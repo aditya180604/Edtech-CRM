@@ -26,6 +26,8 @@ const courseSchema = new mongoose.Schema(
     status: { type: String, default: 'DRAFT', index: true },
     visibility: { type: String, default: 'PUBLIC', index: true },
     publishedAt: { type: Date },
+    syllabusUrl: { type: String },
+    syllabusFileName: { type: String },
   },
   {
     collection: 'courses',
