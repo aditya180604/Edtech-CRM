@@ -1,27 +1,37 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Code2, BarChart3, BrainCircuit, Cloud, Palette, ShieldCheck, ArrowRight } from 'lucide-react';
-import { categoriesData } from '../data/mockData';
+import { catalogApi, type CatalogCategory } from '../api/catalog';
+
+
 
 export const CategorySection: React.FC = () => {
-  const getCategoryIcon = (iconName: string) => {
-    const classProps = "w-6 h-6";
-    switch (iconName) {
-      case 'Code2':
-        return <Code2 className={classProps} />;
-      case 'BarChart3':
-        return <BarChart3 className={classProps} />;
-      case 'BrainCircuit':
-        return <BrainCircuit className={classProps} />;
-      case 'Cloud':
-        return <Cloud className={classProps} />;
-      case 'Palette':
-        return <Palette className={classProps} />;
-      case 'ShieldCheck':
-        return <ShieldCheck className={classProps} />;
-      default:
-        return <Code2 className={classProps} />;
-    }
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    catalogApi
+      .getCategories()
+      .then((data) => {
+        setCategories(data);
+      })
+      .catch((err) => {
+        console.error('Failed to load categories:', err);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
+
+  const getCategoryIcon = (catName: string) => {
+    const name = catName.toLowerCase();
+    const classProps = 'w-6 h-6 text-indigo-600';
+    if (name.includes('data') || name.includes('analytics')) return <BarChart3 className={classProps} />;
+    if (name.includes('ai') || name.includes('machine') || name.includes('intelligence')) return <BrainCircuit className={classProps} />;
+    if (name.includes('cloud') || name.includes('devops')) return <Cloud className={classProps} />;
+    if (name.includes('design') || name.includes('ui') || name.includes('ux')) return <Palette className={classProps} />;
+    if (name.includes('security') || name.includes('cyber')) return <ShieldCheck className={classProps} />;
+    return <Code2 className={classProps} />;
   };
 
   return (
@@ -43,29 +53,44 @@ export const CategorySection: React.FC = () => {
         </Link>
       </div>
 
-      {/* Categories Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
-        {categoriesData.map((cat) => (
-          <Link
-            key={cat.id}
-            to={`/courses?category=${encodeURIComponent(cat.name)}`}
-            className="group relative bg-white p-4.5 rounded-2xl border border-slate-100 shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-150 flex flex-col items-center text-center"
-          >
-            {/* Icon Container */}
-            <div className={`w-13 h-13 rounded-2xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105 duration-150 ${cat.iconColor}`}>
-              {getCategoryIcon(cat.icon)}
+      {/* Loading State */}
+      {isLoading && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <div key={n} className="bg-white p-4.5 rounded-2xl border border-slate-100 animate-pulse flex flex-col items-center">
+              <div className="w-12 h-12 rounded-2xl bg-slate-200 mb-3" />
+              <div className="h-4 bg-slate-200 rounded w-16 mb-2" />
+              <div className="h-3 bg-slate-100 rounded w-12" />
             </div>
+          ))}
+        </div>
+      )}
 
-            {/* Category Title */}
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors leading-snug mb-0.5">
-              {cat.name}
-            </h3>
+      {/* Categories Grid */}
+      {!isLoading && categories.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+          {categories.map((cat) => (
+            <Link
+              key={cat.name}
+              to={`/courses?category=${encodeURIComponent(cat.name)}`}
+              className="group relative bg-white p-4.5 rounded-2xl border border-slate-100 shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-150 flex flex-col items-center text-center"
+            >
+              {/* Icon Container */}
+              <div className="w-13 h-13 rounded-2xl bg-indigo-50/70 border border-indigo-100/50 flex items-center justify-center mb-3 transition-transform group-hover:scale-105 duration-150">
+                {getCategoryIcon(cat.name)}
+              </div>
 
-            {/* Courses Count */}
-            <p className="text-[11px] text-slate-400 font-medium">{cat.count}</p>
-          </Link>
-        ))}
-      </div>
+              {/* Category Title */}
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors leading-snug mb-0.5">
+                {cat.name}
+              </h3>
+
+              {/* Courses Count */}
+              <p className="text-[11px] text-slate-400 font-medium">{cat.count}</p>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

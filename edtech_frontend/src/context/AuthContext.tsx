@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; message?: string }>;
   register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; message?: string }>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   getRedirectPathForRole: (role: UserRole) => string;
 }
 
@@ -118,6 +119,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const res = await authApi.getMe();
+      if (res.success && res.data) {
+        setUser(res.data);
+        localStorage.setItem('user', JSON.stringify(res.data));
+      }
+    } catch (e) {
+      console.error('Failed to refresh user profile:', e);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -129,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        refreshUser,
         getRedirectPathForRole,
       }}
     >

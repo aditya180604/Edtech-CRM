@@ -12,29 +12,38 @@ export async function connectDB() {
     throw new Error('MONGODB_URI is not defined in the environment configuration.');
   }
 
-  try {
-    const conn = await mongoose.connect(config.mongodb.uri, {
-      dbName: config.mongodb.dbName,
-      serverSelectionTimeoutMS: 15000,
-      autoIndex: process.env.NODE_ENV !== 'production',
-    });
+  let attempts = 0;
+  const maxAttempts = 3;
 
-    isConnected = true;
-    console.log(`[Database] MongoDB connected: ${conn.connection.host}/${conn.connection.db.databaseName}`);
+  while (attempts < maxAttempts) {
+    try {
+      attempts++;
+      const conn = await mongoose.connect(config.mongodb.uri, {
+        dbName: config.mongodb.dbName,
+        serverSelectionTimeoutMS: 15000,
+        autoIndex: process.env.NODE_ENV !== 'production',
+      });
 
-    mongoose.connection.on('error', (err) => {
-      console.error(`[Database] MongoDB connection error:`, err);
-    });
+      isConnected = true;
+      console.log(`[Database] MongoDB connected: ${conn.connection.host}/${conn.connection.db.databaseName}`);
 
-    mongoose.connection.on('disconnected', () => {
-      isConnected = false;
-      console.warn(`[Database] MongoDB disconnected.`);
-    });
+      mongoose.connection.on('error', (err) => {
+        console.error(`[Database] MongoDB connection error:`, err);
+      });
 
-    return conn;
-  } catch (error) {
-    console.error(`[Database] MongoDB initial connection failed:`, error.message);
-    throw error;
+      mongoose.connection.on('disconnected', () => {
+        isConnected = false;
+        console.warn(`[Database] MongoDB disconnected.`);
+      });
+
+      return conn;
+    } catch (error) {
+      console.error(`[Database] MongoDB connection attempt ${attempts}/${maxAttempts} failed:`, error.message);
+      if (attempts >= maxAttempts) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
 }
 

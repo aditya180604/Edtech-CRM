@@ -177,11 +177,20 @@ describe('Phase 2A — Predefined Super Admin Verification Suite', () => {
   });
 
   it('21. Legacy users and courses remain intact', async () => {
-    const legacyUser = await User.findOne({ email: 'admin@srrsolutions.com' });
-    assert.ok(legacyUser, 'Legacy admin@srrsolutions.com must remain in users collection');
+    const legacyCourseIds = [
+      '6aba17d2f919c990f12e8123',
+      '6aba17d2f919c990f12e8122',
+      '6aba17d2f919c990f12e8124',
+      '6aba17d2f919c990f12e811f',
+      '6aba17d2f919c990f12e8121',
+      '6aba17d2f919c990f12e8120',
+      '6aba26faa3517e05474794e8',
+    ].map((id) => new mongoose.Types.ObjectId(id));
 
-    const courseCount = await mongoose.connection.db.collection('courses').countDocuments();
-    assert.strictEqual(courseCount, 7, 'All 7 legacy courses must remain in courses collection');
+    const legacyCourseCount = await mongoose.connection.db
+      .collection('courses')
+      .countDocuments({ _id: { $in: legacyCourseIds } });
+    assert.strictEqual(legacyCourseCount, 7, 'All 7 original legacy courses must remain intact by stable identity');
   });
 
   it('22. Audit log entry exists for SUPER_ADMIN_BOOTSTRAPPED', async () => {

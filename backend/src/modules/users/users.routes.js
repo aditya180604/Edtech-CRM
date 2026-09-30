@@ -8,5 +8,6 @@ router.use(authenticate);
 
 router.get('/me', UsersController.getMe);
 router.put('/me', UsersController.updateMe);
+router.patch('/me', UsersController.updateMe);
 
 export const usersRoutes = router;

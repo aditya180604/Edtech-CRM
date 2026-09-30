@@ -38,6 +38,7 @@ const videoProgressSchema = new mongoose.Schema(
     watchedSeconds: { type: Number, default: 0 },
     totalSeconds: { type: Number, default: 0 },
     progressPercent: { type: Number, default: 0 },
+    maxContinuousSeconds: { type: Number, default: 0 },
     completed: { type: Boolean, default: false },
     lastPosition: { type: Number, default: 0 }, // Playback resume position in seconds
     lastWatchedAt: { type: Date, default: Date.now },

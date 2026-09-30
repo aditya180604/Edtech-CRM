@@ -14,6 +14,7 @@ import { InstructorsPage } from './pages/InstructorsPage';
 import { WebinarsPage } from './pages/WebinarsPage';
 import { CartPage } from './pages/CartPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
+import { StudentProfilePage } from './pages/StudentProfilePage';
 
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
@@ -43,7 +44,10 @@ export const App: React.FC = () => {
             <Route path="/cart" element={<CartPage />} />
             <Route path="/course/:slug" element={<CourseDetailPage />} />
 
-            {/* Student Dashboards */}
+            {/* Student Dashboards & Profile */}
+            <Route path="/profile" element={<StudentProfilePage />} />
+            <Route path="/dashboard/student/profile" element={<StudentProfilePage />} />
+            <Route path="/settings" element={<StudentProfilePage />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/dashboard/student" element={<StudentDashboard />} />
 
