@@ -1,10 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Bookmark, ArrowRight, User } from 'lucide-react';
+import { Star, Bookmark, ArrowRight, User, BookOpen } from 'lucide-react';
+import { coursesApi } from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
+import { SyllabusModal } from './SyllabusModal';
+import type { Course } from '../types';
 
 export const FeaturedCourses: React.FC = () => {
+  const [courses, setCourses] = useState<Course[]>(featuredCoursesData);
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [selectedSyllabusCourse, setSelectedSyllabusCourse] = useState<Course | null>(null);
+
+  useEffect(() => {
+    const loadFeatured = async () => {
+      try {
+        const res = await coursesApi.getFeatured(8);
+        if (res.success && res.data && res.data.length > 0) {
+          setCourses(res.data);
+        }
+      } catch (err) {
+        console.warn('Using initial featured courses data:', err);
+      }
+    };
+    loadFeatured();
+  }, []);
 
   const toggleBookmark = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -35,14 +54,14 @@ export const FeaturedCourses: React.FC = () => {
         </Link>
       </div>
 
-      {/* Courses Grid */}
+      {/* Courses Grid (Image 4 Match) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {featuredCoursesData.map((course) => {
+        {courses.map((course) => {
           const isBookmarked = bookmarkedIds.includes(course.id);
 
           return (
             <Link
-              key={course.id}
+              key={course.id || course.slug}
               to={`/course/${course.slug}`}
               className="group bg-white rounded-2xl border border-slate-100 shadow-xs hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-150 overflow-hidden flex flex-col justify-between"
             >
@@ -101,32 +120,57 @@ export const FeaturedCourses: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span className="font-bold text-slate-900">{course.rating.toFixed(1)}</span>
+                    <span className="font-bold text-slate-900">
+                      {typeof course.rating === 'number' ? course.rating.toFixed(1) : course.rating}
+                    </span>
                     <span>({course.reviewCount})</span>
                   </div>
                 </div>
               </div>
 
-              {/* Price */}
-              <div className="px-4.5 pb-4.5 pt-2.5 border-t border-slate-50 flex items-center justify-between">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-extrabold text-slate-900">
+              {/* Price & Action Row (Image 4 Upgrade with Syllabus Button) */}
+              <div className="px-4 pb-4 pt-2.5 border-t border-slate-50 flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-sm sm:text-base font-black text-slate-900">
                     ₹{course.price.toLocaleString('en-IN')}
                   </span>
                   {course.originalPrice && (
-                    <span className="text-xs text-slate-400 line-through">
+                    <span className="text-[11px] text-slate-400 line-through">
                       ₹{course.originalPrice.toLocaleString('en-IN')}
                     </span>
                   )}
                 </div>
-                <span className="text-xs font-bold text-indigo-600 group-hover:underline">
-                  View Course
-                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedSyllabusCourse(course);
+                    }}
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                    title="Quick View Syllabus"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>Syllabus</span>
+                  </button>
+                  <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 flex items-center gap-0.5">
+                    View <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
               </div>
             </Link>
           );
         })}
       </div>
+
+      {/* Syllabus Modal */}
+      {selectedSyllabusCourse && (
+        <SyllabusModal
+          course={selectedSyllabusCourse}
+          onClose={() => setSelectedSyllabusCourse(null)}
+        />
+      )}
     </section>
   );
 };

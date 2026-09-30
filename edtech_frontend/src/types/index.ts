@@ -53,6 +53,7 @@ export interface Category {
 
 export interface Course {
   id: string;
+  _id?: string;
   title: string;
   slug: string;
   instructorName: string;
@@ -61,13 +62,33 @@ export interface Course {
   rating: number;
   reviewCount: string;
   price: number;
+  coursePrice?: number;
   originalPrice?: number;
   thumbnail: string;
+  banner?: string;
   category: string;
   duration?: string;
   level?: string;
   studentCount?: string;
   badge?: string;
+  description?: string;
+  shortDescription?: string;
+  syllabusUrl?: string;
+  syllabusFileName?: string;
+}
+
+export interface CartItem {
+  id: string;
+  type: 'COURSE' | 'TOPIC';
+  title: string;
+  price: number;
+  originalPrice?: number;
+  thumbnail?: string;
+  category?: string;
+  instructorName?: string;
+  courseId?: string;
+  courseSlug?: string;
+  upgradeCredit?: number;
 }
 
 export interface Topic {
