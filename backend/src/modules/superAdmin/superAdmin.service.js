@@ -74,4 +74,91 @@ export class SuperAdminService {
       },
     };
   }
+
+  /**
+   * Real-time query of platform users, students, and instructors
+   */
+  static async getUsersList({
+    role,
+    search,
+    status,
+    page = 1,
+    limit = 50,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+  }) {
+    const query = {};
+
+    if (role && role !== 'ALL') {
+      query.role = role.toUpperCase();
+    }
+
+    if (status && status !== 'ALL') {
+      query.status = status.toUpperCase();
+    }
+
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+      ];
+    }
+
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+
+    const [users, total, totalAll, totalStudents, totalInstructors, totalAdmins, totalSuperAdmins] =
+      await Promise.all([
+        User.find(query)
+          .select('-passwordHash -refreshTokenHash -verificationToken -passwordResetToken')
+          .sort(sort)
+          .skip(skip)
+          .limit(parseInt(limit, 10))
+          .lean(),
+        User.countDocuments(query),
+        User.countDocuments(),
+        User.countDocuments({ role: ROLES.STUDENT }),
+        User.countDocuments({ role: ROLES.INSTRUCTOR }),
+        User.countDocuments({ role: ROLES.ADMIN }),
+        User.countDocuments({ role: ROLES.SUPER_ADMIN }),
+      ]);
+
+    return {
+      users,
+      pagination: {
+        total,
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        pages: Math.ceil(total / parseInt(limit, 10)),
+      },
+      counts: {
+        all: totalAll,
+        students: totalStudents,
+        instructors: totalInstructors,
+        admins: totalAdmins,
+        superAdmins: totalSuperAdmins,
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Real-time update of user status or role by Super Admin
+   */
+  static async updateUserStatus(userId, { status, role }) {
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (role) updateData.role = role;
+
+    const user = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    }).select('-passwordHash -refreshTokenHash');
+
+    return user;
+  }
 }
+

@@ -11,5 +11,8 @@ router.use(authorizeSuperAdmin);
 
 router.get('/status', SuperAdminController.getStatus);
 router.get('/audit-logs', SuperAdminController.getAuditLogs);
+router.get('/users', SuperAdminController.getUsers);
+router.patch('/users/:userId/status', SuperAdminController.updateUser);
 
 export const superAdminRoutes = router;
+

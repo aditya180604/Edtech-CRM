@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AuthModalProvider } from './context/AuthModalContext';
 import { AuthModal } from './components/AuthModal';
@@ -15,6 +15,12 @@ import { WebinarsPage } from './pages/WebinarsPage';
 import { CartPage } from './pages/CartPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 
+// Role Dashboards
+import { StudentDashboard } from './pages/dashboards/StudentDashboard';
+import { InstructorDashboard } from './pages/dashboards/InstructorDashboard';
+import { AdminDashboard } from './pages/dashboards/AdminDashboard';
+import { SuperAdminDashboard } from './pages/dashboards/SuperAdminDashboard';
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -24,6 +30,7 @@ export const App: React.FC = () => {
           <AuthModal />
 
           <Routes>
+            {/* Public Marketplace & Info */}
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<RegisterPage />} />
@@ -35,7 +42,25 @@ export const App: React.FC = () => {
             <Route path="/webinars" element={<WebinarsPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/course/:slug" element={<CourseDetailPage />} />
-            <Route path="*" element={<HomePage />} />
+
+            {/* Student Dashboards */}
+            <Route path="/dashboard" element={<StudentDashboard />} />
+            <Route path="/dashboard/student" element={<StudentDashboard />} />
+
+            {/* Instructor Dashboards */}
+            <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
+            <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
+
+            {/* Admin Dashboards */}
+            <Route path="/dashboard/admin" element={<AdminDashboard />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+
+            {/* Super Admin Dashboards */}
+            <Route path="/super-admin" element={<SuperAdminDashboard />} />
+            <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthModalProvider>
