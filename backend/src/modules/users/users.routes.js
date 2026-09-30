@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { UsersController } from './users.controller.js';
+import { authenticate } from '../../middleware/auth.js';
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get('/me', UsersController.getMe);
+router.put('/me', UsersController.updateMe);
+
+export const usersRoutes = router;
