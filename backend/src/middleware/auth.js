@@ -40,10 +40,13 @@ export async function optionalAuthenticate(req, res, next) {
     } else if (req.cookies && req.cookies.accessToken) {
       token = req.cookies.accessToken;
     }
+
     if (token) {
       const decoded = jwt.verify(token, config.jwt.secret);
       req.user = {
         userId: decoded.userId,
+        _id: decoded.userId,
+        id: decoded.userId,
         email: decoded.email,
         role: decoded.role,
       };
@@ -51,6 +54,5 @@ export async function optionalAuthenticate(req, res, next) {
   } catch (error) {
     // Silently continue for optional auth
   }
-  next();
+  return next();
 }
-

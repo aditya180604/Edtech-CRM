@@ -31,4 +31,11 @@ export const authApi = {
     const response = await apiClient.get('/users/me');
     return response.data;
   },
+
+  // 6. Update Current Authenticated User Profile (/me)
+  async updateMe(payload: Record<string, any>): Promise<{ statusCode: number; success: boolean; data: User }> {
+    const response = await apiClient.patch('/users/me', payload);
+    return response.data;
+  },
 };
+

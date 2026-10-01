@@ -217,7 +217,7 @@ export const TopicsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Dynamic Topics Grid (Matching Image 4) */}
+        {/* Dynamic Topics Grid */}
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center space-y-3">
             <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>

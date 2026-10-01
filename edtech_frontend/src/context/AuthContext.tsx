@@ -12,6 +12,7 @@ interface AuthContextType {
   register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
   logout: () => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => void;
+  refreshUser: () => Promise<void>;
   getRedirectPathForRole: (role: UserRole, isProfileCompleted?: boolean) => string;
 }
 
@@ -52,6 +53,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('user', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await authApi.getMe();
+      if (res.success && res.data) {
+        setUser(res.data);
+        localStorage.setItem('user', JSON.stringify(res.data));
+      }
+    } catch (e) {
+      console.error('Failed to refresh user profile:', e);
+    }
   };
 
   // Restore authenticated session on mount
@@ -143,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         updateUser,
+        refreshUser,
         getRedirectPathForRole,
       }}
     >

@@ -11,7 +11,7 @@
     "db:init": "node src/scripts/initDb.js",
     "db:audit": "node src/scripts/auditDb.js",
     "bootstrap:super-admin": "node src/scripts/bootstrapSuperAdmin.js",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

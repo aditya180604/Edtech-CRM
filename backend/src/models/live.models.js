@@ -11,6 +11,8 @@ const webinarSchema = new mongoose.Schema(
     description: { type: String },
     thumbnail: { type: String },
     instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', index: true },
     category: { type: String, index: true },
     startTime: { type: Date, required: true, index: true },
     endTime: { type: Date, required: true },
@@ -70,6 +72,8 @@ const bookingSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     liveSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'LiveSession', required: true, index: true },
     status: { type: String, default: 'CONFIRMED' }, // CONFIRMED, ATTENDED, CANCELLED
+    attendedMinutes: { type: Number, default: 0 },
+    attendedAt: { type: Date },
     bookedAt: { type: Date, default: Date.now },
     cancelledAt: { type: Date },
   },

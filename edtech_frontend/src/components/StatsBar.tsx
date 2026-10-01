@@ -1,8 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, UserCheck, PlaySquare, Layers, Globe, Star } from 'lucide-react';
-import { statsData } from '../data/mockData';
+import { catalogApi, type CatalogStat } from '../api/catalog';
+
+
 
 export const StatsBar: React.FC = () => {
+  const [stats, setStats] = useState<CatalogStat[]>([]);
+
+  useEffect(() => {
+    catalogApi
+      .getPublicStats()
+      .then((data) => {
+        if (data && data.length > 0) {
+          setStats(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load stats:', err);
+      });
+  }, []);
+
   const getIcon = (iconName: string) => {
     switch (iconName) {
       case 'Users':
@@ -22,10 +39,14 @@ export const StatsBar: React.FC = () => {
     }
   };
 
+  if (stats.length === 0) {
+    return null;
+  }
+
   return (
     <section className="relative -mt-6 sm:-mt-8 z-20 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
       <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 py-4.5 px-6 sm:px-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6 items-center divide-y sm:divide-y-0 lg:divide-x divide-slate-100">
-        {statsData.map((stat, idx) => (
+        {stats.map((stat, idx) => (
           <div
             key={idx}
             className={`flex items-center gap-3.5 ${idx !== 0 ? 'pt-3 sm:pt-0 lg:pl-6' : ''}`}

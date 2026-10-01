@@ -94,13 +94,14 @@ const orderItemSchema = new mongoose.Schema(
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic' },
+    contentOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'TopicContentOffering' },
     instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     quantity: { type: Number, default: 1 },
     unitPrice: { type: Number, required: true, default: 0 },
     discount: { type: Number, default: 0 },
     tax: { type: Number, default: 0 },
     finalPrice: { type: Number, required: true, default: 0 },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: 'INR' },
   },
   {
     collection: 'order_items',
@@ -116,10 +117,10 @@ const paymentSchema = new mongoose.Schema(
   {
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    provider: { type: String, required: true }, // e.g., 'STRIPE', 'CASHFREE'
+    provider: { type: String, required: true }, // e.g., 'STRIPE', 'CASHFREE', 'MOCK_PAYMENT'
     providerPaymentId: { type: String, index: true },
     amount: { type: Number, required: true },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: 'INR' },
     status: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),
@@ -149,7 +150,7 @@ const refundSchema = new mongoose.Schema(
     paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     amount: { type: Number, required: true },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: 'INR' },
     reason: { type: String },
     status: { type: String, default: 'PENDING' },
     providerRefundId: { type: String },
@@ -172,12 +173,13 @@ const entitlementSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     productType: {
       type: String,
-      enum: [PRODUCT_TYPES.COURSE, PRODUCT_TYPES.TOPIC, PRODUCT_TYPES.WEBINAR, PRODUCT_TYPES.LEARNING_PATH],
+      enum: Object.values(PRODUCT_TYPES),
       required: true,
     },
     productId: { type: mongoose.Schema.Types.ObjectId, required: true },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
     topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic' },
+    contentOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'TopicContentOffering', index: true },
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
     source: { type: String, default: 'PURCHASE' }, // PURCHASE, UPGRADE, ADMIN_GRANT, SUBSCRIPTION
     status: {
@@ -200,6 +202,7 @@ const entitlementSchema = new mongoose.Schema(
 entitlementSchema.index({ userId: 1, productType: 1, productId: 1, status: 1 });
 entitlementSchema.index({ userId: 1, courseId: 1, status: 1 });
 entitlementSchema.index({ userId: 1, topicId: 1, status: 1 });
+entitlementSchema.index({ userId: 1, contentOfferingId: 1, status: 1 });
 
 export const Entitlement = mongoose.models.Entitlement || mongoose.model('Entitlement', entitlementSchema);
 

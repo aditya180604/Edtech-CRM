@@ -32,11 +32,7 @@ import {
   CreditCard,
   AlertTriangle,
   X,
-  QrCode,
-  Landmark,
-  Smartphone,
-  Wallet,
-  Check,
+  Clock,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
@@ -84,20 +80,6 @@ export const InstructorDashboard: React.FC = () => {
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [wizardPublishingFeePaid, setWizardPublishingFeePaid] = useState<boolean>(false);
   const [isSubmittingCourse, setIsSubmittingCourse] = useState<boolean>(false);
-
-  // Cashfree Interactive PG UI States
-  const [pgMethod, setPgMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallet'>('upi');
-  const [pgUpiMode, setPgUpiMode] = useState<'qr' | 'vpa'>('qr');
-  const [pgVpaInput, setPgVpaInput] = useState('instructor@okhdfcbank');
-  const [pgCardNumber, setPgCardNumber] = useState('4012 0000 0000 0000');
-  const [pgCardName, setPgCardName] = useState('David Miller');
-  const [pgCardExpiry, setPgCardExpiry] = useState('12/28');
-  const [pgCardCvv, setPgCardCvv] = useState('888');
-  const [pgSelectedBank, setPgSelectedBank] = useState('HDFC');
-  const [pgSelectedWallet, setPgSelectedWallet] = useState('paytm');
-  const [pgOtpStep, setPgOtpStep] = useState(false);
-  const [pgOtpValue, setPgOtpValue] = useState('123456');
-  const [pgPaymentSuccess, setPgPaymentSuccess] = useState(false);
 
   // Webinars Tab State
   const [webinarsTab, setWebinarsTab] = useState('ALL');
@@ -782,10 +764,6 @@ export const InstructorDashboard: React.FC = () => {
       setProcessingFee(true);
       setFeeModalCourse(course);
       setShowFeeModal(true);
-      setPgMethod('upi');
-      setPgUpiMode('qr');
-      setPgOtpStep(false);
-      setPgPaymentSuccess(false);
       const res = await instructorApi.createPublishingFeeOrder(course._id || course.id);
       if (res.success && res.data) {
         setFeeOrderData(res.data);
@@ -806,15 +784,12 @@ export const InstructorDashboard: React.FC = () => {
         cashfreeOrderId: feeOrderData.orderId,
       });
       if (res.success) {
-        setPgPaymentSuccess(true);
         success('Publishing Fee Paid Successfully!', 'Your course is now verified and ready for Super Admin review.');
         setTimeout(async () => {
           setShowFeeModal(false);
           setFeeModalCourse(null);
           setFeeOrderData(null);
           setWizardPublishingFeePaid(true);
-          setPgPaymentSuccess(false);
-          setPgOtpStep(false);
           await loadSubViewData();
           fetchDashboard(true);
         }, 1200);

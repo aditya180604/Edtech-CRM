@@ -116,6 +116,8 @@ const lessonSchema = new mongoose.Schema(
   {
     lessonId: { type: String, unique: true, sparse: true, index: true },
     topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', required: true, index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    contentOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'TopicContentOffering', index: true },
     title: { type: String, required: true },
     videoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Video' },
     playbackReference: { type: String },
@@ -124,6 +126,7 @@ const lessonSchema = new mongoose.Schema(
     resources: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Resource' }],
     order: { type: Number, default: 1 },
     status: { type: String, default: 'DRAFT' },
+    isFreePreview: { type: Boolean, default: false },
   },
   {
     collection: 'lessons',
@@ -132,6 +135,7 @@ const lessonSchema = new mongoose.Schema(
 );
 
 lessonSchema.index({ topicId: 1, order: 1 });
+lessonSchema.index({ contentOfferingId: 1, order: 1 });
 
 export const Lesson = mongoose.models.Lesson || mongoose.model('Lesson', lessonSchema);
 
@@ -218,3 +222,105 @@ const learningPathSchema = new mongoose.Schema(
 
 export const LearningPath =
   mongoose.models.LearningPath || mongoose.model('LearningPath', learningPathSchema);
+
+// ==========================================
+// 10. LearningPathDomain Model (Collection: learning_path_domains)
+// ==========================================
+const learningPathDomainSchema = new mongoose.Schema(
+  {
+    domainId: { type: String, unique: true, sparse: true, index: true },
+    learningPathId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningPath', required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    slug: { type: String, index: true, lowercase: true, trim: true },
+    description: { type: String },
+    skills: { type: [String], default: [] },
+    order: { type: Number, default: 1 },
+    status: { type: String, enum: ['DRAFT', 'PUBLISHED', 'ARCHIVED'], default: 'PUBLISHED', index: true },
+    icon: { type: String },
+  },
+  {
+    collection: 'learning_path_domains',
+    timestamps: true,
+  }
+);
+
+learningPathDomainSchema.index({ learningPathId: 1, order: 1 });
+learningPathDomainSchema.index({ learningPathId: 1, status: 1 });
+
+export const LearningPathDomain =
+  mongoose.models.LearningPathDomain || mongoose.model('LearningPathDomain', learningPathDomainSchema);
+
+// ==========================================
+// 11. LearningPathDomainTopic Model (Collection: learning_path_domain_topics)
+// ==========================================
+const learningPathDomainTopicSchema = new mongoose.Schema(
+  {
+    learningPathId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningPath', required: true, index: true },
+    domainId: { type: mongoose.Schema.Types.ObjectId, ref: 'LearningPathDomain', required: true, index: true },
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', required: true, index: true },
+    order: { type: Number, default: 1 },
+    isRequired: { type: Boolean, default: true },
+    isRecommended: { type: Boolean, default: false },
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE', index: true },
+  },
+  {
+    collection: 'learning_path_domain_topics',
+    timestamps: true,
+  }
+);
+
+learningPathDomainTopicSchema.index({ domainId: 1, order: 1 });
+learningPathDomainTopicSchema.index({ learningPathId: 1, domainId: 1, topicId: 1 }, { unique: true });
+
+export const LearningPathDomainTopic =
+  mongoose.models.LearningPathDomainTopic ||
+  mongoose.model('LearningPathDomainTopic', learningPathDomainTopicSchema);
+
+// ==========================================
+// 12. TopicContentOffering Model (Collection: topic_content_offerings) - THE PAID MARKETPLACE PRODUCT
+// ==========================================
+const topicContentOfferingSchema = new mongoose.Schema(
+  {
+    offeringId: { type: String, unique: true, sparse: true, index: true },
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', required: true, index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    slug: { type: String, index: true, lowercase: true, trim: true },
+    description: { type: String },
+    shortDescription: { type: String },
+    price: { type: Number, required: true, default: 0 }, // AUTHORITATIVE COMMERCIAL PRICE
+    currency: { type: String, default: 'INR' },
+    duration: { type: Number, default: 0 }, // in seconds
+    durationMinutes: { type: Number, default: 0 },
+    contentType: { type: String, default: 'VIDEO_SERIES' },
+    thumbnail: { type: String },
+    status: {
+      type: String,
+      enum: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'],
+      default: 'PUBLISHED',
+      index: true,
+    },
+    publicationState: { type: String, default: 'PUBLISHED' },
+    isPreviewAvailable: { type: Boolean, default: true },
+    skills: { type: [String], default: [] },
+    learningObjectives: { type: [String], default: [] },
+    prerequisites: { type: [String], default: [] },
+    level: { type: String, default: 'ALL_LEVELS' },
+    language: { type: String, default: 'English' },
+    badge: { type: String },
+  },
+  {
+    collection: 'topic_content_offerings',
+    timestamps: true,
+  }
+);
+
+topicContentOfferingSchema.index({ topicId: 1, status: 1 });
+topicContentOfferingSchema.index({ instructorId: 1, status: 1 });
+topicContentOfferingSchema.index({ courseId: 1, topicId: 1, instructorId: 1 });
+
+export const TopicContentOffering =
+  mongoose.models.TopicContentOffering ||
+  mongoose.model('TopicContentOffering', topicContentOfferingSchema);
+

@@ -88,8 +88,6 @@ export const SuperAdminDashboard: React.FC = () => {
   const [countriesList, setCountriesList] = useState<SuperAdminCountry[]>([]);
   const [currenciesList, setCurrenciesList] = useState<SuperAdminCurrency[]>([]);
   const [taxesList, setTaxesList] = useState<SuperAdminTax[]>([]);
-  const [infraData, setInfraData] = useState<any>(null);
-  const [fraudData, setFraudData] = useState<any[]>([]);
 
   // Filters State
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'STUDENT' | 'INSTRUCTOR' | 'ADMIN'>('ALL');
@@ -269,16 +267,6 @@ export const SuperAdminDashboard: React.FC = () => {
         if (activeNav === 'taxes') {
           const tRes = await superAdminApi.getTaxes().catch(() => null);
           if (tRes?.success && tRes.data) setTaxesList(tRes.data);
-        }
-
-        if (activeNav === 'infrastructure') {
-          const iRes = await superAdminApi.getInfrastructure().catch(() => null);
-          if (iRes?.success && iRes.data) setInfraData(iRes.data);
-        }
-
-        if (activeNav === 'fraud') {
-          const fRes = await superAdminApi.getFraud().catch(() => null);
-          if (fRes?.success && fRes.data) setFraudData(fRes.data);
         }
       } catch (err) {
         console.error('Failed to load super admin telemetry:', err);
@@ -1914,71 +1902,6 @@ export const SuperAdminDashboard: React.FC = () => {
                       <span>Server Response</span> <strong className="text-slate-900">&lt; 45ms</strong>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* =========================================================================
-              VIEW 12: FRAUD & RISK CONTROL
-             ========================================================================= */}
-          {activeNav === 'fraud' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Fraud & Risk Control</h2>
-                <p className="text-xs text-slate-500">AI velocity anomaly detection and high-risk transaction monitoring.</p>
-              </div>
-
-              <div className="space-y-3">
-                {fraudData.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-6 text-center">No anomalous or fraudulent activity detected.</p>
-                ) : (
-                  fraudData.map((f, i) => (
-                    <div key={i} className="p-4 bg-rose-50/50 rounded-2xl border border-rose-200 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-black">
-                          {f.riskScore}%
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{f.type} ({f.eventId})</h4>
-                          <p className="text-xs text-slate-500">{f.reason}</p>
-                        </div>
-                      </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-200">
-                        {f.status}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* =========================================================================
-              VIEW 13: INFRASTRUCTURE TELEMETRY
-             ========================================================================= */}
-          {activeNav === 'infrastructure' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Infrastructure & System Health</h2>
-                <p className="text-xs text-slate-500">Live production cluster health, deployment versions, and rollback readiness.</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1">
-                  <p className="text-2xl font-black text-emerald-700">{infraData?.healthStatus || 'HEALTHY'}</p>
-                  <p className="text-xs font-bold text-slate-500">Cluster Status</p>
-                  <p className="text-[11px] text-emerald-600 font-semibold">Uptime: {infraData?.uptime || '99.98%'}</p>
-                </div>
-                <div className="p-5 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-1">
-                  <p className="text-2xl font-black text-slate-900">{infraData?.releaseVersion || 'v2.4.8-release'}</p>
-                  <p className="text-xs font-bold text-slate-500">Active Deployment</p>
-                  <p className="text-[11px] text-indigo-600 font-semibold">Env: {infraData?.environment || 'production'}</p>
-                </div>
-                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-                  <p className="text-2xl font-black text-slate-900">{infraData?.rollbackVersion || 'v2.4.7-lts'}</p>
-                  <p className="text-xs font-bold text-slate-500">Rollback Target</p>
-                  <p className="text-[11px] text-slate-500 font-semibold">Status: Verified Ready</p>
                 </div>
               </div>
             </div>

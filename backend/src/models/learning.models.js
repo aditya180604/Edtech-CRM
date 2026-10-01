@@ -8,7 +8,8 @@ const learningProgressSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
     moduleId: { type: mongoose.Schema.Types.ObjectId, ref: 'Module' },
-    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic' },
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', index: true },
+    contentOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'TopicContentOffering', index: true },
     lessonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson', index: true },
     watchedSeconds: { type: Number, default: 0 },
     totalSeconds: { type: Number, default: 0 },
@@ -24,6 +25,7 @@ const learningProgressSchema = new mongoose.Schema(
 
 learningProgressSchema.index({ userId: 1, lessonId: 1 }, { unique: true });
 learningProgressSchema.index({ userId: 1, courseId: 1 });
+learningProgressSchema.index({ userId: 1, contentOfferingId: 1 });
 
 export const LearningProgress =
   mongoose.models.LearningProgress || mongoose.model('LearningProgress', learningProgressSchema);
@@ -35,9 +37,11 @@ const videoProgressSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     lessonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson', required: true, index: true },
+    contentOfferingId: { type: mongoose.Schema.Types.ObjectId, ref: 'TopicContentOffering', index: true },
     watchedSeconds: { type: Number, default: 0 },
     totalSeconds: { type: Number, default: 0 },
     progressPercent: { type: Number, default: 0 },
+    maxContinuousSeconds: { type: Number, default: 0 },
     completed: { type: Boolean, default: false },
     lastPosition: { type: Number, default: 0 }, // Playback resume position in seconds
     lastWatchedAt: { type: Date, default: Date.now },
@@ -49,6 +53,7 @@ const videoProgressSchema = new mongoose.Schema(
 );
 
 videoProgressSchema.index({ userId: 1, lessonId: 1 }, { unique: true });
+videoProgressSchema.index({ userId: 1, contentOfferingId: 1 });
 
 export const VideoProgress =
   mongoose.models.VideoProgress || mongoose.model('VideoProgress', videoProgressSchema);

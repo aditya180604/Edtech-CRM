@@ -16,6 +16,10 @@ import { InstructorsPage } from './pages/InstructorsPage';
 import { WebinarsPage } from './pages/WebinarsPage';
 import { CartPage } from './pages/CartPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
+import { LearningPathDetailPage } from './pages/LearningPathDetailPage';
+import { TopicDetailPage } from './pages/TopicDetailPage';
+import { OfferingDetailPage } from './pages/OfferingDetailPage';
+import { StudentProfilePage } from './pages/StudentProfilePage';
 
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
@@ -42,13 +46,19 @@ export const App: React.FC = () => {
             <Route path="/choose-role" element={<ChooseRolePage />} />
             <Route path="/courses" element={<CoursesPage />} />
             <Route path="/topics" element={<TopicsPage />} />
+            <Route path="/topics/:topicId" element={<TopicDetailPage />} />
             <Route path="/learning-paths" element={<LearningPathsPage />} />
+            <Route path="/learning-paths/:slug" element={<LearningPathDetailPage />} />
+            <Route path="/offerings/:offeringId" element={<OfferingDetailPage />} />
             <Route path="/instructors" element={<InstructorsPage />} />
             <Route path="/webinars" element={<WebinarsPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/course/:slug" element={<CourseDetailPage />} />
 
-            {/* Student Dashboards */}
+            {/* Student Dashboards & Profile */}
+            <Route path="/profile" element={<StudentProfilePage />} />
+            <Route path="/dashboard/student/profile" element={<StudentProfilePage />} />
+            <Route path="/settings" element={<StudentProfilePage />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/dashboard/student" element={<StudentDashboard />} />
 
