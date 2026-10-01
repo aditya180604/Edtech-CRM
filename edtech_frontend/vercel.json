@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd edtech_frontend && npm install && npm run build",
+  "outputDirectory": "edtech_frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
