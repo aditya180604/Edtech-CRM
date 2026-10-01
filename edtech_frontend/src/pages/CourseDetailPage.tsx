@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { coursesApi, type CourseDetailsResponse } from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
+import { useCart } from '../context/CartContext';
+import { useToast } from '../context/ToastContext';
 import {
   Star,
   CheckCircle2,
@@ -22,6 +24,9 @@ import {
 
 export const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
+  const { success } = useToast();
   const [courseData, setCourseData] = useState<CourseDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
@@ -364,10 +369,10 @@ export const CourseDetailPage: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (top.videoUrl.startsWith('http')) {
+                                        if (top.videoUrl && top.videoUrl.startsWith('http')) {
                                           window.open(top.videoUrl, '_blank');
                                         } else {
-                                          alert(`Opening video for topic: ${top.title}`);
+                                          success('Lesson Preview', `Opening video content for topic: ${top.title}`);
                                         }
                                       }}
                                       className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer shadow-2xs"
@@ -392,7 +397,7 @@ export const CourseDetailPage: React.FC = () => {
               <h2 className="text-lg font-bold text-slate-900">About the Instructor</h2>
               <div className="flex items-start gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
-                  {course.instructorName[0]}
+                  {course.instructorName ? course.instructorName[0] : 'I'}
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">{course.instructorName}</h3>
@@ -410,32 +415,39 @@ export const CourseDetailPage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl sticky top-24 space-y-6">
               <div className="space-y-1">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Course Investment</p>
-                <div className="flex items-baseline gap-3">
+                <div className="flex items-baseline">
                   <span className="text-3xl font-black text-slate-900">
                     {displayPrice === 0 ? 'FREE' : `₹${displayPrice.toLocaleString('en-IN')}`}
                   </span>
-                  {displayPrice > 0 && (
-                    <span className="text-sm text-slate-400 line-through">
-                      ₹{Math.round(displayPrice * 2.2).toLocaleString('en-IN')}
-                    </span>
-                  )}
                 </div>
               </div>
 
               <div className="space-y-3">
-                <Link
-                  to="/cart"
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToCart({
+                      id: course._id || course.id,
+                      title: course.title,
+                      price: displayPrice,
+                      thumbnail: course.thumbnail,
+                      category: course.category,
+                      type: 'COURSE',
+                    });
+                    success('Added to Cart', `"${course.title}" has been added to your shopping cart.`);
+                    navigate('/cart');
+                  }}
                   className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Enroll in Full Course</span>
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </button>
 
                 <Link
-                  to="/topics"
+                  to={`/topics?courseId=${encodeURIComponent(course._id || course.id)}&category=${encodeURIComponent(course.category)}`}
                   className="w-full py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center cursor-pointer"
                 >
-                  Buy Standalone Topics (from ₹499)
+                  Buy Standalone Topics
                 </Link>
               </div>
 

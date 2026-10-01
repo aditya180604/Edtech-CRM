@@ -266,7 +266,7 @@ const seedData = async () => {
           endTime: new Date(Date.now() + 86400000 * 2 + 7200000),
           capacity: 200,
           price: 0,
-          status: 'LIVE',
+          status: 'SCHEDULED',
           thumbnail: 'https://images.unsplash.com/photo-1667372393119-3d4c48d07fc9?auto=format&fit=crop&w=400&q=80',
         },
         {

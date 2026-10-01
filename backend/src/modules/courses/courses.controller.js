@@ -20,4 +20,9 @@ export class CoursesController {
     }
     return ApiResponse.success(res, data, 'Course details and syllabus retrieved successfully.');
   });
+
+  static getTopics = asyncHandler(async (req, res) => {
+    const topics = await CoursesService.getAllTopics(req.query);
+    return ApiResponse.success(res, topics, 'Dynamic topics retrieved successfully.');
+  });
 }

@@ -54,6 +54,24 @@ export interface CourseDetailsResponse {
   }>;
 }
 
+export interface TopicItem {
+  id: string;
+  _id: string;
+  title: string;
+  price: number;
+  duration: number;
+  isFree: boolean;
+  category: string;
+  courseTitle: string;
+  courseSlug: string;
+  courseId: string;
+  moduleTitle: string;
+  lessonsCount: number;
+  videoUrl?: string;
+  hasVideo: boolean;
+  thumbnail?: string;
+}
+
 export const coursesApi = {
   // 1. Featured Courses for Home Page (Image 4)
   async getFeatured(limit = 8): Promise<{ success: boolean; data: Course[] }> {
@@ -77,6 +95,16 @@ export const coursesApi = {
   // 3. Course Details & Complete Syllabus Hierarchy (Requirement 4 / Image 5)
   async getDetails(slug: string): Promise<{ success: boolean; data: CourseDetailsResponse }> {
     const res = await apiClient.get(`/courses/${slug}`);
+    return res.data;
+  },
+
+  // 4. Dynamic Standalone Topics for Atomic Topic Purchase (Image 4)
+  async getTopics(params?: {
+    courseId?: string;
+    category?: string;
+    search?: string;
+  }): Promise<{ success: boolean; data: TopicItem[] }> {
+    const res = await apiClient.get('/courses/topics', { params });
     return res.data;
   },
 };

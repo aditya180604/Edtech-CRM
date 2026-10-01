@@ -92,4 +92,9 @@ export {
   AuditLog,
   Recommendation,
   Analytics,
+  Country,
+  Currency,
+  Tax,
+  FraudRecord,
+  InfrastructureStatus,
 } from './governance.models.js';

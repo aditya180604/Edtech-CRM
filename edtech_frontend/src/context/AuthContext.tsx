@@ -8,10 +8,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; message?: string }>;
-  register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; message?: string }>;
+  login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
+  register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
   logout: () => Promise<void>;
-  getRedirectPathForRole: (role: UserRole) => string;
+  updateUser: (updatedUser: Partial<User>) => void;
+  getRedirectPathForRole: (role: UserRole, isProfileCompleted?: boolean) => string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,18 +28,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getRedirectPathForRole = (role: UserRole): string => {
+  const getRedirectPathForRole = (role: UserRole, isProfileCompleted?: boolean): string => {
     switch (role) {
       case 'SUPER_ADMIN':
         return '/super-admin';
       case 'ADMIN':
         return '/dashboard/admin';
       case 'INSTRUCTOR':
+        if (isProfileCompleted === false) {
+          return '/instructor/onboarding';
+        }
         return '/dashboard/instructor';
       case 'STUDENT':
       default:
         return '/dashboard/student';
     }
+  };
+
+  const updateUser = (updatedFields: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updatedFields };
+      localStorage.setItem('user', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   // Restore authenticated session on mount
@@ -75,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
       return { success: false, message: res.message || 'Login failed' };
     } catch (err: any) {
@@ -95,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
       return { success: false, message: res.message || 'Registration failed' };
     } catch (err: any) {
@@ -129,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        updateUser,
         getRedirectPathForRole,
       }}
     >

@@ -130,15 +130,10 @@ export const FeaturedCourses: React.FC = () => {
 
               {/* Price & Action Row (Image 4 Upgrade with Syllabus Button) */}
               <div className="px-4 pb-4 pt-2.5 border-t border-slate-50 flex items-center justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
+                <div className="flex items-baseline">
                   <span className="text-sm sm:text-base font-black text-slate-900">
-                    ₹{course.price.toLocaleString('en-IN')}
+                    {course.price === 0 ? 'FREE' : `₹${course.price.toLocaleString('en-IN')}`}
                   </span>
-                  {course.originalPrice && (
-                    <span className="text-[11px] text-slate-400 line-through">
-                      ₹{course.originalPrice.toLocaleString('en-IN')}
-                    </span>
-                  )}
                 </div>
 
                 <div className="flex items-center gap-1.5">

@@ -4,6 +4,7 @@ import { usersRoutes } from '../modules/users/users.routes.js';
 import { superAdminRoutes } from '../modules/superAdmin/superAdmin.routes.js';
 import { instructorRoutes } from '../modules/instructor/instructor.routes.js';
 import { coursesRoutes } from '../modules/courses/courses.routes.js';
+import { webinarsRoutes } from '../modules/webinars/webinars.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -28,5 +29,7 @@ router.use('/users', usersRoutes);
 router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
+router.use('/webinars', webinarsRoutes);
 
 export const apiRouter = router;
+

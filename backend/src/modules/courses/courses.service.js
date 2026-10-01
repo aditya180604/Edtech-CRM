@@ -23,8 +23,7 @@ export class CoursesService {
       instructorAvatar: c.instructorId?.profilePhoto || null,
       rating: 4.8,
       reviewCount: '12K',
-      price: c.coursePrice || 1999,
-      originalPrice: Math.round((c.coursePrice || 1999) * 2.5),
+      price: c.coursePrice ?? 0,
       thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
       category: (c.category || 'DEVELOPMENT').toUpperCase(),
       level: c.level || 'Beginner',
@@ -70,16 +69,19 @@ export class CoursesService {
       Course.find({ status: 'PUBLISHED' }).select('category level').lean(),
     ]);
 
-    // Dynamically calculate category counts for sidebar filter (Image 5)
+    // Dynamically calculate category & level counts for sidebar filter (Image 5)
     const categoryCountMap = {};
     const levelCountMap = {};
 
     allPublished.forEach((c) => {
-      const cat = c.category || 'Development';
-      categoryCountMap[cat] = (categoryCountMap[cat] || 0) + 1;
-
-      const lvl = c.level || 'Beginner';
-      levelCountMap[lvl] = (levelCountMap[lvl] || 0) + 1;
+      if (c.category && c.category.trim()) {
+        const cat = c.category.trim();
+        categoryCountMap[cat] = (categoryCountMap[cat] || 0) + 1;
+      }
+      if (c.level && c.level.trim()) {
+        const lvl = c.level.trim();
+        levelCountMap[lvl] = (levelCountMap[lvl] || 0) + 1;
+      }
     });
 
     const categoriesFilter = [
@@ -94,17 +96,16 @@ export class CoursesService {
       { name: 'Advanced', count: levelCountMap['Advanced'] || 0 },
     ];
 
-    const formatted = courses.map((c, idx) => ({
+    const formatted = courses.map((c) => ({
       id: c._id.toString(),
       _id: c._id.toString(),
       title: c.title,
       slug: c.slug || c._id.toString(),
-      instructorName: `${c.instructorId?.firstName || 'Instructor'} ${c.instructorId?.lastName || ''}`.trim(),
+      instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
       instructorAvatar: c.instructorId?.profilePhoto || null,
       rating: 4.8,
       reviewCount: '10K',
-      price: c.coursePrice || 1999,
-      originalPrice: Math.round((c.coursePrice || 1999) * 2.2),
+      price: c.coursePrice ?? 0,
       thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
       category: (c.category || 'Development').toUpperCase(),
       level: c.level || 'Beginner',
@@ -196,7 +197,6 @@ export class CoursesService {
         ...course,
         price: finalPrice,
         coursePrice: finalPrice,
-        originalPrice: finalPrice > 0 ? Math.round(finalPrice * 2) : 0,
         instructorName: [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
         instructorAvatar: course.instructorId?.profilePhoto || null,
         rating: 4.8,
@@ -205,5 +205,74 @@ export class CoursesService {
       },
       syllabus,
     };
+  }
+
+  /**
+   * 4. Dynamic Topics for Standalone Topic Purchases (Image 4)
+   */
+  static async getAllTopics({ courseId, category, search }) {
+    let moduleIds = [];
+    if (courseId) {
+      let query = { courseId };
+      if (mongoose.Types.ObjectId.isValid(courseId)) {
+        query = { courseId: new mongoose.Types.ObjectId(courseId) };
+      }
+      const modules = await Module.find(query).select('_id').lean();
+      moduleIds = modules.map((m) => m._id);
+    }
+
+    const topicQuery = { status: { $ne: 'ARCHIVED' } };
+    if (moduleIds.length > 0) {
+      topicQuery.moduleId = { $in: moduleIds };
+    }
+    if (search && search.trim()) {
+      topicQuery.title = new RegExp(search.trim(), 'i');
+    }
+
+    const topics = await Topic.find(topicQuery)
+      .populate({
+        path: 'moduleId',
+        select: 'title courseId',
+        populate: {
+          path: 'courseId',
+          select: 'title category thumbnail coursePrice slug status',
+        },
+      })
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    const topicIds = topics.map((t) => t._id);
+    const lessons = await Lesson.find({ topicId: { $in: topicIds } }).lean();
+
+    let formatted = topics.map((t) => {
+      const mod = t.moduleId;
+      const crs = mod?.courseId;
+      const topLessons = lessons.filter((l) => l.topicId.toString() === t._id.toString());
+      const hasVideo = !!(t.videoUrl || topLessons.some((l) => l.playbackReference || l.videoId));
+
+      return {
+        id: t._id.toString(),
+        _id: t._id.toString(),
+        title: t.title,
+        price: t.price ?? 0,
+        duration: t.duration || 30,
+        isFree: !!t.isFree,
+        category: (crs?.category || 'Development').toUpperCase(),
+        courseTitle: crs?.title || 'Comprehensive Course',
+        courseSlug: crs?.slug || '',
+        courseId: crs?._id?.toString() || '',
+        moduleTitle: mod?.title || '',
+        lessonsCount: topLessons.length || (t.lessons?.length || 1),
+        videoUrl: t.videoUrl || topLessons[0]?.playbackReference || '',
+        hasVideo,
+        thumbnail: crs?.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+      };
+    });
+
+    if (category && category !== 'All' && category !== 'ALL') {
+      formatted = formatted.filter((t) => t.category.toLowerCase() === category.toLowerCase());
+    }
+
+    return formatted;
   }
 }

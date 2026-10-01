@@ -99,6 +99,7 @@ export class AuthService {
         bio: '',
         skills: [],
         expertise: [],
+        isCompleted: false,
       });
     }
 
@@ -115,17 +116,43 @@ export class AuthService {
       newValue: { email: user.email, role: user.role },
     });
 
+    const userPayload = await this.formatUserPayload(user);
+
     return {
-      user: {
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      },
+      user: userPayload,
       accessToken,
       refreshToken,
+    };
+  }
+
+  static async formatUserPayload(user) {
+    let isProfileCompleted = user.isProfileCompleted || false;
+    let instructorProfile = null;
+
+    if (user.role === ROLES.INSTRUCTOR) {
+      instructorProfile = await InstructorProfile.findOne({ userId: user._id }).lean();
+      if (
+        instructorProfile?.isCompleted ||
+        (instructorProfile?.bio && instructorProfile?.workExperience && instructorProfile?.expertise?.length > 0)
+      ) {
+        isProfileCompleted = true;
+      }
+    } else {
+      isProfileCompleted = true;
+    }
+
+    return {
+      _id: user._id,
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      profilePhoto: user.profilePhoto || instructorProfile?.profilePhoto || null,
+      isProfileCompleted,
+      instructorProfile: instructorProfile || undefined,
     };
   }
 
@@ -182,18 +209,24 @@ export class AuthService {
       userAgent,
     });
 
+    const userPayload = await this.formatUserPayload(user);
+
     return {
-      user: {
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      },
+      user: userPayload,
       accessToken,
       refreshToken,
     };
+  }
+
+  /**
+   * Get Current Authenticated User profile
+   */
+  static async getMe(userId) {
+    const user = await User.findById(userId);
+    if (!user || user.status !== USER_STATUS.ACTIVE) {
+      throw new AppError('User not found or inactive.', 404);
+    }
+    return await this.formatUserPayload(user);
   }
 
   /**

@@ -77,9 +77,37 @@ export class InstructorController {
     return ApiResponse.created(res, webinar, 'Webinar created successfully.');
   });
 
+  static updateWebinar = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const webinar = await InstructorService.updateWebinar(req.user.userId, id, req.body);
+    return ApiResponse.success(res, webinar, 'Webinar updated successfully.');
+  });
+
+  static deleteWebinar = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await InstructorService.deleteWebinar(req.user.userId, id);
+    return ApiResponse.success(res, result, 'Webinar deleted successfully.');
+  });
+
+  static updateWebinarStatus = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const webinar = await InstructorService.updateWebinarStatus(req.user.userId, id, req.body);
+    return ApiResponse.success(res, webinar, 'Webinar status updated successfully.');
+  });
+
   static getStudents = asyncHandler(async (req, res) => {
     const data = await InstructorService.getStudents(req.user.userId, req.query);
     return ApiResponse.success(res, data, 'Students retrieved successfully.');
+  });
+
+  static getReviews = asyncHandler(async (req, res) => {
+    const data = await InstructorService.getReviews(req.user.userId, req.query);
+    return ApiResponse.success(res, data, 'Instructor reviews retrieved successfully.');
+  });
+
+  static getAnalytics = asyncHandler(async (req, res) => {
+    const data = await InstructorService.getAnalytics(req.user.userId, req.query);
+    return ApiResponse.success(res, data, 'Instructor analytics retrieved successfully.');
   });
 
   static getQuestions = asyncHandler(async (req, res) => {
@@ -101,5 +129,36 @@ export class InstructorController {
   static updateProfile = asyncHandler(async (req, res) => {
     const data = await InstructorService.updateProfile(req.user.userId, req.body);
     return ApiResponse.success(res, data, 'Instructor profile updated successfully.');
+  });
+
+  static completeOnboarding = asyncHandler(async (req, res) => {
+    const data = await InstructorService.completeOnboarding(req.user.userId, req.body);
+    return ApiResponse.success(res, data, 'Profile completed successfully! Welcome to your dashboard.');
+  });
+
+  static submitForReview = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const course = await InstructorService.submitForReview(req.user.userId, id);
+    return ApiResponse.success(res, course, 'Course submitted for review successfully.');
+  });
+
+  static createPublishingFeeOrder = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { returnUrl } = req.body;
+    const result = await InstructorService.createPublishingFeeOrder(req.user.userId, id, returnUrl);
+    return ApiResponse.success(res, result, 'Cashfree publishing fee order created.');
+  });
+
+  static verifyPublishingFee = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { orderId } = req.body;
+    const result = await InstructorService.verifyPublishingFee(req.user.userId, id, orderId);
+    return ApiResponse.success(res, result, 'Publishing fee payment verified.');
+  });
+
+  static publishCourse = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const course = await InstructorService.publishCourse(req.user.userId, id);
+    return ApiResponse.success(res, course, 'Course published successfully.');
   });
 }

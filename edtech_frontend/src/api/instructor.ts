@@ -111,13 +111,34 @@ export const instructorApi = {
     return res.data;
   },
 
+  async updateWebinar(webinarId: string, payload: any) {
+    const res = await apiClient.put(`/instructor/webinars/${webinarId}`, payload);
+    return res.data;
+  },
+
+  async deleteWebinar(webinarId: string) {
+    const res = await apiClient.delete(`/instructor/webinars/${webinarId}`);
+    return res.data;
+  },
+
+  async updateWebinarStatus(webinarId: string, payload: { status: string }) {
+    const res = await apiClient.patch(`/instructor/webinars/${webinarId}/status`, payload);
+    return res.data;
+  },
+
   // 5. Students
   async getStudents(params?: { status?: string; courseId?: string; search?: string }) {
     const res = await apiClient.get('/instructor/students', { params });
     return res.data;
   },
 
-  // 6. Q&A
+  // 6. Reviews & Ratings
+  async getReviews(params?: { rating?: number; search?: string }) {
+    const res = await apiClient.get('/instructor/reviews', { params });
+    return res.data;
+  },
+
+  // 7. Q&A
   async getQuestions(params?: { status?: string; search?: string }) {
     const res = await apiClient.get('/instructor/questions', { params });
     return res.data;
@@ -128,7 +149,13 @@ export const instructorApi = {
     return res.data;
   },
 
-  // 7. Profile
+  // 8. Analytics
+  async getAnalytics(params?: { timeframe?: string }) {
+    const res = await apiClient.get('/instructor/analytics', { params });
+    return res.data;
+  },
+
+  // 9. Profile & Onboarding
   async getProfile() {
     const res = await apiClient.get('/instructor/profile');
     return res.data;
@@ -136,6 +163,40 @@ export const instructorApi = {
 
   async updateProfile(payload: any) {
     const res = await apiClient.put('/instructor/profile', payload);
+    return res.data;
+  },
+
+  async completeOnboarding(payload: {
+    fullName: string;
+    bio: string;
+    expertise: string[];
+    currentOrganization?: string;
+    workExperience: string;
+    yearsOfExperience: number;
+    profilePhoto?: string;
+  }) {
+    const res = await apiClient.post('/instructor/profile/onboarding', payload);
+    return res.data;
+  },
+
+  // 10. Course Review & Publishing Workflow
+  async submitForReview(courseId: string) {
+    const res = await apiClient.post(`/instructor/courses/${courseId}/submit-for-review`);
+    return res.data;
+  },
+
+  async createPublishingFeeOrder(courseId: string) {
+    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/create-order`);
+    return res.data;
+  },
+
+  async verifyPublishingFee(courseId: string, payload: { cashfreeOrderId: string }) {
+    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/verify`, payload);
+    return res.data;
+  },
+
+  async publishCourse(courseId: string) {
+    const res = await apiClient.post(`/instructor/courses/${courseId}/publish`);
     return res.data;
   },
 };

@@ -31,3 +31,26 @@ export async function authenticate(req, res, next) {
     return next(new AppError('Invalid authentication token.', 401));
   }
 }
+
+export async function optionalAuthenticate(req, res, next) {
+  try {
+    let token = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies && req.cookies.accessToken) {
+      token = req.cookies.accessToken;
+    }
+    if (token) {
+      const decoded = jwt.verify(token, config.jwt.secret);
+      req.user = {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+      };
+    }
+  } catch (error) {
+    // Silently continue for optional auth
+  }
+  next();
+}
+

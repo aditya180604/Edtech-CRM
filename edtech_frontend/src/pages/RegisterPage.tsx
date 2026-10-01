@@ -40,7 +40,7 @@ export const RegisterPage: React.FC = () => {
     setLoading(false);
 
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role);
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
       navigate(redirectPath);
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');

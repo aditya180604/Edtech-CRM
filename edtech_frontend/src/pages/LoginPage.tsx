@@ -21,7 +21,7 @@ export const LoginPage: React.FC = () => {
     setLoading(false);
 
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role);
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
       navigate(redirectPath);
     } else {
       setErrorMessage(result.message || 'Invalid email or password.');

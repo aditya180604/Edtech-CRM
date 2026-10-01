@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
+import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useAuthModal } from '../context/AuthModalContext';
+import { useToast } from '../context/ToastContext';
 
 export const CartPage: React.FC = () => {
   const {
     items,
     removeFromCart,
+    clearCart,
     subtotal,
     discount,
     total,
@@ -18,8 +20,9 @@ export const CartPage: React.FC = () => {
     applyCoupon,
     removeCoupon,
   } = useCart();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { openLogin } = useAuthModal();
+  const { success } = useToast();
   const navigate = useNavigate();
 
   const [couponInput, setCouponInput] = useState('');
@@ -43,7 +46,11 @@ export const CartPage: React.FC = () => {
     }
     setCheckingOut(true);
     setTimeout(() => {
-      alert(`🎉 Checkout successful! Enrolled into ${items.length} item(s) for ₹${total.toLocaleString('en-IN')}. Access is now unlocked in your Student Dashboard.`);
+      success(
+        '🎉 Enrollment Successful!',
+        `Enrolled into ${items.length} item(s) for ₹${total.toLocaleString('en-IN')}. Access is unlocked in your Student Dashboard.`
+      );
+      clearCart();
       setCheckingOut(false);
       navigate('/dashboard/student');
     }, 1200);

@@ -27,13 +27,25 @@ import {
   Globe,
   HardDrive,
   Trash2,
+  Lock,
+  Edit3,
+  CreditCard,
+  AlertTriangle,
+  X,
+  QrCode,
+  Landmark,
+  Smartphone,
+  Wallet,
+  Check,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
+import { useToast } from '../../context/ToastContext';
 
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { success, error: toastError, info } = useToast();
 
   // Navigation Sub-tab state
   const [activeNav, setActiveNav] = useState<
@@ -63,6 +75,30 @@ export const InstructorDashboard: React.FC = () => {
   const [courseCategory, setCourseCategory] = useState('ALL');
   const [coursesList, setCoursesList] = useState<any[]>([]);
 
+  // Cashfree Publishing Fee & Rejection Feedback States (Workflow 2 & 3)
+  const [feeModalCourse, setFeeModalCourse] = useState<any | null>(null);
+  const [feeOrderData, setFeeOrderData] = useState<any | null>(null);
+  const [showFeeModal, setShowFeeModal] = useState(false);
+  const [processingFee, setProcessingFee] = useState(false);
+  const [rejectionModalCourse, setRejectionModalCourse] = useState<any | null>(null);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [wizardPublishingFeePaid, setWizardPublishingFeePaid] = useState<boolean>(false);
+  const [isSubmittingCourse, setIsSubmittingCourse] = useState<boolean>(false);
+
+  // Cashfree Interactive PG UI States
+  const [pgMethod, setPgMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallet'>('upi');
+  const [pgUpiMode, setPgUpiMode] = useState<'qr' | 'vpa'>('qr');
+  const [pgVpaInput, setPgVpaInput] = useState('instructor@okhdfcbank');
+  const [pgCardNumber, setPgCardNumber] = useState('4012 0000 0000 0000');
+  const [pgCardName, setPgCardName] = useState('David Miller');
+  const [pgCardExpiry, setPgCardExpiry] = useState('12/28');
+  const [pgCardCvv, setPgCardCvv] = useState('888');
+  const [pgSelectedBank, setPgSelectedBank] = useState('HDFC');
+  const [pgSelectedWallet, setPgSelectedWallet] = useState('paytm');
+  const [pgOtpStep, setPgOtpStep] = useState(false);
+  const [pgOtpValue, setPgOtpValue] = useState('123456');
+  const [pgPaymentSuccess, setPgPaymentSuccess] = useState(false);
+
   // Webinars Tab State
   const [webinarsTab, setWebinarsTab] = useState('ALL');
   const [webinarSearch, setWebinarSearch] = useState('');
@@ -75,7 +111,27 @@ export const InstructorDashboard: React.FC = () => {
     startTime: '',
     capacity: 100,
     price: 0,
+    meetingUrl: '',
   });
+
+  // Edit Webinar State with 2-Hour Lock
+  const [editingWebinar, setEditingWebinar] = useState<any | null>(null);
+  const [showEditWebinarModal, setShowEditWebinarModal] = useState(false);
+
+  // Reviews Tab State
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [reviewsMetrics, setReviewsMetrics] = useState<any>({
+    totalReviews: 0,
+    averageRating: 0,
+    verifiedPurchases: 0,
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  });
+  const [reviewRatingFilter, setReviewRatingFilter] = useState<number | null>(null);
+  const [reviewSearch, setReviewSearch] = useState('');
+
+  // Analytics Tab State
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState('30d');
 
   // Students Tab State
   const [studentsTab, setStudentsTab] = useState('ALL');
@@ -215,6 +271,20 @@ export const InstructorDashboard: React.FC = () => {
         setStudentsList(res.data.students || []);
         setStudentCounts(res.data.counts || {});
       }
+    } else if (activeNav === 'reviews') {
+      const res = await instructorApi.getReviews({
+        rating: reviewRatingFilter || undefined,
+        search: reviewSearch || undefined,
+      });
+      if (res.success && res.data) {
+        setReviewsList(res.data.reviews || []);
+        setReviewsMetrics(res.data.metrics || {});
+      }
+    } else if (activeNav === 'analytics') {
+      const res = await instructorApi.getAnalytics({ timeframe: analyticsTimeframe });
+      if (res.success && res.data) {
+        setAnalyticsData(res.data);
+      }
     } else if (activeNav === 'qa') {
       const res = await instructorApi.getQuestions({
         status: qaTab,
@@ -230,7 +300,21 @@ export const InstructorDashboard: React.FC = () => {
         setProfileData(res.data.profile);
       }
     }
-  }, [activeNav, courseStatusTab, courseSearch, courseCategory, webinarsTab, webinarSearch, studentsTab, studentSearch, qaTab, qaSearch]);
+  }, [
+    activeNav,
+    courseStatusTab,
+    courseSearch,
+    courseCategory,
+    webinarsTab,
+    webinarSearch,
+    studentsTab,
+    studentSearch,
+    qaTab,
+    qaSearch,
+    reviewRatingFilter,
+    reviewSearch,
+    analyticsTimeframe,
+  ]);
 
   useEffect(() => {
     fetchDashboard();
@@ -239,6 +323,22 @@ export const InstructorDashboard: React.FC = () => {
   useEffect(() => {
     loadSubViewData();
   }, [loadSubViewData]);
+
+  useEffect(() => {
+    const onWebinarsChanged = () => {
+      loadSubViewData();
+      fetchDashboard(true);
+    };
+    window.addEventListener('webinarsChanged', onWebinarsChanged);
+    return () => window.removeEventListener('webinarsChanged', onWebinarsChanged);
+  }, [loadSubViewData, fetchDashboard]);
+
+  // Mandatory Onboarding Guard (Workflow 1)
+  useEffect(() => {
+    if (user && user.role === 'INSTRUCTOR' && user.isProfileCompleted === false) {
+      navigate('/instructor/onboarding');
+    }
+  }, [user, navigate]);
 
   const handleLogout = async () => {
     await logout();
@@ -416,12 +516,13 @@ export const InstructorDashboard: React.FC = () => {
             })),
           })),
         });
+        setWizardPublishingFeePaid(Boolean(course.publishingFeePaid));
         setActiveNav('create-course');
         setCreateStep(1);
       }
     } catch (err) {
       console.error('Failed to load course for editing:', err);
-      alert('Could not load course details for editing.');
+      toastError('Error', 'Could not load course details for editing.');
     } finally {
       setLoading(false);
     }
@@ -434,12 +535,12 @@ export const InstructorDashboard: React.FC = () => {
     }
     try {
       await instructorApi.deleteCourse(courseId);
-      alert('Course deleted successfully.');
+      success('Course Deleted', `Course "${courseTitle}" was deleted successfully.`);
       loadSubViewData();
       fetchDashboard(true);
     } catch (err) {
       console.error('Failed to delete course:', err);
-      alert('Failed to delete course.');
+      toastError('Delete Failed', 'Failed to delete course.');
     }
   };
 
@@ -487,43 +588,164 @@ export const InstructorDashboard: React.FC = () => {
   const handleCreateWebinar = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const scheduledDate = newWebinar.startTime ? new Date(newWebinar.startTime) : new Date(Date.now() + 86400000 * 3);
       await instructorApi.createWebinar({
-        title: newWebinar.title,
+        title: newWebinar.title.trim(),
         category: newWebinar.category,
-        startTime: newWebinar.startTime || new Date(Date.now() + 86400000 * 3),
-        endTime: new Date(Date.now() + 86400000 * 3 + 7200000),
-        capacity: newWebinar.capacity,
-        price: newWebinar.price,
+        startTime: scheduledDate.toISOString(),
+        endTime: new Date(scheduledDate.getTime() + 7200000).toISOString(),
+        capacity: Number(newWebinar.capacity) || 100,
+        price: Number(newWebinar.price) || 0,
+        meetingUrl: newWebinar.meetingUrl.trim(),
+        status: 'SCHEDULED',
       });
       setShowCreateWebinarModal(false);
-      setNewWebinar({ title: '', category: 'DevOps / Cloud', startTime: '', capacity: 100, price: 0 });
-      loadSubViewData();
-    } catch (err) {
+      setNewWebinar({ title: '', category: 'DevOps / Cloud', startTime: '', capacity: 100, price: 0, meetingUrl: '' });
+      success('Webinar Scheduled', 'Your live webinar was successfully created and scheduled!');
+      window.dispatchEvent(new Event('webinarsChanged'));
+      await loadSubViewData();
+      fetchDashboard(true);
+    } catch (err: any) {
       console.error('Error creating webinar:', err);
+      toastError('Error', err.response?.data?.message || 'Failed to create webinar.');
     }
   };
 
-  const handlePublishCourseWizard = async () => {
+  const handleUpdateWebinar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWebinar) return;
+    try {
+      const payload: any = {
+        title: editingWebinar.title.trim(),
+        category: editingWebinar.category,
+        capacity: Number(editingWebinar.capacity) || 100,
+        price: Number(editingWebinar.price) || 0,
+        meetingUrl: (editingWebinar.meetingUrl || '').trim(),
+      };
+
+      // Strict 2-Hour Cutoff: Only update startTime if not locked
+      if (!editingWebinar.isTimingLocked && editingWebinar.startTime) {
+        payload.startTime = new Date(editingWebinar.startTime).toISOString();
+        payload.endTime = new Date(new Date(editingWebinar.startTime).getTime() + 7200000).toISOString();
+      }
+
+      await instructorApi.updateWebinar(editingWebinar._id, payload);
+      setShowEditWebinarModal(false);
+      setEditingWebinar(null);
+      success('Webinar Updated', 'Webinar details updated successfully!');
+      window.dispatchEvent(new Event('webinarsChanged'));
+      await loadSubViewData();
+      fetchDashboard(true);
+    } catch (err: any) {
+      console.error('Error updating webinar:', err);
+      toastError('Update Failed', err.response?.data?.message || 'Could not update webinar.');
+    }
+  };
+
+  const handleDeleteWebinar = async (webinarId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to delete the scheduled webinar "${title}"?`)) return;
+    try {
+      await instructorApi.deleteWebinar(webinarId);
+      success('Webinar Deleted', `Webinar "${title}" was deleted successfully.`);
+      window.dispatchEvent(new Event('webinarsChanged'));
+      await loadSubViewData();
+      fetchDashboard(true);
+    } catch (err) {
+      console.error('Error deleting webinar:', err);
+      toastError('Error', 'Failed to delete webinar.');
+    }
+  };
+
+  const handleWizardPayFee = async () => {
     if (!courseFormData.title.trim()) {
-      alert('Please provide a course title in Step 1 before publishing.');
+      toastError('Course Title Required', 'Please enter a course title in Step 1 before proceeding to payment.');
       setCreateStep(1);
       return;
     }
     try {
+      setProcessingFee(true);
+      let targetCourseId = editingCourseId;
+      if (!targetCourseId) {
+        // Create initial draft course first to obtain courseId
+        const res = await instructorApi.createCourse({
+          ...courseFormData,
+          status: 'DRAFT',
+          approvalStatus: 'DRAFT',
+        });
+        targetCourseId = res.data?._id || res.data?.id;
+        setEditingCourseId(targetCourseId);
+      } else {
+        // Update existing course draft
+        await instructorApi.updateCourse(targetCourseId, {
+          ...courseFormData,
+          status: 'DRAFT',
+          approvalStatus: 'DRAFT',
+        });
+      }
+
+      if (!targetCourseId) {
+        toastError('Error', 'Unable to initiate course for payment. Please try again.');
+        return;
+      }
+
+      // Open Cashfree fee payment modal
+      setFeeModalCourse({ _id: targetCourseId, title: courseFormData.title });
+      setShowFeeModal(true);
+      const feeRes = await instructorApi.createPublishingFeeOrder(targetCourseId);
+      if (feeRes.success && feeRes.data) {
+        setFeeOrderData(feeRes.data);
+      }
+    } catch (err: any) {
+      console.error('Error in handleWizardPayFee:', err);
+      toastError('Payment Initialization Failed', err.response?.data?.message || err.message || 'Could not initiate payment.');
+      setShowFeeModal(false);
+    } finally {
+      setProcessingFee(false);
+    }
+  };
+
+  const handleSubmitCourseForReview = async (saveAsDraftOnly = false) => {
+    if (!courseFormData.title.trim()) {
+      toastError('Title Required', 'Please provide a course title in Step 1 before submitting.');
+      setCreateStep(1);
+      return;
+    }
+    if (!saveAsDraftOnly && !wizardPublishingFeePaid) {
+      toastError('Publishing Fee Required', 'Please pay the platform publishing fee (₹499) via Cashfree before submitting for Super Admin review.');
+      return;
+    }
+    if (isSubmittingCourse) return;
+
+    try {
+      setIsSubmittingCourse(true);
+      const statusToSet = saveAsDraftOnly ? 'DRAFT' : 'PENDING_APPROVAL';
+      const approvalStatusToSet = saveAsDraftOnly ? 'DRAFT' : 'PENDING_APPROVAL';
+
+      let savedCourseId = editingCourseId;
       if (editingCourseId) {
         await instructorApi.updateCourse(editingCourseId, {
           ...courseFormData,
-          status: 'PUBLISHED',
+          status: statusToSet,
+          approvalStatus: approvalStatusToSet,
         });
-        alert('Course updated successfully!');
       } else {
-        await instructorApi.createCourse({
+        const res = await instructorApi.createCourse({
           ...courseFormData,
-          status: 'PUBLISHED',
+          status: statusToSet,
+          approvalStatus: approvalStatusToSet,
         });
-        alert('Course published successfully! It is now live on the Home Page and Catalog.');
+        savedCourseId = res.data?._id || res.data?.id;
       }
+
+      if (!saveAsDraftOnly && savedCourseId) {
+        await instructorApi.submitForReview(savedCourseId);
+        success('Course Submitted for Review!', 'Your course is now pending Super Admin review. You will be notified once approved.');
+      } else {
+        success('Course Draft Saved', 'Your course structure and curriculum have been saved as draft.');
+      }
+
       setEditingCourseId(null);
+      setWizardPublishingFeePaid(false);
       setActiveNav('courses');
       setCreateStep(1);
       setCourseFormData({
@@ -545,9 +767,83 @@ export const InstructorDashboard: React.FC = () => {
         syllabusFileName: '',
         modules: [],
       });
+      await loadSubViewData();
       fetchDashboard(true);
-    } catch (err) {
-      console.error('Error publishing/updating course:', err);
+    } catch (err: any) {
+      console.error('Error submitting course:', err);
+      toastError('Submission Error', err.response?.data?.message || err.message || 'Could not submit course.');
+    } finally {
+      setIsSubmittingCourse(false);
+    }
+  };
+
+  const handleOpenFeeModal = async (course: any) => {
+    try {
+      setProcessingFee(true);
+      setFeeModalCourse(course);
+      setShowFeeModal(true);
+      setPgMethod('upi');
+      setPgUpiMode('qr');
+      setPgOtpStep(false);
+      setPgPaymentSuccess(false);
+      const res = await instructorApi.createPublishingFeeOrder(course._id || course.id);
+      if (res.success && res.data) {
+        setFeeOrderData(res.data);
+      }
+    } catch (err: any) {
+      toastError('Payment Initialization Failed', err.response?.data?.message || err.message);
+      setShowFeeModal(false);
+    } finally {
+      setProcessingFee(false);
+    }
+  };
+
+  const handleVerifyFeePayment = async () => {
+    if (!feeModalCourse || !feeOrderData) return;
+    try {
+      setProcessingFee(true);
+      const res = await instructorApi.verifyPublishingFee(feeModalCourse._id || feeModalCourse.id, {
+        cashfreeOrderId: feeOrderData.orderId,
+      });
+      if (res.success) {
+        setPgPaymentSuccess(true);
+        success('Publishing Fee Paid Successfully!', 'Your course is now verified and ready for Super Admin review.');
+        setTimeout(async () => {
+          setShowFeeModal(false);
+          setFeeModalCourse(null);
+          setFeeOrderData(null);
+          setWizardPublishingFeePaid(true);
+          setPgPaymentSuccess(false);
+          setPgOtpStep(false);
+          await loadSubViewData();
+          fetchDashboard(true);
+        }, 1200);
+      }
+    } catch (err: any) {
+      toastError('Verification Failed', err.response?.data?.message || err.message);
+    } finally {
+      setProcessingFee(false);
+    }
+  };
+
+  const handlePublishLive = async (courseId: string) => {
+    try {
+      await instructorApi.publishCourse(courseId);
+      success('🚀 Course is Live!', 'Your course is now officially live on the Home Page and Courses Catalog.');
+      await loadSubViewData();
+      fetchDashboard(true);
+    } catch (err: any) {
+      toastError('Publish Failed', err.response?.data?.message || err.message || 'Could not publish course.');
+    }
+  };
+
+  const handleSubmitExistingForReview = async (courseId: string) => {
+    try {
+      await instructorApi.submitForReview(courseId);
+      success('Submitted for Review', 'Course submitted to Super Admin for approval.');
+      await loadSubViewData();
+    } catch (err: any) {
+      toastError('Submission Failed', err.response?.data?.message || err.message);
     }
   };
 
@@ -869,7 +1165,7 @@ export const InstructorDashboard: React.FC = () => {
                       <span>Create Webinar</span>
                     </button>
                     <button
-                      onClick={() => alert('Resource Uploader')}
+                      onClick={() => info('Resource Uploader', 'Resource uploader opened.')}
                       className="py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-slate-100 cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5 text-emerald-600" />
@@ -1147,10 +1443,10 @@ export const InstructorDashboard: React.FC = () => {
                   <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                     <th className="py-3 px-4">Course</th>
                     <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Level</th>
                     <th className="py-3 px-4">Price</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">Approval Status</th>
+                    <th className="py-3 px-4">Publishing Fee</th>
+                    <th className="py-3 px-4 text-right">Workflow & Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1170,21 +1466,91 @@ export const InstructorDashboard: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-700">{c.category}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                          {c.level || 'Beginner'}
-                        </span>
-                      </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">₹{c.coursePrice?.toLocaleString()}</td>
+                      
+                      {/* Approval Status Badge */}
                       <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          c.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {c.status || 'Published'}
-                        </span>
+                        {c.approvalStatus === 'APPROVED' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Approved</span>
+                          </span>
+                        ) : c.approvalStatus === 'PENDING_APPROVAL' || c.status === 'PENDING_APPROVAL' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending Review</span>
+                          </span>
+                        ) : c.approvalStatus === 'REJECTED' ? (
+                          <button
+                            onClick={() => {
+                              setRejectionModalCourse(c);
+                              setShowRejectionModal(true);
+                            }}
+                            className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1 hover:bg-rose-100 cursor-pointer"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Rejected (View Reason)</span>
+                          </button>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                            Draft
+                          </span>
+                        )}
                       </td>
+
+                      {/* Publishing Fee Status */}
+                      <td className="py-3.5 px-4">
+                        {c.publishingFeePaid ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            ₹499 Paid
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
+                            Unpaid
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
+                          {/* Workflow Step 1: For Draft Courses - Require Cashfree Fee before Review Submission */}
+                          {(!c.approvalStatus || c.approvalStatus === 'DRAFT') && (
+                            <>
+                              {!c.publishingFeePaid ? (
+                                <button
+                                  onClick={() => handleOpenFeeModal(c)}
+                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
+                                  title="Pay Cashfree Publishing Fee (₹499) to Unlock Review Submission"
+                                >
+                                  <CreditCard className="w-3 h-3" />
+                                  <span>Pay Fee (₹499)</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleSubmitExistingForReview(c._id)}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
+                                  title="Submit to Super Admin for Approval"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>Submit Review</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {/* Workflow Step 2: For Approved Courses - Publish Live */}
+                          {c.approvalStatus === 'APPROVED' && c.status !== 'PUBLISHED' && (
+                            <button
+                              onClick={() => handlePublishLive(c._id)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
+                              title="Make Course Live on Public Catalog"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Publish Live</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => handleEditCourse(c._id)}
                             className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg cursor-pointer transition-colors"
@@ -1256,10 +1622,7 @@ export const InstructorDashboard: React.FC = () => {
                 )}
 
                 <button
-                  onClick={() => {
-                    setCourseFormData((prev) => ({ ...prev, status: 'DRAFT' }));
-                    handlePublishCourseWizard();
-                  }}
+                  onClick={() => handleSubmitCourseForReview(true)}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
                 >
                   Save as Draft
@@ -1273,12 +1636,34 @@ export const InstructorDashboard: React.FC = () => {
                     <span>Next Step</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
+                ) : !wizardPublishingFeePaid ? (
+                  <button
+                    type="button"
+                    onClick={handleWizardPayFee}
+                    disabled={processingFee}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-60"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Pay Fee (₹499) to Unlock</span>
+                  </button>
                 ) : (
                   <button
-                    onClick={handlePublishCourseWizard}
-                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+                    type="button"
+                    disabled={isSubmittingCourse}
+                    onClick={() => handleSubmitCourseForReview(false)}
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-70"
                   >
-                    <span>🚀 Publish Course Live</span>
+                    {isSubmittingCourse ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Submit for Super Admin Review</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -1982,6 +2367,62 @@ export const InstructorDashboard: React.FC = () => {
                       )}
                     </div>
 
+                    {/* Cashfree Publishing Fee Gatekeeper Card (Workflow 3 Strict Gate) */}
+                    <div
+                      className={`p-5 rounded-2xl border transition-all ${
+                        wizardPublishingFeePaid
+                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                          : 'bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-indigo-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                              wizardPublishingFeePaid
+                                ? 'bg-emerald-500 text-white shadow-emerald-500/20'
+                                : 'bg-indigo-600 text-white shadow-indigo-600/20'
+                            }`}
+                          >
+                            {wizardPublishingFeePaid ? <CheckCircle2 className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-extrabold text-sm text-slate-900">
+                                Platform Publishing & Verification Fee (₹499)
+                              </h4>
+                              {wizardPublishingFeePaid ? (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-300 inline-flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" /> Fee Paid & Verified
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                  <Lock className="w-3 h-3" /> Payment Required to Unlock Submission
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
+                              {wizardPublishingFeePaid
+                                ? 'Your publishing fee has been verified via Cashfree. You can now submit this course to the Super Admin approval queue.'
+                                : 'Instructors must pay a platform verification fee of ₹499 via Cashfree sandbox before submitting the course for Super Admin review.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {!wizardPublishingFeePaid && (
+                          <button
+                            type="button"
+                            onClick={handleWizardPayFee}
+                            disabled={processingFee}
+                            className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            <span>Pay ₹499 via Cashfree</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Final Action Buttons in Preview */}
                     <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
                       <button
@@ -1993,21 +2434,43 @@ export const InstructorDashboard: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setCourseFormData((prev) => ({ ...prev, status: 'DRAFT' }));
-                          handlePublishCourseWizard();
-                        }}
+                        onClick={() => handleSubmitCourseForReview(true)}
                         className="w-full sm:w-auto px-5 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl cursor-pointer transition-colors"
                       >
                         Save as Draft
                       </button>
-                      <button
-                        type="button"
-                        onClick={handlePublishCourseWizard}
-                        className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <span>🚀 Publish Course Live</span>
-                      </button>
+
+                      {!wizardPublishingFeePaid ? (
+                        <button
+                          type="button"
+                          onClick={handleWizardPayFee}
+                          disabled={processingFee}
+                          className="w-full sm:w-auto px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 border border-slate-300"
+                          title="Click Pay ₹499 via Cashfree above to unlock submission"
+                        >
+                          <Lock className="w-4 h-4 text-slate-500" />
+                          <span>Submit for Review (Pay Fee to Unlock)</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isSubmittingCourse}
+                          onClick={() => handleSubmitCourseForReview(false)}
+                          className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                          {isSubmittingCourse ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Submitting Course to Super Admin...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Submit for Super Admin Review</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2045,11 +2508,14 @@ export const InstructorDashboard: React.FC = () => {
                 <p className="font-semibold text-slate-600">Upcoming</p>
               </div>
               <div className="p-4 rounded-2xl bg-blue-50 text-blue-700">
-                <p className="text-2xl font-black">{webinarsList.reduce((acc, w) => acc + (w.registrations?.length || 0), 0)}</p>
+                <p className="text-2xl font-black">
+                  {webinarCounts.totalRegistrations ??
+                    webinarsList.reduce((acc, w) => acc + (w.registrations?.length || 0), 0)}
+                </p>
                 <p className="font-semibold text-slate-600">Total Registrations</p>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
-                <p className="text-2xl font-black">4.8</p>
+                <p className="text-2xl font-black">{webinarCounts.averageRating ?? '0.0'}</p>
                 <p className="font-semibold text-slate-600">Average Rating</p>
               </div>
             </div>
@@ -2090,27 +2556,108 @@ export const InstructorDashboard: React.FC = () => {
                   <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-100">
                     <th className="py-3 px-4">Webinar Title</th>
                     <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4">Registrations</th>
                     <th className="py-3 px-4">Capacity</th>
                     <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Meeting Link</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {webinarsList.map((w) => (
-                    <tr key={w._id} className="hover:bg-slate-50">
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{w.title}</td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {new Date(w.startTime).toLocaleDateString()} {new Date(w.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 200}</td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          w.status === 'LIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {w.status || 'Scheduled'}
-                        </span>
+                  {webinarsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                        No webinars found. Click "+ Create Webinar" to schedule a session.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    webinarsList.map((w) => {
+                      const isLive = w.isLive || w.status === 'LIVE';
+                      return (
+                        <tr key={w._id} className="hover:bg-slate-50">
+                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                            <div>{w.title}</div>
+                            <span className="text-[10px] text-slate-400 font-semibold">{w.category}</span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-medium">
+                            <div>{new Date(w.startTime).toLocaleDateString()}</div>
+                            <div className="text-[11px] text-slate-400 font-semibold">
+                              {new Date(w.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-indigo-600">
+                            {w.registrations?.length || 0}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 100}</td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                isLive
+                                  ? 'bg-red-100 text-red-700 animate-pulse font-black'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {isLive ? '🔴 LIVE NOW' : w.status || 'SCHEDULED'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {w.meetingUrl ? (
+                              <a
+                                href={w.meetingUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-indigo-600 hover:text-indigo-800 underline font-semibold max-w-[140px] truncate block"
+                              >
+                                Open Meeting ↗
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Not configured</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {isLive && w.meetingUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(w.meetingUrl, '_blank')}
+                                  className="px-2.5 py-1 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition cursor-pointer text-[11px]"
+                                >
+                                  Host Live
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const localIso = w.startTime
+                                    ? new Date(new Date(w.startTime).getTime() - new Date().getTimezoneOffset() * 60000)
+                                        .toISOString()
+                                        .slice(0, 16)
+                                    : '';
+                                  setEditingWebinar({
+                                    ...w,
+                                    startTime: localIso,
+                                  });
+                                  setShowEditWebinarModal(true);
+                                }}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition cursor-pointer text-[11px] inline-flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteWebinar(w._id, w.title)}
+                                className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition cursor-pointer"
+                                title="Delete webinar"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2141,7 +2688,7 @@ export const InstructorDashboard: React.FC = () => {
                 <p className="font-semibold text-slate-600">Completed</p>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
-                <p className="text-2xl font-black">4.8</p>
+                <p className="text-2xl font-black">{studentCounts.averageEngagement ?? '0.0'}</p>
                 <p className="font-semibold text-slate-600">Average Engagement</p>
               </div>
             </div>
@@ -2327,6 +2874,252 @@ export const InstructorDashboard: React.FC = () => {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            VIEW 6B: REVIEWS & RATINGS (Image 3)
+           ========================================================================= */}
+        {activeNav === 'reviews' && (
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Reviews & Ratings</h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Track student feedback, course ratings, and reviews in real time.
+                </p>
+              </div>
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                  <span className="text-2xl font-black">
+                    {Number(reviewsMetrics.averageRating || 0).toFixed(1)}
+                  </span>
+                </div>
+                <p className="font-semibold text-slate-600">Average Rating</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
+                <p className="text-2xl font-black">{reviewsMetrics.totalReviews ?? 0}</p>
+                <p className="font-semibold text-slate-600">Total Reviews</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-700">
+                <p className="text-2xl font-black">{reviewsMetrics.verifiedPurchases ?? 0}</p>
+                <p className="font-semibold text-slate-600">Verified Enrollees</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700 flex flex-col justify-center gap-1">
+                {[5, 4, 3, 2, 1].map((stars) => {
+                  const count = reviewsMetrics.distribution?.[stars] || 0;
+                  const pct =
+                    reviewsMetrics.totalReviews > 0
+                      ? Math.round((count / reviewsMetrics.totalReviews) * 100)
+                      : 0;
+                  return (
+                    <div key={stars} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+                      <span className="w-4">{stars}★</span>
+                      <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div style={{ width: `${pct}%` }} className="h-full bg-amber-400 rounded-full" />
+                      </div>
+                      <span className="w-6 text-right text-slate-400">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Status Filter Tabs & Search */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  onClick={() => setReviewRatingFilter(null)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    reviewRatingFilter === null
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  All ({reviewsMetrics.totalReviews ?? 0})
+                </button>
+                {[5, 4, 3, 2, 1].map((rating) => (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() => setReviewRatingFilter(rating)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                      reviewRatingFilter === rating
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{rating}★</span>
+                    <span>({reviewsMetrics.distribution?.[rating] || 0})</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search reviews..."
+                  value={reviewSearch}
+                  onChange={(e) => setReviewSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Reviews List */}
+            <div className="space-y-4">
+              {reviewsList.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  <Star className="w-8 h-8 mx-auto mb-2 text-slate-300 stroke-1" />
+                  <p className="font-bold text-slate-600">No reviews found</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Student reviews on your published courses will appear here in real time.
+                  </p>
+                </div>
+              ) : (
+                reviewsList.map((rev) => (
+                  <div key={rev._id} className="p-4 rounded-2xl border border-slate-100 hover:border-slate-200 transition bg-slate-50/50 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                          {rev.user?.name?.[0] || 'S'}
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900">{rev.user?.name || 'Student'}</p>
+                          <p className="text-[10px] text-indigo-600 font-semibold">{rev.course?.title || 'Enrolled Course'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center text-amber-400">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`w-3.5 h-3.5 ${
+                                star <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {new Date(rev.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    {rev.comment && (
+                      <p className="text-xs text-slate-700 leading-relaxed font-medium bg-white p-3 rounded-xl border border-slate-100">
+                        "{rev.comment}"
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            VIEW 6C: ANALYTICS TAB
+           ========================================================================= */}
+        {activeNav === 'analytics' && (
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Performance Analytics</h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Detailed telemetry, revenue, and enrollment metrics for your courses and webinars.
+                </p>
+              </div>
+
+              {/* Timeframe Selector */}
+              <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                {['7d', '30d', '90d', '1y'].map((tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setAnalyticsTimeframe(tf)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      analyticsTimeframe === tf
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {tf.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Analytics Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
+                <p className="text-2xl font-black">
+                  ₹{(analyticsData?.totalRevenue || 0).toLocaleString('en-IN')}
+                </p>
+                <p className="font-semibold text-slate-600">Total Revenue</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-700">
+                <p className="text-2xl font-black">{analyticsData?.activeStudents ?? 0}</p>
+                <p className="font-semibold text-slate-600">Active Students</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700">
+                <p className="text-2xl font-black">{analyticsData?.totalCourses ?? 0}</p>
+                <p className="font-semibold text-slate-600">Active Courses</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
+                <p className="text-2xl font-black">{analyticsData?.totalWebinars ?? 0}</p>
+                <p className="font-semibold text-slate-600">Webinars Hosted</p>
+              </div>
+            </div>
+
+            {/* Course Performance Breakdown Table */}
+            <div className="space-y-3">
+              <h3 className="font-bold text-sm text-slate-900">Course Performance Breakdown</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-100">
+                      <th className="py-3 px-4">Course Title</th>
+                      <th className="py-3 px-4">Enrolled Students</th>
+                      <th className="py-3 px-4">Revenue Generated</th>
+                      <th className="py-3 px-4">Average Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {!analyticsData?.courses || analyticsData.courses.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-slate-400 font-medium">
+                          No course analytics available yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      analyticsData.courses.map((c: any) => (
+                        <tr key={c.id || c._id} className="hover:bg-slate-50">
+                          <td className="py-3.5 px-4 font-bold text-slate-900">{c.title}</td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-700">
+                            {c.enrolledStudents || 0}
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-emerald-700">
+                            ₹{(c.revenue || 0).toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
+                              ★ {Number(c.averageRating || 0).toFixed(1)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -2742,6 +3535,22 @@ export const InstructorDashboard: React.FC = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1.5">
+                    Live Meeting Link (Zoom / Google Meet / LiveKit)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
+                    value={newWebinar.meetingUrl}
+                    onChange={(e) => setNewWebinar({ ...newWebinar, meetingUrl: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    This link becomes live for registered attendees when the scheduled time arrives.
+                  </p>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -2758,6 +3567,301 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* In-UI Modal: Edit Webinar with 2-Hour Strict Cutoff */}
+        {showEditWebinarModal && editingWebinar && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Edit Webinar</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Update webinar schedule or meeting link</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditWebinarModal(false);
+                    setEditingWebinar(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 2-Hour Cutoff Logic Indicator */}
+              {(editingWebinar.isTimingLocked ||
+                (editingWebinar.startTime &&
+                  new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Timing Locked (2-Hour Window)</strong>
+                    <span>
+                      Webinar date & time cannot be rescheduled within 2 hours of the event start time. Other details can still be updated.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateWebinar} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1.5">Webinar Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingWebinar.title || ''}
+                    onChange={(e) => setEditingWebinar({ ...editingWebinar, title: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Category</label>
+                    <select
+                      value={editingWebinar.category || 'DevOps / Cloud'}
+                      onChange={(e) => setEditingWebinar({ ...editingWebinar, category: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                    >
+                      <option value="DevOps / Cloud">DevOps / Cloud</option>
+                      <option value="Web Development">Web Development</option>
+                      <option value="Data Science">Data Science</option>
+                      <option value="AI & ML">AI & ML</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Max Capacity</label>
+                    <input
+                      type="number"
+                      value={editingWebinar.capacity || 100}
+                      onChange={(e) => setEditingWebinar({ ...editingWebinar, capacity: Number(e.target.value) })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* Date & Time Field with strict 2-hour locking */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-bold text-slate-700 block">Date & Time</label>
+                    {(editingWebinar.isTimingLocked ||
+                      (editingWebinar.startTime &&
+                        new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
+                      <span className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Locked
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="datetime-local"
+                    disabled={
+                      editingWebinar.isTimingLocked ||
+                      (editingWebinar.startTime &&
+                        new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)
+                    }
+                    value={editingWebinar.startTime || ''}
+                    onChange={(e) => setEditingWebinar({ ...editingWebinar, startTime: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-60 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1.5">Ticket Price (₹, 0 for Free)</label>
+                  <input
+                    type="number"
+                    value={editingWebinar.price ?? 0}
+                    onChange={(e) => setEditingWebinar({ ...editingWebinar, price: Number(e.target.value) })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1.5">
+                    Live Meeting Link (Zoom / Meet / LiveKit)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
+                    value={editingWebinar.meetingUrl || ''}
+                    onChange={(e) => setEditingWebinar({ ...editingWebinar, meetingUrl: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditWebinarModal(false);
+                      setEditingWebinar(null);
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-indigo-700 transition"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: CASHFREE PUBLISHING FEE PAYMENT (Workflow 3)
+           ========================================================================= */}
+        {showFeeModal && feeModalCourse && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-slate-100 shadow-2xl space-y-5 animate-in fade-in">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-xs">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base">Cashfree Payment Gateway</h3>
+                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      Sandbox Mode • Verified PG
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowFeeModal(false);
+                    setFeeModalCourse(null);
+                    setFeeOrderData(null);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Order Info Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Course:</span>
+                  <span className="font-bold text-slate-900 truncate max-w-[200px]">{feeModalCourse.title}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Fee Purpose:</span>
+                  <span className="font-bold text-slate-900">Platform Publishing Fee</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                  <span className="text-slate-700 font-bold">Total Payable:</span>
+                  <span className="font-black text-slate-900 text-base">₹499.00</span>
+                </div>
+              </div>
+
+              {/* Cashfree Session Details */}
+              {feeOrderData && (
+                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[11px] text-slate-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-slate-500">Order ID:</span>
+                    <span className="font-mono font-bold text-indigo-700">{feeOrderData.orderId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-slate-500">Gateway Status:</span>
+                    <span className="font-bold text-emerald-600">Active Sandbox Session</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  disabled={processingFee}
+                  onClick={handleVerifyFeePayment}
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  {processingFee ? (
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Processing Payment Verification...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Complete Cashfree Payment (₹499)</span>
+                    </div>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFeeModal(false);
+                    setFeeModalCourse(null);
+                    setFeeOrderData(null);
+                  }}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancel Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: COURSE REJECTION FEEDBACK
+           ========================================================================= */}
+        {showRejectionModal && rejectionModalCourse && (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-slate-100 shadow-2xl space-y-4 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Course Rejection Details</h3>
+                  <p className="text-xs text-slate-500 font-medium">{rejectionModalCourse.title}</p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-100 space-y-1.5">
+                <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">
+                  Super Admin Feedback
+                </span>
+                <p className="text-xs text-rose-900 font-medium leading-relaxed">
+                  {rejectionModalCourse.rejectionReason || 'Course does not meet platform quality guidelines. Please review curriculum content and re-submit.'}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRejectionModal(false);
+                    setRejectionModalCourse(null);
+                  }}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idToEdit = rejectionModalCourse._id;
+                    setShowRejectionModal(false);
+                    setRejectionModalCourse(null);
+                    handleEditCourse(idToEdit);
+                  }}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+                >
+                  Edit Course & Curriculum
+                </button>
+              </div>
             </div>
           </div>
         )}

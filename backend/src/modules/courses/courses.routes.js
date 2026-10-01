@@ -5,6 +5,7 @@ const router = Router();
 
 // Public Course Discovery Routes
 router.get('/featured', CoursesController.getFeatured);
+router.get('/topics', CoursesController.getTopics);
 router.get('/', CoursesController.getCatalog);
 router.get('/:slug', CoursesController.getDetails);
 

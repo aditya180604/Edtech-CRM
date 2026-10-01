@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AuthModalProvider } from './context/AuthModalContext';
 import { CartProvider } from './context/CartContext';
+import { ToastProvider } from './context/ToastContext';
 import { AuthModal } from './components/AuthModal';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -19,6 +20,7 @@ import { CourseDetailPage } from './pages/CourseDetailPage';
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
 import { InstructorDashboard } from './pages/dashboards/InstructorDashboard';
+import { InstructorOnboardingPage } from './pages/InstructorOnboardingPage';
 import { AdminDashboard } from './pages/dashboards/AdminDashboard';
 import { SuperAdminDashboard } from './pages/dashboards/SuperAdminDashboard';
 
@@ -27,9 +29,10 @@ export const App: React.FC = () => {
     <AuthProvider>
       <AuthModalProvider>
         <CartProvider>
-          <BrowserRouter>
-            {/* Global Auth Popup Modal */}
-            <AuthModal />
+          <ToastProvider>
+            <BrowserRouter>
+              {/* Global Auth Popup Modal */}
+              <AuthModal />
 
           <Routes>
             {/* Public Marketplace & Info */}
@@ -50,6 +53,7 @@ export const App: React.FC = () => {
             <Route path="/dashboard/student" element={<StudentDashboard />} />
 
             {/* Instructor Dashboards */}
+            <Route path="/instructor/onboarding" element={<InstructorOnboardingPage />} />
             <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
 
@@ -65,7 +69,8 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
-      </CartProvider>
+          </ToastProvider>
+        </CartProvider>
       </AuthModalProvider>
     </AuthProvider>
   );

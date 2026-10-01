@@ -5,6 +5,8 @@ import { useAuthModal } from '../context/AuthModalContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 
+import { webinarsApi } from '../api/webinars';
+
 export const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -12,13 +14,42 @@ export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout, getRedirectPathForRole } = useAuth();
   const { itemCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hasUpcomingWebinars, setHasUpcomingWebinars] = useState<boolean>(false);
+
+  // Check for active / scheduled upcoming webinars
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkUpcomingWebinars = async () => {
+      try {
+        const res = await webinarsApi.getUpcomingWebinars();
+        if (isMounted && res.success && res.data) {
+          setHasUpcomingWebinars(!!res.data.hasUpcoming);
+        }
+      } catch (err) {
+        if (isMounted) setHasUpcomingWebinars(false);
+      }
+    };
+
+    checkUpcomingWebinars();
+
+    // Re-check when instructor adds/deletes webinars
+    const onWebinarsChanged = () => checkUpcomingWebinars();
+    window.addEventListener('webinarsChanged', onWebinarsChanged);
+    window.addEventListener('storage', onWebinarsChanged);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('webinarsChanged', onWebinarsChanged);
+      window.removeEventListener('storage', onWebinarsChanged);
+    };
+  }, []);
 
   const publicNavLinks = [
     { name: 'Courses', path: '/courses' },
     { name: 'Topics', path: '/topics' },
     { name: 'Learning Paths', path: '/learning-paths' },
     { name: 'Instructors', path: '/instructors' },
-    { name: 'Webinars', path: '/webinars' },
+    ...(hasUpcomingWebinars ? [{ name: 'Webinars', path: '/webinars' }] : []),
   ];
 
   const isActive = (path: string) => location.pathname === path;
