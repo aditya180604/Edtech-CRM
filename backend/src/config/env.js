@@ -22,7 +22,11 @@ export const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.includes(',')
+        ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+        : process.env.CORS_ORIGIN
+      : ['http://localhost:5173', 'http://localhost:3000'],
   },
   cashfree: {
     env: process.env.CASHFREE_ENV || 'SANDBOX',
