@@ -39,7 +39,7 @@ export const FeaturedCourses: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Featured Courses
+            Featured Courses  
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Top-rated courses handpicked by industry professionals
