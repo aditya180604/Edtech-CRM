@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
+import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +18,7 @@ export const CartPage: React.FC = () => {
     applyCoupon,
     removeCoupon,
   } = useCart();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { openLogin } = useAuthModal();
   const navigate = useNavigate();
 

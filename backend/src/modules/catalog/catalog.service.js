@@ -414,10 +414,20 @@ export class CatalogService {
 
   /**
    * Get public instructors list from User and InstructorProfile models
-   * Dynamic: real course counts, student enrollments, and ratings
+   * Dynamic: real course counts, student enrollments, ratings, and course lists
    */
-  static async getInstructors({ limit = 20 } = {}) {
-    const instructors = await User.find({ role: 'INSTRUCTOR', status: 'ACTIVE' })
+  static async getInstructors({ search, limit = 50 } = {}) {
+    const filter = {
+      role: { $in: ['INSTRUCTOR', 'Instructor', 'instructor'] },
+      status: { $in: ['ACTIVE', 'Active', 'active', 'VERIFIED'] },
+    };
+
+    if (search && search.trim()) {
+      const re = new RegExp(search.trim(), 'i');
+      filter.$or = [{ firstName: re }, { lastName: re }, { email: re }];
+    }
+
+    const instructors = await User.find(filter)
       .select('firstName lastName email profilePhoto timezone country')
       .limit(Number(limit))
       .lean();
@@ -425,7 +435,12 @@ export class CatalogService {
     const userIds = instructors.map((u) => u._id);
     const [profiles, courses] = await Promise.all([
       InstructorProfile.find({ userId: { $in: userIds } }).lean(),
-      Course.find({ instructorId: { $in: userIds } }).select('_id instructorId').lean(),
+      Course.find({
+        instructorId: { $in: userIds },
+        status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
+      })
+        .select('_id title slug thumbnail category coursePrice instructorId')
+        .lean(),
     ]);
 
     const courseIds = courses.map((c) => c._id);
@@ -456,17 +471,32 @@ export class CatalogService {
         : 0;
 
       const name = `${inst.firstName || ''} ${inst.lastName || ''}`.trim();
+      const primaryCategory = instructorCourses[0]?.category || null;
+
+      const allSkills = [
+        ...(Array.isArray(profile?.expertise) ? profile.expertise : []),
+        ...(Array.isArray(profile?.skills) ? profile.skills : []),
+      ].filter(Boolean);
 
       return {
         id: uId,
         name: name || 'Instructor',
-        title: profile?.currentOrganization || profile?.headline || null,
+        title: profile?.currentOrganization || profile?.experience || (primaryCategory ? `Lead ${primaryCategory} Instructor` : 'Technology Educator'),
         avatar: inst.profilePhoto || null,
-        bio: profile?.bio || null,
-        specialization: Array.isArray(profile?.expertise) && profile.expertise.length > 0 ? profile.expertise[0] : null,
+        bio: profile?.bio || 'Passionate industry expert dedicated to teaching practical, career-ready skills.',
+        specialization: allSkills[0] || primaryCategory || 'Technology',
+        expertise: allSkills.slice(0, 4),
+        country: inst.country || profile?.country || null,
         rating: avgRating,
         studentCount: totalStudents,
         courseCount: instructorCourses.length,
+        courses: instructorCourses.map((c) => ({
+          id: c._id.toString(),
+          title: c.title,
+          slug: c.slug || c._id.toString(),
+          thumbnail: c.thumbnail || null,
+          category: c.category || 'Development',
+        })),
       };
     });
   }

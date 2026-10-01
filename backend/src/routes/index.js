@@ -6,6 +6,7 @@ import { instructorRoutes } from '../modules/instructor/instructor.routes.js';
 import { coursesRoutes } from '../modules/courses/courses.routes.js';
 import { studentDashboardRoutes } from '../modules/studentDashboard/studentDashboard.routes.js';
 import { catalogRoutes } from '../modules/catalog/catalog.routes.js';
+import { learningPathRoutes } from '../modules/learningPaths/learningPath.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -31,6 +32,7 @@ router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
 router.use('/dashboard/student', studentDashboardRoutes);
+router.use('/', learningPathRoutes);
 router.use('/catalog', catalogRoutes);
 router.use('/', catalogRoutes);
 

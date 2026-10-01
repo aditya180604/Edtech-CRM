@@ -364,7 +364,7 @@ export const CourseDetailPage: React.FC = () => {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (top.videoUrl.startsWith('http')) {
+                                        if (top.videoUrl && top.videoUrl.startsWith('http')) {
                                           window.open(top.videoUrl, '_blank');
                                         } else {
                                           alert(`Opening video for topic: ${top.title}`);

@@ -15,6 +15,9 @@ export {
   Resource,
   Video,
   LearningPath,
+  LearningPathDomain,
+  LearningPathDomainTopic,
+  TopicContentOffering,
 } from './content.models.js';
 
 // 10-14: Assessments & Assignments

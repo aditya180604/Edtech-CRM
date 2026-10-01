@@ -4,6 +4,8 @@ import { Star, ArrowRight, UserPlus, Check, AlertCircle, UserCheck } from 'lucid
 import { catalogApi, type CatalogInstructor } from '../api/catalog';
 
 
+import { normalizeImageUrl } from '../utils/imageUrl';
+
 export const TopInstructorsSection: React.FC = () => {
   const [instructors, setInstructors] = useState<CatalogInstructor[]>([]);
   const [followingIds, setFollowingIds] = useState<string[]>([]);
@@ -90,6 +92,7 @@ export const TopInstructorsSection: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
           {instructors.map((instructor) => {
             const isFollowing = followingIds.includes(instructor.id);
+            const avatarUrl = normalizeImageUrl(instructor.avatar);
 
             return (
               <div
@@ -100,11 +103,14 @@ export const TopInstructorsSection: React.FC = () => {
                   {/* Avatar with gradient ring */}
                   <div className="relative mb-3">
                     <div className="w-18 h-18 rounded-full p-0.5 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500">
-                      {instructor.avatar ? (
+                      {avatarUrl ? (
                         <img
-                          src={instructor.avatar}
+                          src={avatarUrl}
                           alt={instructor.name}
                           className="w-full h-full rounded-full object-cover border-2 border-white"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center font-bold text-indigo-600 border-2 border-white">

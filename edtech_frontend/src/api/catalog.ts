@@ -130,9 +130,18 @@ export interface CatalogInstructor {
   avatar: string | null;
   bio: string;
   specialization: string;
+  expertise?: string[];
+  country?: string | null;
   rating: number;
-  studentCount: string;
+  studentCount: number | string;
   courseCount: number;
+  courses?: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    thumbnail: string | null;
+    category: string;
+  }>;
 }
 
 export interface CatalogLearningPath {
