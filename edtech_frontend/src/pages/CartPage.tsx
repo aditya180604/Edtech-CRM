@@ -164,7 +164,7 @@ export const CartPage: React.FC = () => {
                       title="Remove from Cart"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Remove</span>
+                      <span>Remove </span>
                     </button>
                   </div>
                 </div>
