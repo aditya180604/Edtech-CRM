@@ -40,6 +40,7 @@ export {
   TopicCredit,
   CourseUpgrade,
   FinancialLedger,
+  PlatformFee,
 } from './commerce.models.js';
 
 // 24-26: Learning Progress & Certificates

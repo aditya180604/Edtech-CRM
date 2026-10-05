@@ -8,6 +8,8 @@ import { webinarsRoutes } from '../modules/webinars/webinars.routes.js';
 import { studentDashboardRoutes } from '../modules/studentDashboard/studentDashboard.routes.js';
 import { catalogRoutes } from '../modules/catalog/catalog.routes.js';
 import { learningPathRoutes } from '../modules/learningPaths/learningPath.routes.js';
+import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
+import { paymentRoutes } from '../modules/payments/payments.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -33,6 +35,8 @@ router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
 router.use('/webinars', webinarsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/payments', paymentRoutes);
 router.use('/dashboard/student', studentDashboardRoutes);
 router.use('/', learningPathRoutes);
 router.use('/catalog', catalogRoutes);

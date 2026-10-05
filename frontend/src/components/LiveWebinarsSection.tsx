@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Users, Video, ArrowRight, CheckCircle2, ExternalLink } from 'lucide-react';
 import { webinarsApi, type WebinarItem } from '../api/webinars';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ interface LiveWebinarsSectionProps {
 }
 
 export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIfEmpty = false }) => {
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { openLogin } = useAuthModal();
   const { success, error: toastError, info } = useToast();
@@ -56,7 +57,7 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
       const res = await webinarsApi.register(webinar.id || webinar._id);
       if (res.success) {
         setLocalRegistered((prev) => ({ ...prev, [webinar.id || webinar._id]: true }));
-        success('Registered Successfully!', `You have registered for "${webinar.title}".`);
+        success('Success', `You have successfully registered for "${webinar.title}"! You will receive a notification on your dashboard when the session starts.`);
         // Notify all views (Instructor dashboard, navbar, cards) to update registration counts live!
         window.dispatchEvent(new Event('webinarsChanged'));
         await fetchWebinars();
@@ -71,7 +72,13 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
 
   const handleJoinLive = (webinar: WebinarItem) => {
     if (webinar.meetingUrl) {
-      window.open(webinar.meetingUrl, '_blank', 'noopener,noreferrer');
+      if (webinar.meetingUrl.startsWith('/webinars/live/') || webinar.meetingUrl.startsWith('/webinar/live/')) {
+        navigate(webinar.meetingUrl);
+      } else {
+        window.open(webinar.meetingUrl, '_blank', 'noopener,noreferrer');
+      }
+    } else if (webinar.roomCode) {
+      navigate(`/webinars/live/${webinar.roomCode}`);
     } else {
       info('Session Starting', 'The instructor is launching the live session. Please refresh in a moment.');
     }

@@ -33,10 +33,41 @@ import {
   AlertTriangle,
   X,
   Clock,
+  ExternalLink,
+  User,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Link2,
+  Code,
+  Quote,
+  Strikethrough,
+  FileText,
+  Check,
+  PlayCircle,
+  Award,
+  HelpCircle,
+  Monitor,
+  DollarSign,
+  Eye,
+  Shield,
+  Tag,
+  Laptop,
+  Cpu,
+  Key,
+  Heart,
+  Bookmark,
+  Calendar,
+  GraduationCap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
 import { useToast } from '../../context/ToastContext';
+import { NotificationBell } from '../../components/dashboard/NotificationBell';
+import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
 
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -76,6 +107,15 @@ export const InstructorDashboard: React.FC = () => {
   const [feeOrderData, setFeeOrderData] = useState<any | null>(null);
   const [showFeeModal, setShowFeeModal] = useState(false);
   const [processingFee, setProcessingFee] = useState(false);
+  const [cashfreePaymentState, setCashfreePaymentState] = useState<
+    'IDLE' | 'PROCESSING' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'USER_DROPPED' | 'EXPIRED'
+  >('IDLE');
+  const [checkoutButtonStep, setCheckoutButtonStep] = useState<'IDLE' | 'CREATING' | 'OPENING'>('IDLE');
+  const [verifiedPaymentData, setVerifiedPaymentData] = useState<{
+    orderId?: string;
+    paymentId?: string;
+    amount?: number;
+  } | null>(null);
   const [rejectionModalCourse, setRejectionModalCourse] = useState<any | null>(null);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [wizardPublishingFeePaid, setWizardPublishingFeePaid] = useState<boolean>(false);
@@ -87,12 +127,23 @@ export const InstructorDashboard: React.FC = () => {
   const [webinarsList, setWebinarsList] = useState<any[]>([]);
   const [webinarCounts, setWebinarCounts] = useState<any>({});
   const [showCreateWebinarModal, setShowCreateWebinarModal] = useState(false);
-  const [newWebinar, setNewWebinar] = useState({
+  const [newWebinar, setNewWebinar] = useState<{
+    title: string;
+    category: string;
+    startTime: string;
+    endTime: string;
+    capacity: number;
+    price: number;
+    meetingType: 'IN_PLATFORM' | 'EXTERNAL';
+    meetingUrl: string;
+  }>({
     title: '',
     category: 'DevOps / Cloud',
     startTime: '',
+    endTime: '',
     capacity: 100,
     price: 0,
+    meetingType: 'IN_PLATFORM',
     meetingUrl: '',
   });
 
@@ -132,18 +183,25 @@ export const InstructorDashboard: React.FC = () => {
   // Profile & Verification State
   const [profileData, setProfileData] = useState<any>({
     bio: '',
+    headline: '',
     expertise: ['DevOps', 'Cloud Computing', 'Web Development'],
     skills: ['React', 'Node.js', 'Docker', 'AWS'],
     experience: '5+ Years',
     qualifications: ['Bachelor of Technology (CSE)'],
     currentOrganization: '',
+    phone: '',
+    profilePhoto: '',
     identityStatus: 'VERIFIED',
     verificationStatus: 'UNDER_REVIEW',
     kycStatus: 'NOT_STARTED',
     payoutStatus: 'NOT_CONNECTED',
   });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [newExpertiseInput, setNewExpertiseInput] = useState('');
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [photoUrlInput, setPhotoUrlInput] = useState('');
 
-  // 4-Step Create/Edit Course Wizard State
+  // 9-Step Create/Edit Course Wizard State
   const [createStep, setCreateStep] = useState(1);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [courseFormData, setCourseFormData] = useState({
@@ -157,16 +215,51 @@ export const InstructorDashboard: React.FC = () => {
     level: 'Beginner',
     language: 'English',
     skills: [] as string[],
-    requirements: [] as string[],
+    detailedOverview: '',
+    targetAudience: [] as string[],
+    courseGoals: [] as string[],
+    teachingMethodology: 'Hands-on Projects, Practical Architecture Labs, and Real-world Case Studies',
     learningObjectives: [] as string[],
+    foundationalConcepts: [] as string[],
+    recommendedPriorKnowledge: [] as string[],
+    coreTools: [] as string[],
+    requirements: [] as string[],
+    hardwareRequirements: [] as string[],
+    softwareRequirements: [] as string[],
+    requiredAccounts: [] as string[],
+    courseIncludes: {
+      videoHours: '20+ Hours of On-Demand HD Video',
+      resourcesCount: '15 Downloadable Architecture Guides & Source Repos',
+      projectsCount: '3 Full-Stack Production Projects',
+      certificate: true,
+      qaSupport: true,
+      lifetimeAccess: true,
+      otherBenefits: [] as string[],
+    },
+    promotionalVideo: '',
     coursePrice: 0,
+    discountPrice: 0,
+    accessDuration: 'Lifetime Access',
+    certificateSettings: {
+      enableCertificate: true,
+      certificateTitle: '',
+    },
     currency: 'INR',
     syllabusUrl: '',
     syllabusFileName: '',
+    // Optional Enrollment Cap & Rich Card Attributes
+    maxEnrollmentLimit: '' as string | number,
+    schedule: '',
+    mentorStatus: 'Pro Mentor',
+    professionalTags: ['Ex-Apple', 'Full Stack Engineer', 'MERN Developer'] as string[],
+    experienceMetrics: ['18y Exp', 'Top 1% Mentor', '10x Engineer'] as string[],
+    qualifications: [] as string[],
+    totalSessions: '' as string | number,
     modules: [] as Array<{
       title: string;
       topics: Array<{
         title: string;
+        description?: string;
         price: number;
         isFree: boolean;
         duration: number;
@@ -175,6 +268,22 @@ export const InstructorDashboard: React.FC = () => {
       }>;
     }>,
   });
+
+  // Helper inputs for Step 1, 2, 3, 5, 6, 7
+  const [newGoalInput, setNewGoalInput] = useState('');
+  const [newAudienceInput, setNewAudienceInput] = useState('');
+  const [newLearningObjectiveInput, setNewLearningObjectiveInput] = useState('');
+  const [newProfessionalTagInput, setNewProfessionalTagInput] = useState('');
+  const [newExperienceMetricInput, setNewExperienceMetricInput] = useState('');
+  const [newQualificationInput, setNewQualificationInput] = useState('');
+  const [newFoundationalConceptInput, setNewFoundationalConceptInput] = useState('');
+  const [newPriorKnowledgeInput, setNewPriorKnowledgeInput] = useState('');
+  const [newCoreToolInput, setNewCoreToolInput] = useState('');
+  const [newPrerequisiteInput, setNewPrerequisiteInput] = useState('');
+  const [newHardwareReqInput, setNewHardwareReqInput] = useState('');
+  const [newSoftwareReqInput, setNewSoftwareReqInput] = useState('');
+  const [newRequiredAccountInput, setNewRequiredAccountInput] = useState('');
+  const [newOtherBenefitInput, setNewOtherBenefitInput] = useState('');
 
   // Image Upload Mode state (device vs weburl)
   const [thumbUploadTab, setThumbUploadTab] = useState<'device' | 'url'>('device');
@@ -190,14 +299,146 @@ export const InstructorDashboard: React.FC = () => {
   const [wizardModuleTitle, setWizardModuleTitle] = useState('');
   const [wizardTopicModal, setWizardTopicModal] = useState(false);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null);
+  const [editingTopicIndex, setEditingTopicIndex] = useState<number | null>(null);
   const [wizardTopicForm, setWizardTopicForm] = useState({
     title: '',
+    description: '',
     price: 0,
     isFree: false,
     duration: 30,
     videoUrl: '',
     videoSourceTab: 'url' as 'device' | 'url',
   });
+
+  // Utility to parse single, comma-separated, semicolon-separated, or multiline/bullet list inputs
+  const parseMultiItems = (text: string): string[] => {
+    if (!text || !text.trim()) return [];
+    return text
+      .split(/\r?\n|,|;/)
+      .map((s) => s.replace(/^[\s\d+.\-•*–—>)\]]+/, '').trim())
+      .filter((s) => s.length > 0);
+  };
+
+  const handleAddPrerequisites = () => {
+    const items = parseMultiItems(newPrerequisiteInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        requirements: [...(prev.requirements || []), ...items],
+      }));
+      setNewPrerequisiteInput('');
+    }
+  };
+
+  const handleAddHardwareReqs = () => {
+    const items = parseMultiItems(newHardwareReqInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        hardwareRequirements: [...(prev.hardwareRequirements || []), ...items],
+      }));
+      setNewHardwareReqInput('');
+    }
+  };
+
+  const handleAddSoftwareReqs = () => {
+    const items = parseMultiItems(newSoftwareReqInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        softwareRequirements: [...(prev.softwareRequirements || []), ...items],
+      }));
+      setNewSoftwareReqInput('');
+    }
+  };
+
+  const handleAddRequiredAccounts = () => {
+    const items = parseMultiItems(newRequiredAccountInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        requiredAccounts: [...(prev.requiredAccounts || []), ...items],
+      }));
+      setNewRequiredAccountInput('');
+    }
+  };
+
+  const handleAddSkills = () => {
+    const items = parseMultiItems(newSkillTagInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        skills: [...(prev.skills || []), ...items],
+      }));
+      setNewSkillTagInput('');
+    }
+  };
+
+  const handleAddLearningOutcomes = () => {
+    const items = parseMultiItems(newLearningObjectiveInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        learningObjectives: [...(prev.learningObjectives || []), ...items],
+      }));
+      setNewLearningObjectiveInput('');
+    }
+  };
+
+  const handleAddFoundational = () => {
+    const items = parseMultiItems(newFoundationalConceptInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        foundationalConcepts: [...(prev.foundationalConcepts || []), ...items],
+      }));
+      setNewFoundationalConceptInput('');
+    }
+  };
+
+  const handleAddPriorKnowledge = () => {
+    const items = parseMultiItems(newPriorKnowledgeInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        recommendedPriorKnowledge: [...(prev.recommendedPriorKnowledge || []), ...items],
+      }));
+      setNewPriorKnowledgeInput('');
+    }
+  };
+
+  const handleAddCoreTools = () => {
+    const items = parseMultiItems(newCoreToolInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        coreTools: [...(prev.coreTools || []), ...items],
+      }));
+      setNewCoreToolInput('');
+    }
+  };
+
+  const handleAddAudience = () => {
+    const items = parseMultiItems(newAudienceInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        targetAudience: [...(prev.targetAudience || []), ...items],
+      }));
+      setNewAudienceInput('');
+    }
+  };
+
+  const handleAddGoals = () => {
+    const items = parseMultiItems(newGoalInput);
+    if (items.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        courseGoals: [...(prev.courseGoals || []), ...items],
+      }));
+      setNewGoalInput('');
+    }
+  };
 
   // Load Dashboard Live Telemetry
   const fetchDashboard = useCallback(async (isSilent = false) => {
@@ -315,11 +556,30 @@ export const InstructorDashboard: React.FC = () => {
     return () => window.removeEventListener('webinarsChanged', onWebinarsChanged);
   }, [loadSubViewData, fetchDashboard]);
 
-  // Mandatory Onboarding Guard (Workflow 1)
+  // Mandatory Onboarding & Super Admin Verification Guard (Workflow 1 & 3)
   useEffect(() => {
-    if (user && user.role === 'INSTRUCTOR' && user.isProfileCompleted === false) {
-      navigate('/instructor/onboarding');
+    if (!user || user.role !== 'INSTRUCTOR') return;
+    if (user.isProfileCompleted === false) {
+      navigate('/instructor/onboarding', { replace: true });
+      return;
     }
+
+    const checkVerificationStatus = async () => {
+      try {
+        const res = await instructorApi.getProfile();
+        if (res.success && res.data?.profile) {
+          const prof = res.data.profile;
+          setProfileData(prof);
+          const status = (prof.verificationStatus || 'PENDING').toUpperCase();
+          if (status !== 'VERIFIED' && status !== 'APPROVED') {
+            navigate('/instructor/pending-verification', { replace: true });
+          }
+        }
+      } catch (err) {
+        console.error('Verification guard check error:', err);
+      }
+    };
+    checkVerificationStatus();
   }, [user, navigate]);
 
   const handleLogout = async () => {
@@ -387,49 +647,83 @@ export const InstructorDashboard: React.FC = () => {
     setWizardModuleModal(false);
   };
 
-  // In-UI Add Topic in Wizard (Fixed Duplicate Topic Bug & Video Attachment)
-  const handleWizardAddTopic = (e: React.FormEvent) => {
+  // In-UI Save Topic in Wizard (Add or Edit with Strict Validations)
+  const handleWizardSaveTopic = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (selectedModuleIndex === null || !wizardTopicForm.title.trim()) return;
+    if (selectedModuleIndex === null) return;
 
-    const newTopic = {
+    // Strict Validations: All fields mandatory
+    if (!wizardTopicForm.title.trim()) {
+      toastError('Validation Error', 'Topic Title is mandatory.');
+      return;
+    }
+    if (!wizardTopicForm.description.trim()) {
+      toastError('Validation Error', 'Topic Description is mandatory for all topics.');
+      return;
+    }
+    if (!wizardTopicForm.videoUrl.trim()) {
+      toastError('Validation Error', 'Topic Video link or uploaded video is mandatory.');
+      return;
+    }
+    if (!wizardTopicForm.isFree && (Number(wizardTopicForm.price) <= 0 || isNaN(Number(wizardTopicForm.price)))) {
+      toastError('Validation Error', 'Please specify a valid topic price (₹) or enable "Mark as Free Preview Topic".');
+      return;
+    }
+    if (Number(wizardTopicForm.duration) <= 0 || isNaN(Number(wizardTopicForm.duration))) {
+      toastError('Validation Error', 'Topic duration must be greater than 0 minutes.');
+      return;
+    }
+
+    const topicPayload = {
       title: wizardTopicForm.title.trim(),
-      price: Number(wizardTopicForm.price) || 0,
+      description: wizardTopicForm.description.trim(),
+      price: wizardTopicForm.isFree ? 0 : Number(wizardTopicForm.price) || 0,
       isFree: wizardTopicForm.isFree,
       duration: Number(wizardTopicForm.duration) || 30,
-      videoUrl: wizardTopicForm.videoUrl || '',
-      lessons: wizardTopicForm.videoUrl
-        ? [
-            {
-              title: wizardTopicForm.title.trim(),
-              duration: Number(wizardTopicForm.duration) || 30,
-              videoUrl: wizardTopicForm.videoUrl,
-            },
-          ]
-        : [],
+      videoUrl: wizardTopicForm.videoUrl.trim(),
+      lessons: [
+        {
+          title: wizardTopicForm.title.trim(),
+          duration: Number(wizardTopicForm.duration) || 30,
+          videoUrl: wizardTopicForm.videoUrl.trim(),
+        },
+      ],
     };
 
     setCourseFormData((prev) => ({
       ...prev,
-      modules: prev.modules.map((m, idx) =>
-        idx === selectedModuleIndex
-          ? {
-              ...m,
-              topics: [...m.topics, newTopic],
-            }
-          : m
-      ),
+      modules: prev.modules.map((m, idx) => {
+        if (idx !== selectedModuleIndex) return m;
+        if (editingTopicIndex !== null) {
+          return {
+            ...m,
+            topics: m.topics.map((t, ti) => (ti === editingTopicIndex ? topicPayload : t)),
+          };
+        } else {
+          return {
+            ...m,
+            topics: [...m.topics, topicPayload],
+          };
+        }
+      }),
     }));
+
+    success(
+      editingTopicIndex !== null ? 'Topic Updated' : 'Topic Added',
+      `"${wizardTopicForm.title.trim()}" has been saved successfully.`
+    );
 
     setWizardTopicForm({
       title: '',
+      description: '',
       price: 0,
       isFree: false,
       duration: 30,
       videoUrl: '',
       videoSourceTab: 'url',
     });
+    setEditingTopicIndex(null);
     setWizardTopicModal(false);
     setSelectedModuleIndex(null);
   };
@@ -480,16 +774,50 @@ export const InstructorDashboard: React.FC = () => {
           level: course.level || 'Beginner',
           language: course.language || 'English',
           skills: course.skills || [],
-          requirements: course.requirements || [],
+          detailedOverview: course.detailedOverview || course.description || '',
+          targetAudience: course.targetAudience || [],
+          courseGoals: course.courseGoals || [],
+          teachingMethodology: course.teachingMethodology || 'Hands-on Projects, Practical Architecture Labs, and Real-world Case Studies',
           learningObjectives: course.learningObjectives || [],
+          foundationalConcepts: course.foundationalConcepts || [],
+          recommendedPriorKnowledge: course.recommendedPriorKnowledge || [],
+          coreTools: course.coreTools || [],
+          requirements: course.requirements || [],
+          hardwareRequirements: course.hardwareRequirements || [],
+          softwareRequirements: course.softwareRequirements || [],
+          requiredAccounts: course.requiredAccounts || [],
+          courseIncludes: {
+            videoHours: course.courseIncludes?.videoHours || '20+ Hours of On-Demand HD Video',
+            resourcesCount: course.courseIncludes?.resourcesCount || '15 Downloadable Architecture Guides & Source Repos',
+            projectsCount: course.courseIncludes?.projectsCount || '3 Full-Stack Production Projects',
+            certificate: course.courseIncludes?.certificate ?? true,
+            qaSupport: course.courseIncludes?.qaSupport ?? true,
+            lifetimeAccess: course.courseIncludes?.lifetimeAccess ?? true,
+            otherBenefits: course.courseIncludes?.otherBenefits || [],
+          },
+          promotionalVideo: course.promotionalVideo || '',
           coursePrice: course.coursePrice ?? 1999,
+          discountPrice: course.discountPrice ?? 0,
+          accessDuration: course.accessDuration || 'Lifetime Access',
+          certificateSettings: {
+            enableCertificate: course.certificateSettings?.enableCertificate ?? true,
+            certificateTitle: course.certificateSettings?.certificateTitle || '',
+          },
           currency: course.currency || 'INR',
           syllabusUrl: course.syllabusUrl || '',
           syllabusFileName: course.syllabusFileName || '',
+          maxEnrollmentLimit: course.maxEnrollmentLimit ?? '',
+          schedule: course.schedule || '',
+          mentorStatus: course.mentorStatus || 'Pro Mentor',
+          professionalTags: Array.isArray(course.professionalTags) ? course.professionalTags : ['Ex-Apple', 'Full Stack Engineer'],
+          experienceMetrics: Array.isArray(course.experienceMetrics) ? course.experienceMetrics : ['18y Exp', 'Top 1% Mentor'],
+          qualifications: Array.isArray(course.qualifications) ? course.qualifications : [],
+          totalSessions: course.totalSessions ?? '',
           modules: (modules || []).map((m: any) => ({
             title: (m.title || '').replace(/^Module\s*\d+\s*:\s*/i, ''),
             topics: (m.topics || []).map((t: any) => ({
               title: t.title,
+              description: t.description || '',
               price: t.price ?? 0,
               isFree: !!t.isFree,
               duration: t.duration || 30,
@@ -571,19 +899,27 @@ export const InstructorDashboard: React.FC = () => {
     e.preventDefault();
     try {
       const scheduledDate = newWebinar.startTime ? new Date(newWebinar.startTime) : new Date(Date.now() + 86400000 * 3);
+      const expiryDate = newWebinar.endTime ? new Date(newWebinar.endTime) : new Date(scheduledDate.getTime() + 7200000);
+
+      if (expiryDate.getTime() <= scheduledDate.getTime()) {
+        toastError('Invalid Expiry Time', 'Webinar expiry / end time must be after the scheduled start time.');
+        return;
+      }
+
       await instructorApi.createWebinar({
         title: newWebinar.title.trim(),
         category: newWebinar.category,
         startTime: scheduledDate.toISOString(),
-        endTime: new Date(scheduledDate.getTime() + 7200000).toISOString(),
+        endTime: expiryDate.toISOString(),
         capacity: Number(newWebinar.capacity) || 100,
         price: Number(newWebinar.price) || 0,
-        meetingUrl: newWebinar.meetingUrl.trim(),
+        meetingType: newWebinar.meetingType || 'IN_PLATFORM',
+        meetingUrl: newWebinar.meetingType === 'EXTERNAL' ? newWebinar.meetingUrl.trim() : undefined,
         status: 'SCHEDULED',
       });
       setShowCreateWebinarModal(false);
-      setNewWebinar({ title: '', category: 'DevOps / Cloud', startTime: '', capacity: 100, price: 0, meetingUrl: '' });
-      success('Webinar Scheduled', 'Your live webinar was successfully created and scheduled!');
+      setNewWebinar({ title: '', category: 'DevOps / Cloud', startTime: '', endTime: '', capacity: 100, price: 0, meetingType: 'IN_PLATFORM', meetingUrl: '' });
+      success('Webinar Scheduled', 'Your live webinar was successfully created with an automated in-platform room!');
       window.dispatchEvent(new Event('webinarsChanged'));
       await loadSubViewData();
       fetchDashboard(true);
@@ -602,13 +938,20 @@ export const InstructorDashboard: React.FC = () => {
         category: editingWebinar.category,
         capacity: Number(editingWebinar.capacity) || 100,
         price: Number(editingWebinar.price) || 0,
+        meetingType: editingWebinar.meetingType || 'IN_PLATFORM',
         meetingUrl: (editingWebinar.meetingUrl || '').trim(),
       };
 
-      // Strict 2-Hour Cutoff: Only update startTime if not locked
+      // Strict 2-Hour Cutoff: Only update startTime and endTime if not locked
       if (!editingWebinar.isTimingLocked && editingWebinar.startTime) {
         payload.startTime = new Date(editingWebinar.startTime).toISOString();
-        payload.endTime = new Date(new Date(editingWebinar.startTime).getTime() + 7200000).toISOString();
+        if (editingWebinar.endTime) {
+          payload.endTime = new Date(editingWebinar.endTime).toISOString();
+        } else {
+          payload.endTime = new Date(new Date(editingWebinar.startTime).getTime() + 7200000).toISOString();
+        }
+      } else if (!editingWebinar.isTimingLocked && editingWebinar.endTime) {
+        payload.endTime = new Date(editingWebinar.endTime).toISOString();
       }
 
       await instructorApi.updateWebinar(editingWebinar._id, payload);
@@ -638,6 +981,46 @@ export const InstructorDashboard: React.FC = () => {
     }
   };
 
+  // Genuine Cashfree Payment Verification with Backend
+  // Genuine Cashfree Payment Verification with Backend
+  const verifyBackendPaymentStatus = async (courseId: string, orderId?: string) => {
+    try {
+      setProcessingFee(true);
+      const res = await instructorApi.getPublishingFeeStatus(courseId, orderId);
+      const data = res?.data;
+      const status = data?.paymentStatus || data?.payment_status;
+
+      if (status === 'SUCCESS') {
+        setCashfreePaymentState('SUCCESS');
+        setWizardPublishingFeePaid(true);
+        setVerifiedPaymentData({
+          orderId: data.orderId || data.order_id || orderId,
+          paymentId: data.paymentId || data.cashfreePaymentId || '—',
+          amount: data.amount,
+        });
+        success(
+          'Payment Verified Successfully! ✓',
+          `Order ID: ${data.orderId || orderId}. Platform fee (₹${Number(data.amount || 0).toLocaleString('en-IN')}) registered. Platform fee revenue added to Super Admin Ledger.`
+        );
+        fetchDashboard(true);
+      } else if (status === 'USER_DROPPED') {
+        setCashfreePaymentState('USER_DROPPED');
+      } else if (status === 'FAILED') {
+        setCashfreePaymentState('FAILED');
+      } else if (status === 'EXPIRED') {
+        setCashfreePaymentState('EXPIRED');
+      } else {
+        setCashfreePaymentState('PENDING');
+      }
+    } catch (err: any) {
+      console.error('Error verifying payment status with server:', err);
+      setCashfreePaymentState('PENDING');
+    } finally {
+      setProcessingFee(false);
+      setCheckoutButtonStep('IDLE');
+    }
+  };
+
   const handleWizardPayFee = async () => {
     if (!courseFormData.title.trim()) {
       toastError('Course Title Required', 'Please enter a course title in Step 1 before proceeding to payment.');
@@ -646,6 +1029,9 @@ export const InstructorDashboard: React.FC = () => {
     }
     try {
       setProcessingFee(true);
+      setCheckoutButtonStep('CREATING');
+      setCashfreePaymentState('PROCESSING');
+
       let targetCourseId = editingCourseId;
       if (!targetCourseId) {
         // Create initial draft course first to obtain courseId
@@ -667,22 +1053,116 @@ export const InstructorDashboard: React.FC = () => {
 
       if (!targetCourseId) {
         toastError('Error', 'Unable to initiate course for payment. Please try again.');
+        setCashfreePaymentState('IDLE');
+        setCheckoutButtonStep('IDLE');
         return;
       }
 
-      // Open Cashfree fee payment modal
-      setFeeModalCourse({ _id: targetCourseId, title: courseFormData.title });
-      setShowFeeModal(true);
+      // Initialize genuine Cashfree PG order on backend
       const feeRes = await instructorApi.createPublishingFeeOrder(targetCourseId);
-      if (feeRes.success && feeRes.data) {
-        setFeeOrderData(feeRes.data);
+      if (!feeRes.success || !feeRes.data) {
+        throw new Error(feeRes.message || 'Failed to initialize payment order with Cashfree.');
       }
+
+      const orderData = feeRes.data;
+      setFeeOrderData(orderData);
+
+      // Handle ₹0 free course waiver
+      if (orderData.alreadyPaid && orderData.amount === 0) {
+        setCashfreePaymentState('SUCCESS');
+        setWizardPublishingFeePaid(true);
+        setVerifiedPaymentData({
+          orderId: orderData.orderId || 'FREE_WAIVER',
+          paymentId: 'WAIVED',
+          amount: 0,
+        });
+        success('Platform Fee Waived', 'Publishing fee is waived for free courses (₹0).');
+        setCheckoutButtonStep('IDLE');
+        return;
+      }
+
+      // Handle previously verified course
+      if (orderData.alreadyPaid && orderData.paymentStatus === 'SUCCESS') {
+        setCashfreePaymentState('SUCCESS');
+        setWizardPublishingFeePaid(true);
+        setVerifiedPaymentData({
+          orderId: orderData.orderId,
+          paymentId: orderData.paymentId,
+          amount: orderData.amount,
+        });
+        success('Payment Verified', 'Platform fee has already been verified.');
+        setCheckoutButtonStep('IDLE');
+        return;
+      }
+
+      if (!orderData.paymentSessionId) {
+        throw new Error('Cashfree payment session ID was not received from gateway.');
+      }
+
+      setCheckoutButtonStep('OPENING');
+
+      // Initialize Cashfree official SDK
+      const cfMode = orderData.environment === 'production' ? 'production' : 'sandbox';
+      let cashfree: any = null;
+      try {
+        cashfree = await loadCashfree({ mode: cfMode });
+      } catch (sdkErr) {
+        console.warn('Cashfree SDK load notice:', sdkErr);
+      }
+
+      if (!cashfree) {
+        throw new Error('Could not load Cashfree SDK modal. Please check your network connection.');
+      }
+
+      let userDropped = false;
+      try {
+        const checkoutResult: any = await cashfree.checkout({
+          paymentSessionId: orderData.paymentSessionId,
+          redirectTarget: '_modal',
+        });
+
+        if (checkoutResult?.error) {
+          console.warn('[Cashfree Checkout Event]:', checkoutResult.error);
+          if (
+            checkoutResult.error.code === 'USER_DROPPED' ||
+            checkoutResult.error.message?.toLowerCase().includes('user dropped') ||
+            checkoutResult.error.message?.toLowerCase().includes('closed') ||
+            checkoutResult.error.message?.toLowerCase().includes('dismiss')
+          ) {
+            userDropped = true;
+          }
+        }
+      } catch (checkoutErr: any) {
+        console.warn('[Cashfree Checkout Warning]:', checkoutErr);
+        if (
+          checkoutErr?.message?.toLowerCase().includes('user dropped') ||
+          checkoutErr?.message?.toLowerCase().includes('closed')
+        ) {
+          userDropped = true;
+        }
+      }
+
+      if (userDropped) {
+        setCashfreePaymentState('USER_DROPPED');
+        setProcessingFee(false);
+        setCheckoutButtonStep('IDLE');
+        return;
+      }
+
+      // Verify payment with server (rely strictly on Cashfree server verification)
+      await verifyBackendPaymentStatus(targetCourseId, orderData.orderId);
     } catch (err: any) {
       console.error('Error in handleWizardPayFee:', err);
-      toastError('Payment Initialization Failed', err.response?.data?.message || err.message || 'Could not initiate payment.');
-      setShowFeeModal(false);
+      if (err.response?.status === 401) {
+        toastError('Session Expired', 'Your session has expired. Please refresh the page or log in again.');
+        setCashfreePaymentState('IDLE');
+      } else {
+        toastError('Payment Initialization Failed', err.response?.data?.message || err.message || 'Could not initiate payment.');
+        setCashfreePaymentState('FAILED');
+      }
     } finally {
       setProcessingFee(false);
+      setCheckoutButtonStep('IDLE');
     }
   };
 
@@ -693,7 +1173,7 @@ export const InstructorDashboard: React.FC = () => {
       return;
     }
     if (!saveAsDraftOnly && !wizardPublishingFeePaid) {
-      toastError('Publishing Fee Required', 'Please pay the platform publishing fee (₹499) via Cashfree before submitting for Super Admin review.');
+      toastError('Publishing Fee Required', 'Please pay the 10% platform publishing fee via Cashfree before submitting for Super Admin review.');
       return;
     }
     if (isSubmittingCourse) return;
@@ -721,15 +1201,26 @@ export const InstructorDashboard: React.FC = () => {
 
       if (!saveAsDraftOnly && savedCourseId) {
         await instructorApi.submitForReview(savedCourseId);
-        success('Course Submitted for Review!', 'Your course is now pending Super Admin review. You will be notified once approved.');
+        const orderIdDisp = verifiedPaymentData?.orderId || feeOrderData?.orderId || 'VERIFIED';
+        success(
+          'Course Submitted for Super Admin Review! 🎉',
+          `Order ID: ${orderIdDisp}. Platform fee verified and course submitted for review. You can track approval progress in My Courses.`
+        );
+        setEditingCourseId(null);
+        setWizardPublishingFeePaid(false);
+        setCashfreePaymentState('IDLE');
+        setVerifiedPaymentData(null);
+        setActiveNav('courses');
+        setCreateStep(1);
       } else {
         success('Course Draft Saved', 'Your course structure and curriculum have been saved as draft.');
+        setEditingCourseId(null);
+        setWizardPublishingFeePaid(false);
+        setCashfreePaymentState('IDLE');
+        setVerifiedPaymentData(null);
+        setActiveNav('courses');
+        setCreateStep(1);
       }
-
-      setEditingCourseId(null);
-      setWizardPublishingFeePaid(false);
-      setActiveNav('courses');
-      setCreateStep(1);
       setCourseFormData({
         title: '',
         shortDescription: '',
@@ -741,12 +1232,45 @@ export const InstructorDashboard: React.FC = () => {
         level: 'Beginner',
         language: 'English',
         skills: [],
-        requirements: [],
+        detailedOverview: '',
+        targetAudience: [],
+        courseGoals: [],
+        teachingMethodology: 'Hands-on Projects, Practical Architecture Labs, and Real-world Case Studies',
         learningObjectives: [],
+        foundationalConcepts: [],
+        recommendedPriorKnowledge: [],
+        coreTools: [],
+        requirements: [],
+        hardwareRequirements: [],
+        softwareRequirements: [],
+        requiredAccounts: [],
+        courseIncludes: {
+          videoHours: '20+ Hours of On-Demand HD Video',
+          resourcesCount: '15 Downloadable Architecture Guides & Source Repos',
+          projectsCount: '3 Full-Stack Production Projects',
+          certificate: true,
+          qaSupport: true,
+          lifetimeAccess: true,
+          otherBenefits: [],
+        },
+        promotionalVideo: '',
         coursePrice: 0,
+        discountPrice: 0,
+        accessDuration: 'Lifetime Access',
+        certificateSettings: {
+          enableCertificate: true,
+          certificateTitle: '',
+        },
         currency: 'INR',
         syllabusUrl: '',
         syllabusFileName: '',
+        maxEnrollmentLimit: '',
+        schedule: '',
+        mentorStatus: 'Pro Mentor',
+        professionalTags: [],
+        experienceMetrics: [],
+        qualifications: [],
+        totalSessions: '',
         modules: [],
       });
       await loadSubViewData();
@@ -760,42 +1284,91 @@ export const InstructorDashboard: React.FC = () => {
   };
 
   const handleOpenFeeModal = async (course: any) => {
-    try {
-      setProcessingFee(true);
-      setFeeModalCourse(course);
-      setShowFeeModal(true);
-      const res = await instructorApi.createPublishingFeeOrder(course._id || course.id);
-      if (res.success && res.data) {
-        setFeeOrderData(res.data);
-      }
-    } catch (err: any) {
-      toastError('Payment Initialization Failed', err.response?.data?.message || err.message);
-      setShowFeeModal(false);
-    } finally {
-      setProcessingFee(false);
-    }
-  };
+    const targetCourseId = course._id || course.id;
+    if (!targetCourseId) return;
 
-  const handleVerifyFeePayment = async () => {
-    if (!feeModalCourse || !feeOrderData) return;
     try {
       setProcessingFee(true);
-      const res = await instructorApi.verifyPublishingFee(feeModalCourse._id || feeModalCourse.id, {
-        cashfreeOrderId: feeOrderData.orderId,
-      });
-      if (res.success) {
-        success('Publishing Fee Paid Successfully!', 'Your course is now verified and ready for Super Admin review.');
-        setTimeout(async () => {
-          setShowFeeModal(false);
-          setFeeModalCourse(null);
-          setFeeOrderData(null);
-          setWizardPublishingFeePaid(true);
-          await loadSubViewData();
-          fetchDashboard(true);
-        }, 1200);
+      const feeRes = await instructorApi.createPublishingFeeOrder(targetCourseId);
+      if (!feeRes.success || !feeRes.data) {
+        throw new Error(feeRes.message || 'Failed to initialize payment with Cashfree.');
       }
+
+      const orderData = feeRes.data;
+      if (orderData.alreadyPaid && orderData.amount === 0) {
+        success('Platform Fee Waived', 'Publishing fee is waived for free courses.');
+        await loadSubViewData();
+        return;
+      }
+
+      if (orderData.alreadyPaid && orderData.paymentStatus === 'SUCCESS') {
+        success('Platform Fee Verified', 'Platform fee has already been verified.');
+        await loadSubViewData();
+        return;
+      }
+
+      if (!orderData.paymentSessionId) {
+        throw new Error('Cashfree payment session ID was not received from gateway.');
+      }
+
+      const cfMode = orderData.environment === 'production' ? 'production' : 'sandbox';
+      let cashfree: any = null;
+      try {
+        cashfree = await loadCashfree({ mode: cfMode });
+      } catch (sdkErr) {
+        console.warn('Cashfree SDK load notice:', sdkErr);
+      }
+
+      if (!cashfree) {
+        throw new Error('Cashfree Payment Gateway SDK failed to initialize.');
+      }
+
+      let userDropped = false;
+      try {
+        const checkoutResult: any = await cashfree.checkout({
+          paymentSessionId: orderData.paymentSessionId,
+          redirectTarget: '_modal',
+        });
+
+        if (checkoutResult?.error) {
+          console.warn('[Cashfree Checkout Event]:', checkoutResult.error);
+          if (
+            checkoutResult.error.code === 'USER_DROPPED' ||
+            checkoutResult.error.message?.toLowerCase().includes('user dropped') ||
+            checkoutResult.error.message?.toLowerCase().includes('closed') ||
+            checkoutResult.error.message?.toLowerCase().includes('dismiss')
+          ) {
+            userDropped = true;
+          }
+        }
+      } catch (checkoutErr: any) {
+        console.warn('[Cashfree Checkout Warning]:', checkoutErr);
+        if (
+          checkoutErr?.message?.toLowerCase().includes('user dropped') ||
+          checkoutErr?.message?.toLowerCase().includes('closed')
+        ) {
+          userDropped = true;
+        }
+      }
+
+      if (userDropped) {
+        toastError('Payment Incomplete', 'Payment modal was closed without completing payment.');
+        setProcessingFee(false);
+        return;
+      }
+
+      // Verify payment with server (no simulation)
+      const statusRes = await instructorApi.getPublishingFeeStatus(targetCourseId, orderData.orderId);
+      if (statusRes.data?.paymentStatus === 'SUCCESS') {
+        success('Payment Verified Successfully! ✓', `Order ID: ${orderData.orderId}. Platform fee registered and credited to Super Admin.`);
+      } else {
+        info('Payment Update', statusRes.data?.message || 'Payment status updated.');
+      }
+      await loadSubViewData();
+      fetchDashboard(true);
     } catch (err: any) {
-      toastError('Verification Failed', err.response?.data?.message || err.message);
+      console.error('Error initiating Cashfree payment:', err);
+      toastError('Payment Failed', err.response?.data?.message || err.message || 'Payment initiation failed.');
     } finally {
       setProcessingFee(false);
     }
@@ -819,6 +1392,23 @@ export const InstructorDashboard: React.FC = () => {
       await loadSubViewData();
     } catch (err: any) {
       toastError('Submission Failed', err.response?.data?.message || err.message);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setIsSavingProfile(true);
+      const res = await instructorApi.updateProfile(profileData);
+      if (res.success || res.status === 'success' || res.profile) {
+        success('Profile Saved', 'Your instructor profile, bio, and verification details have been updated.');
+        await loadSubViewData();
+        fetchDashboard(true);
+      }
+    } catch (err: any) {
+      console.error('Error saving profile:', err);
+      toastError('Update Failed', err.response?.data?.message || err.message || 'Could not update profile.');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -915,10 +1505,7 @@ export const InstructorDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 self-end sm:self-auto">
-            <button className="relative p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500"></span>
-            </button>
+            <NotificationBell />
 
             <div className="flex items-center gap-2.5 pl-3 border-l border-slate-100">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white font-bold text-xs flex items-center justify-center">
@@ -931,6 +1518,9 @@ export const InstructorDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Real-time Webinar Started Notification Banner */}
+        <LiveStartedBanner />
 
         {/* Global Loading Spinner for Initial Data Fetch */}
         {loading && !dashboardData ? (
@@ -1557,56 +2147,48 @@ export const InstructorDashboard: React.FC = () => {
         )}
 
         {/* =========================================================================
-            VIEW 3: CREATE / EDIT COURSE (4-STEP STREAMLINED WIZARD)
+            VIEW 3: CREATE / EDIT COURSE (9-STEP PROGRESSIVE WIZARD MATCHING IMAGE 1)
            ========================================================================= */}
         {activeNav === 'create-course' && (
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-            {/* Header with Back, Draft & Next / Publish Actions */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="space-y-6 font-sans">
+            {/* Top Bar Header with Title, Subtitle, and Action Buttons (Image 1) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs">
               <div className="flex items-center gap-3">
                 {createStep > 1 && (
                   <button
+                    type="button"
                     onClick={() => setCreateStep(createStep - 1)}
-                    className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
-                    title="Go Back"
+                    className="w-9 h-9 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors flex items-center justify-center cursor-pointer shrink-0"
+                    title="Previous Step"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
                 )}
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                     {editingCourseId ? `Edit Course: ${courseFormData.title || 'Untitled'}` : 'Create New Course'}
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium">
-                    {editingCourseId
-                      ? 'Update course details, syllabus document, curriculum hierarchy, and pricing.'
-                      : 'Follow the 4 streamlined steps to design, structure, and publish your course.'}
+                  <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                    Add all the details about your course. Complete each section to publish.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5">
-                {createStep > 1 && (
-                  <button
-                    onClick={() => setCreateStep(createStep - 1)}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Back</span>
-                  </button>
-                )}
-
+              <div className="flex items-center gap-3 self-start sm:self-auto">
                 <button
+                  type="button"
                   onClick={() => handleSubmitCourseForReview(true)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-colors cursor-pointer"
                 >
-                  Save as Draft
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Save as Draft</span>
                 </button>
 
-                {createStep < 4 ? (
+                {createStep < 9 ? (
                   <button
+                    type="button"
                     onClick={() => setCreateStep(createStep + 1)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                   >
                     <span>Next Step</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -1616,22 +2198,22 @@ export const InstructorDashboard: React.FC = () => {
                     type="button"
                     onClick={handleWizardPayFee}
                     disabled={processingFee}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-60"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
-                    <span>Pay Fee (₹499) to Unlock</span>
+                    <span>Pay Fee (₹{(courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.10).toFixed(2)) : 0).toLocaleString('en-IN')}) to Unlock</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     disabled={isSubmittingCourse}
                     onClick={() => handleSubmitCourseForReview(false)}
-                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-70"
+                    className="inline-flex items-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-70"
                   >
                     {isSubmittingCourse ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Submitting...</span>
+                        <span>Submitting Course...</span>
                       </>
                     ) : (
                       <>
@@ -1644,547 +2226,1615 @@ export const InstructorDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Stepper Progress Badges (4 Clean Steps) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 py-2 border-b border-slate-50">
-              {[
-                { step: 1, label: '1. Basic Information' },
-                { step: 2, label: '2. Syllabus & Documents' },
-                { step: 3, label: '3. Curriculum Structure' },
-                { step: 4, label: '4. Pricing & Preview' },
-              ].map((s) => (
-                <button
-                  key={s.step}
-                  onClick={() => setCreateStep(s.step)}
-                  className={`flex items-center gap-2.5 p-2.5 rounded-2xl text-xs font-semibold cursor-pointer select-none transition-all ${
-                    createStep === s.step
-                      ? 'bg-indigo-50/80 border border-indigo-200 text-indigo-700 shadow-2xs'
-                      : createStep > s.step
-                      ? 'bg-emerald-50/60 border border-emerald-100 text-emerald-800'
-                      : 'bg-slate-50 border border-transparent text-slate-500 hover:bg-slate-100'
-                  }`}
-                >
-                  <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+            {/* Stepper Progress Badges (9 Progressive Steps Matching Image 1) */}
+            <div className="overflow-x-auto pb-2 scrollbar-thin">
+              <div className="flex items-center gap-2 min-w-max p-1 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+                {[
+                  { step: 1, label: 'Basic Information' },
+                  { step: 2, label: 'Course Description' },
+                  { step: 3, label: "What You'll Learn" },
+                  { step: 4, label: 'Curriculum' },
+                  { step: 5, label: 'Course Foundations' },
+                  { step: 6, label: 'Requirements' },
+                  { step: 7, label: 'This Course Includes' },
+                  { step: 8, label: 'Media & Pricing' },
+                  { step: 9, label: 'Review & Submit' },
+                ].map((s) => (
+                  <button
+                    key={s.step}
+                    type="button"
+                    onClick={() => setCreateStep(s.step)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none ${
                       createStep === s.step
-                        ? 'bg-indigo-600 text-white shadow-xs'
+                        ? 'bg-blue-50 border border-blue-200 text-blue-700 shadow-2xs'
                         : createStep > s.step
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-slate-200 text-slate-600'
+                        ? 'bg-emerald-50/60 border border-emerald-100 text-emerald-800'
+                        : 'bg-transparent border border-transparent text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {createStep > s.step ? '✓' : s.step}
-                  </span>
-                  <span className="truncate font-bold text-[12px]">{s.label}</span>
-                </button>
-              ))}
+                    <span
+                      className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
+                        createStep === s.step
+                          ? 'bg-blue-600 text-white'
+                          : createStep > s.step
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {createStep > s.step ? '✓' : s.step}
+                    </span>
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* =========================================================================
-                STEP 1: BASIC INFORMATION
-               ========================================================================= */}
-            {createStep === 1 && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-                {/* Left Column: Title & Descriptions (6 Cols) */}
-                <div className="lg:col-span-6 space-y-4 text-xs">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Course Title *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Master React & Node.js Architecture"
-                      value={courseFormData.title}
-                      onChange={(e) => setCourseFormData({ ...courseFormData, title: e.target.value })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
-                    />
+            {/* Main Step Container Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+
+              {/* =========================================================================
+                  STEP 1: BASIC INFORMATION (Image 1 Layout)
+                 ========================================================================= */}
+              {createStep === 1 && (
+                <div className="space-y-6 text-xs">
+                  {/* Step 1 Header Badge */}
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">Basic Information</h3>
+                      <p className="text-slate-500 font-medium text-xs">Add the main details of your course.</p>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Short Description *</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Brief overview of the course (1-2 sentences)..."
-                      value={courseFormData.shortDescription}
-                      onChange={(e) => setCourseFormData({ ...courseFormData, shortDescription: e.target.value })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Full Description</label>
-                    <textarea
-                      rows={5}
-                      placeholder="Detailed course description, prerequisites, and learning outcomes..."
-                      value={courseFormData.description}
-                      onChange={(e) => setCourseFormData({ ...courseFormData, description: e.target.value })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none leading-relaxed"
-                    />
-                  </div>
-                </div>
-
-                {/* Right Column: Thumbnail & Classification (6 Cols) */}
-                <div className="lg:col-span-6 space-y-4 text-xs">
-                  {/* Thumbnail Upload with Dual Device/URL Options */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Course Thumbnail Image</label>
-
-                    {courseFormData.thumbnail ? (
-                      <div className="relative rounded-2xl overflow-hidden h-40 bg-slate-100 border border-slate-200 group">
-                        <img src={courseFormData.thumbnail} alt="Thumbnail Preview" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setCourseFormData({ ...courseFormData, thumbnail: '' })}
-                          className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-red-600/90 text-white shadow-md hover:bg-red-700 transition-colors cursor-pointer"
-                          title="Remove Image"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left Column: Title, Short Description, Full Description */}
+                    <div className="lg:col-span-6 space-y-5">
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Course Title *</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Complete Web Development Bootcamp"
+                          value={courseFormData.title}
+                          onChange={(e) => setCourseFormData({ ...courseFormData, title: e.target.value })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 focus:border-blue-500 focus:outline-none shadow-2xs"
+                        />
                       </div>
-                    ) : (
-                      <div className="rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center bg-slate-50/50 flex flex-col items-center justify-center space-y-2">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                          <ImageIcon className="w-5 h-5" />
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="font-bold text-slate-800">Short Description *</label>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {courseFormData.shortDescription.length}/150
+                          </span>
                         </div>
-                        <p className="text-xs font-bold text-slate-700">No Image Uploaded</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Recommended: 1280 × 720 (Max 5MB)</p>
-                      </div>
-                    )}
-
-                    <div className="mt-3 space-y-2">
-                      <div className="flex rounded-xl bg-slate-100 p-1">
-                        <button
-                          type="button"
-                          onClick={() => setThumbUploadTab('device')}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            thumbUploadTab === 'device' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          <HardDrive className="w-3.5 h-3.5" />
-                          <span>Upload from Device</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setThumbUploadTab('url')}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            thumbUploadTab === 'url' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600'
-                          }`}
-                        >
-                          <Globe className="w-3.5 h-3.5" />
-                          <span>From Web URL</span>
-                        </button>
+                        <textarea
+                          rows={3}
+                          maxLength={150}
+                          placeholder="Brief overview of the course (1-2 sentences)..."
+                          value={courseFormData.shortDescription}
+                          onChange={(e) => setCourseFormData({ ...courseFormData, shortDescription: e.target.value })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-blue-500 focus:outline-none shadow-2xs resize-none"
+                        />
                       </div>
 
-                      {thumbUploadTab === 'device' ? (
-                        <label className="block w-full py-2.5 px-3 bg-white border border-slate-200 hover:border-indigo-400 rounded-xl text-center text-xs font-bold text-slate-700 hover:text-indigo-600 cursor-pointer transition-colors shadow-2xs">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleDeviceFileUpload}
-                            className="hidden"
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="font-bold text-slate-800">Full Description *</label>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {courseFormData.description.length}/3000
+                          </span>
+                        </div>
+
+                        {/* Formatting Toolbar (Image 1) */}
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                          <div className="flex items-center flex-wrap gap-1 p-2 bg-slate-50 border-b border-slate-200 text-slate-600">
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Bold"><Bold className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Italic"><Italic className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Underline"><Underline className="w-3.5 h-3.5" /></button>
+                            <span className="w-px h-4 bg-slate-300 mx-1" />
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Bullet List"><List className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Numbered List"><ListOrdered className="w-3.5 h-3.5" /></button>
+                            <span className="w-px h-4 bg-slate-300 mx-1" />
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Insert Link"><Link2 className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Insert Image"><ImageIcon className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Insert Video"><Video className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Code"><Code className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Quote"><Quote className="w-3.5 h-3.5" /></button>
+                            <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Strikethrough"><Strikethrough className="w-3.5 h-3.5" /></button>
+                          </div>
+                          <textarea
+                            rows={6}
+                            maxLength={3000}
+                            placeholder="Provide a detailed description about your course, target audience, topics covered, and why students should take this course..."
+                            value={courseFormData.description}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, description: e.target.value })}
+                            className="w-full p-3.5 bg-white font-medium text-slate-900 focus:outline-none leading-relaxed resize-none"
                           />
-                          <span>Choose Image File from Device...</span>
-                        </label>
-                      ) : (
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Thumbnail, Category, Level, Skills */}
+                    <div className="lg:col-span-6 space-y-5">
+                      {/* Thumbnail Box */}
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Course Thumbnail Image *</label>
+
+                        {courseFormData.thumbnail ? (
+                          <div className="relative rounded-2xl overflow-hidden h-40 bg-slate-100 border border-slate-200 group">
+                            <img src={courseFormData.thumbnail} alt="Thumbnail Preview" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setCourseFormData({ ...courseFormData, thumbnail: '' })}
+                              className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-red-600/90 text-white shadow-md hover:bg-red-700 transition-colors cursor-pointer"
+                              title="Remove Image"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border-2 border-dashed border-blue-200/80 p-6 text-center bg-blue-50/20 flex flex-col items-center justify-center space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                              <ImageIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-extrabold text-slate-800">Drag & drop an image here</p>
+                              <p className="text-[11px] text-slate-500 font-medium">or click to upload</p>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold">Recommended: 1280 × 720 (Max 5MB)</p>
+                          </div>
+                        )}
+
+                        <div className="mt-3 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setThumbUploadTab('device')}
+                              className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${
+                                thumbUploadTab === 'device'
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                              }`}
+                            >
+                              <HardDrive className="w-3.5 h-3.5" />
+                              <span>Upload from Device</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setThumbUploadTab('url')}
+                              className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${
+                                thumbUploadTab === 'url'
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                              }`}
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              <span>From Web URL</span>
+                            </button>
+                          </div>
+
+                          {thumbUploadTab === 'device' ? (
+                            <label className="block w-full py-2 px-3 bg-white border border-slate-200 hover:border-blue-400 rounded-xl text-center text-xs font-bold text-slate-700 hover:text-blue-600 cursor-pointer transition-colors shadow-2xs">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleDeviceFileUpload}
+                                className="hidden"
+                              />
+                              <span>Browse File from Device...</span>
+                            </label>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input
+                                type="url"
+                                placeholder="https://example.com/thumbnail.jpg"
+                                value={thumbUrlInput}
+                                onChange={(e) => setThumbUrlInput(e.target.value)}
+                                className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleApplyWebUrl}
+                                className="px-3.5 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Category & Subcategory */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">Category *</label>
+                          <select
+                            value={courseFormData.category}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, category: e.target.value })}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                          >
+                            <option value="Development">Development</option>
+                            <option value="Cloud Computing">Cloud Computing</option>
+                            <option value="IT & Software">IT & Software</option>
+                            <option value="Data Science">Data Science</option>
+                            <option value="Design">Design</option>
+                            <option value="Cybersecurity">Cybersecurity</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">Subcategory *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Web Architecture, DevOps"
+                            value={courseFormData.subcategory}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, subcategory: e.target.value })}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Level & Language */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">Course Level *</label>
+                          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                            {['Beginner', 'Intermediate', 'Advanced'].map((lvl) => (
+                              <button
+                                key={lvl}
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, level: lvl })}
+                                className={`py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                  courseFormData.level === lvl
+                                    ? 'bg-white text-blue-600 border border-blue-200 shadow-2xs'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                {lvl}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">Language *</label>
+                          <select
+                            value={courseFormData.language}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, language: e.target.value })}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                          >
+                            <option value="English">English</option>
+                            <option value="Hindi">Hindi</option>
+                            <option value="Spanish">Spanish</option>
+                            <option value="German">German</option>
+                            <option value="French">French</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Key Skills Taught */}
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Key Skills Taught</label>
+                        {courseFormData.skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
+                            {courseFormData.skills.map((s, idx) => (
+                              <span key={idx} className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-[11px] flex items-center gap-1.5 border border-blue-100">
+                                {s}
+                                <button
+                                  type="button"
+                                  onClick={() => setCourseFormData({ ...courseFormData, skills: courseFormData.skills.filter((_, i) => i !== idx) })}
+                                  className="text-blue-400 hover:text-red-500 font-bold cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <input
-                            type="url"
-                            placeholder="https://example.com/course-thumbnail.jpg"
-                            value={thumbUrlInput}
-                            onChange={(e) => setThumbUrlInput(e.target.value)}
-                            className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                            type="text"
+                            placeholder="e.g. React, Node.js, UI/UX, Data Analysis"
+                            value={newSkillTagInput}
+                            onChange={(e) => setNewSkillTagInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (newSkillTagInput.trim()) {
+                                  setCourseFormData({ ...courseFormData, skills: [...courseFormData.skills, newSkillTagInput.trim()] });
+                                  setNewSkillTagInput('');
+                                }
+                              }
+                            }}
+                            className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
                           />
                           <button
                             type="button"
-                            onClick={handleApplyWebUrl}
-                            className="px-3.5 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                            onClick={() => {
+                              if (newSkillTagInput.trim()) {
+                                setCourseFormData({ ...courseFormData, skills: [...courseFormData.skills, newSkillTagInput.trim()] });
+                                setNewSkillTagInput('');
+                              }
+                            }}
+                            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                           >
-                            Apply
+                            + Add
                           </button>
                         </div>
+                      </div>
+
+                      {/* Schedule & Deadline + Mentor Status Badge */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">
+                            Schedule & Deadline <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Thursday, 5th September | 7:30PM"
+                            value={courseFormData.schedule || ''}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, schedule: e.target.value })}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-1">Live batch cohort date or weekly schedule. Displays prominently on the course card.</p>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-800 block mb-1.5">Mentor Highlight Badge</label>
+                          <select
+                            value={courseFormData.mentorStatus || 'Pro Mentor'}
+                            onChange={(e) => setCourseFormData({ ...courseFormData, mentorStatus: e.target.value })}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                          >
+                            <option value="Pro Mentor">⭐ Pro Mentor</option>
+                            <option value="Top 1% Mentor">🏆 Top 1% Mentor</option>
+                            <option value="Master Instructor">🎓 Master Instructor</option>
+                            <option value="Staff Specialist">💼 Staff Specialist</option>
+                            <option value="Verified Creator">🛡️ Verified Creator</option>
+                          </select>
+                          <p className="text-[10px] text-slate-400 mt-1">Specialized badge displayed next to instructor name on the course card.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 2: COURSE DESCRIPTION
+                 ========================================================================= */}
+              {createStep === 2 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">Course Description & Strategy</h3>
+                      <p className="text-slate-500 font-medium text-xs">Define detailed overview, target audience, course goals, and teaching methodology.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Detailed Course Overview *</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Provide an in-depth breakdown of the syllabus, real-world case studies, and engineering practices taught..."
+                        value={courseFormData.detailedOverview || courseFormData.description}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, detailedOverview: e.target.value })}
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Target Audience List */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Target Audience</label>
+                      {(courseFormData.targetAudience || []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(courseFormData.targetAudience || []).map((aud, idx) => (
+                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 font-bold text-xs flex items-center gap-2 border border-indigo-100">
+                              <span>• {aud}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, targetAudience: (courseFormData.targetAudience || []).filter((_, i) => i !== idx) })}
+                                className="text-indigo-400 hover:text-red-500 font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
                       )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Aspiring Full-Stack Engineers, DevOps Beginners..."
+                          value={newAudienceInput}
+                          onChange={(e) => setNewAudienceInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newAudienceInput.trim()) {
+                                setCourseFormData({ ...courseFormData, targetAudience: [...(courseFormData.targetAudience || []), newAudienceInput.trim()] });
+                                setNewAudienceInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newAudienceInput.trim()) {
+                              setCourseFormData({ ...courseFormData, targetAudience: [...(courseFormData.targetAudience || []), newAudienceInput.trim()] });
+                              setNewAudienceInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Audience
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Course Goals */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Course Goals & Milestones</label>
+                      {(courseFormData.courseGoals || []).length > 0 && (
+                        <div className="space-y-1.5 mb-2">
+                          {(courseFormData.courseGoals || []).map((goal, idx) => (
+                            <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs font-semibold text-slate-800">
+                              <span>✓ {goal}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, courseGoals: (courseFormData.courseGoals || []).filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 font-bold"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Deploy 3 scalable applications to AWS cloud infrastructure..."
+                          value={newGoalInput}
+                          onChange={(e) => setNewGoalInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newGoalInput.trim()) {
+                                setCourseFormData({ ...courseFormData, courseGoals: [...(courseFormData.courseGoals || []), newGoalInput.trim()] });
+                                setNewGoalInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newGoalInput.trim()) {
+                              setCourseFormData({ ...courseFormData, courseGoals: [...(courseFormData.courseGoals || []), newGoalInput.trim()] });
+                              setNewGoalInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Goal
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Teaching Methodology */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Teaching Methodology</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Hands-on coding exercises, production walkthroughs, architectural diagrams"
+                        value={courseFormData.teachingMethodology || ''}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, teachingMethodology: e.target.value })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+
+                    {/* Professional Summary Tags (Corporate Experience Badges) */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1">
+                        Professional Summary Tags (Corporate Experience)
+                      </label>
+                      <p className="text-slate-400 text-[10px] mb-1.5">
+                        High-trust corporate proof points shown on the course card (e.g., Ex-Apple, Full Stack Engineer, Senior Manager).
+                      </p>
+                      {courseFormData.professionalTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
+                          {courseFormData.professionalTags.map((tag, idx) => (
+                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] flex items-center gap-1.5 border border-indigo-100">
+                              🏢 {tag}
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, professionalTags: courseFormData.professionalTags.filter((_, i) => i !== idx) })}
+                                className="text-indigo-400 hover:text-red-500 font-bold cursor-pointer"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Ex-Apple, MERN Developer, Senior Architect"
+                          value={newProfessionalTagInput}
+                          onChange={(e) => setNewProfessionalTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newProfessionalTagInput.trim()) {
+                                setCourseFormData({ ...courseFormData, professionalTags: [...courseFormData.professionalTags, newProfessionalTagInput.trim()] });
+                                setNewProfessionalTagInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newProfessionalTagInput.trim()) {
+                              setCourseFormData({ ...courseFormData, professionalTags: [...courseFormData.professionalTags, newProfessionalTagInput.trim()] });
+                              setNewProfessionalTagInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Tag
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Education & Qualifications Badges (Optional) */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1">
+                        Education & Qualifications <span className="text-slate-400 font-normal lowercase">(optional - leave blank if not applicable)</span>
+                      </label>
+                      <p className="text-slate-400 text-[10px] mb-1.5">
+                        Academic degrees or professional certifications (e.g., PG Diploma, Art & Design). Omitted from card if left empty.
+                      </p>
+                      {courseFormData.qualifications.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
+                          {courseFormData.qualifications.map((q, idx) => (
+                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 font-bold text-[11px] flex items-center gap-1.5 border border-purple-100">
+                              🎓 {q}
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, qualifications: courseFormData.qualifications.filter((_, i) => i !== idx) })}
+                                className="text-purple-400 hover:text-red-500 font-bold cursor-pointer"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. PG Diploma, Art & Design"
+                          value={newQualificationInput}
+                          onChange={(e) => setNewQualificationInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newQualificationInput.trim()) {
+                                setCourseFormData({ ...courseFormData, qualifications: [...courseFormData.qualifications, newQualificationInput.trim()] });
+                                setNewQualificationInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newQualificationInput.trim()) {
+                              setCourseFormData({ ...courseFormData, qualifications: [...courseFormData.qualifications, newQualificationInput.trim()] });
+                              setNewQualificationInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Credential
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 3: WHAT YOU'LL LEARN (Dynamic Learning Outcomes)
+                 ========================================================================= */}
+              {createStep === 3 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">What You'll Learn (Learning Outcomes)</h3>
+                      <p className="text-slate-500 font-medium text-xs">Add key concrete skills and competencies students will acquire upon completing this course.</p>
                     </div>
                   </div>
 
-                  {/* Category, Level, Language */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1.5">Category *</label>
-                      <select
-                        value={courseFormData.category}
-                        onChange={(e) => setCourseFormData({ ...courseFormData, category: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                      >
-                        <option value="Development">Development</option>
-                        <option value="Cloud Computing">Cloud Computing</option>
-                        <option value="IT & Software">IT & Software</option>
-                        <option value="Data Science">Data Science</option>
-                        <option value="Design">Design</option>
-                        <option value="Cybersecurity">Cybersecurity</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1.5">Level *</label>
-                      <select
-                        value={courseFormData.level}
-                        onChange={(e) => setCourseFormData({ ...courseFormData, level: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                      >
-                        <option value="Beginner">Beginner</option>
-                        <option value="Intermediate">Intermediate</option>
-                        <option value="Advanced">Advanced</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1.5">Language</label>
-                      <select
-                        value={courseFormData.language}
-                        onChange={(e) => setCourseFormData({ ...courseFormData, language: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                      >
-                        <option value="English">English</option>
-                        <option value="Hindi">Hindi</option>
-                        <option value="Spanish">Spanish</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Skills Taught */}
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Key Skills Taught</label>
-                    {courseFormData.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl mb-2">
-                        {courseFormData.skills.map((s, idx) => (
-                          <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] flex items-center gap-1.5">
-                            {s}
+                  <div className="space-y-4">
+                    {courseFormData.learningObjectives.length === 0 ? (
+                      <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-2">
+                        <Sparkles className="w-8 h-8 text-slate-400 mx-auto" />
+                        <p className="font-bold text-slate-700">No Learning Outcomes Added Yet</p>
+                        <p className="text-[11px] text-slate-400 font-medium">Add at least 3-4 bullet points to highlight the course value to students.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {courseFormData.learningObjectives.map((obj, idx) => (
+                          <div key={idx} className="p-3.5 bg-white rounded-2xl border border-slate-200 flex items-start justify-between gap-3 shadow-2xs">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                              <span className="font-semibold text-slate-800 text-xs leading-relaxed break-words">{obj}</span>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => setCourseFormData({ ...courseFormData, skills: courseFormData.skills.filter((_, i) => i !== idx) })}
-                              className="text-indigo-400 hover:text-red-500 font-bold cursor-pointer"
+                              onClick={() => setCourseFormData({ ...courseFormData, learningObjectives: courseFormData.learningObjectives.filter((_, i) => i !== idx) })}
+                              className="text-slate-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
                             >
-                              ×
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="font-bold text-slate-800 block">Add Dynamic Learning Outcome</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Master React 19 Server Components and full-stack hydration strategies..."
+                          value={newLearningObjectiveInput}
+                          onChange={(e) => setNewLearningObjectiveInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newLearningObjectiveInput.trim()) {
+                                setCourseFormData({ ...courseFormData, learningObjectives: [...courseFormData.learningObjectives, newLearningObjectiveInput.trim()] });
+                                setNewLearningObjectiveInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-emerald-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newLearningObjectiveInput.trim()) {
+                              setCourseFormData({ ...courseFormData, learningObjectives: [...courseFormData.learningObjectives, newLearningObjectiveInput.trim()] });
+                              setNewLearningObjectiveInput('');
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Outcome
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Experience & Achievement Metrics (e.g. 18y Exp | Top 1% Mentor | 10x Engineer) */}
+                    <div className="pt-6 border-t border-slate-100 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="font-extrabold text-slate-900 block text-xs">
+                            Experience & Achievement Metrics (Image 1 Feature)
+                          </label>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Add key highlights displayed on course cards (e.g., 18y Exp, Top 1% Mentor, Technology Leader, 10x Engineer).
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                          {courseFormData.experienceMetrics.length} Highlights Added
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {courseFormData.experienceMetrics.map((metric, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs shadow-2xs"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{metric}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCourseFormData({
+                                  ...courseFormData,
+                                  experienceMetrics: courseFormData.experienceMetrics.filter((_, i) => i !== idx),
+                                });
+                              }}
+                              className="text-emerald-500 hover:text-emerald-800 cursor-pointer ml-1"
+                            >
+                              <X className="w-3 h-3" />
                             </button>
                           </span>
                         ))}
                       </div>
-                    )}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="e.g. React, Docker, Kubernetes..."
-                        value={newSkillTagInput}
-                        onChange={(e) => setNewSkillTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (newSkillTagInput.trim()) {
-                              setCourseFormData({ ...courseFormData, skills: [...courseFormData.skills, newSkillTagInput.trim()] });
-                              setNewSkillTagInput('');
+
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. 18y Exp, Top 1% Mentor, 10x Engineer, Senior Architect..."
+                          value={newExperienceMetricInput}
+                          onChange={(e) => setNewExperienceMetricInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newExperienceMetricInput.trim()) {
+                                setCourseFormData({
+                                  ...courseFormData,
+                                  experienceMetrics: [...courseFormData.experienceMetrics, newExperienceMetricInput.trim()],
+                                });
+                                setNewExperienceMetricInput('');
+                              }
                             }
-                          }
-                        }}
-                        className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newSkillTagInput.trim()) {
-                            setCourseFormData({ ...courseFormData, skills: [...courseFormData.skills, newSkillTagInput.trim()] });
-                            setNewSkillTagInput('');
-                          }
-                        }}
-                        className="px-4 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
-                      >
-                        + Add
-                      </button>
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-emerald-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newExperienceMetricInput.trim()) {
+                              setCourseFormData({
+                                ...courseFormData,
+                                experienceMetrics: [...courseFormData.experienceMetrics, newExperienceMetricInput.trim()],
+                              });
+                              setNewExperienceMetricInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Metric
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* =========================================================================
-                STEP 2: SYLLABUS UPLOAD & COURSE DOCUMENTS (Dedicated Step)
-               ========================================================================= */}
-            {createStep === 2 && (
-              <div className="max-w-2xl mx-auto space-y-6 text-xs py-2">
-                <div className="text-center space-y-1 pb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs mb-2">
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <h3 className="font-black text-slate-900 text-base">Course Syllabus & Curriculum Document</h3>
-                  <p className="text-slate-500 font-medium max-w-md mx-auto">
-                    Upload or link your official course syllabus (PDF or DOCX). Students will be able to review and download this document from your course card and catalog page.
-                  </p>
-                </div>
-
-                {/* Upload Status Card if document is attached */}
-                {courseFormData.syllabusFileName || courseFormData.syllabusUrl ? (
-                  <div className="p-5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex items-center justify-between gap-4 shadow-2xs">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-5 h-5" />
+              {/* =========================================================================
+                  STEP 4: CURRICULUM (Modules, Topics, Lessons, Free Preview)
+                 ========================================================================= */}
+              {createStep === 4 && (
+                <div className="space-y-6 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                        <Layers className="w-5 h-5" />
                       </div>
-                      <div className="min-w-0">
-                        <h4 className="font-black text-slate-900 text-xs sm:text-sm truncate">
-                          {courseFormData.syllabusFileName || 'Course_Syllabus.pdf'}
-                        </h4>
-                        <p className="text-[11px] text-indigo-700 font-semibold truncate">
-                          Syllabus Document Active & Attached ✓
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900">Curriculum & Syllabus Structure</h3>
+                        <p className="text-slate-500 font-medium text-xs">Add structured modules, atomic topics, durations, free preview toggles, and video lessons.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setWizardModuleModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer shadow-md shadow-blue-600/20"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span> Add Module</span>
+                    </button>
+                  </div>
+
+                  {courseFormData.modules.length === 0 ? (
+                    <div className="p-12 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                      <Layers className="w-10 h-10 text-slate-400 mx-auto" />
+                      <p className="font-black text-slate-700 text-sm">No curriculum modules added yet</p>
+                      <p className="text-slate-500 text-xs max-w-sm mx-auto">
+                        Click "+ Add Module" above to start structuring your course into sequential learning modules.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {courseFormData.modules.map((mod, mIdx) => (
+                        <div key={mIdx} className="p-5 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3.5 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 bg-blue-600 text-white font-black text-[11px] rounded-lg">
+                                Module {mIdx + 1}
+                              </span>
+                              <h4 className="font-black text-slate-900 text-sm">
+                                {mod.title.replace(/^Module\s*\d+\s*:\s*/i, '')}
+                              </h4>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedModuleIndex(mIdx);
+                                  setEditingTopicIndex(null);
+                                  setWizardTopicForm({
+                                    title: '',
+                                    description: '',
+                                    price: 0,
+                                    isFree: false,
+                                    duration: 30,
+                                    videoUrl: '',
+                                    videoSourceTab: 'url',
+                                  });
+                                  setWizardTopicModal(true);
+                                }}
+                                className="px-3.5 py-1.5 bg-white border border-slate-200 hover:border-blue-400 text-blue-600 font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                              >
+                                + Add Topic / Lesson
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCourseFormData((prev) => ({
+                                    ...prev,
+                                    modules: prev.modules.filter((_, i) => i !== mIdx),
+                                  }));
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-500 rounded-xl cursor-pointer hover:bg-red-50 transition-colors"
+                                title="Delete Module"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {mod.topics.length === 0 ? (
+                            <p className="text-slate-400 text-xs italic py-2 pl-2 border-l-2 border-slate-200">
+                              No topics added to this module yet. Click "+ Add Topic / Lesson" to add content.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {mod.topics.map((top, tIdx) => (
+                                <div
+                                  key={tIdx}
+                                  className="p-3.5 bg-white rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-3 shadow-2xs"
+                                >
+                                  <div className="space-y-1 min-w-0 flex-1">
+                                    <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                                      <span className="font-bold text-slate-900 text-xs">{tIdx + 1}. {top.title}</span>
+                                      {top.videoUrl && (
+                                        <span className="px-2 py-0.5 rounded-md bg-purple-50 border border-purple-100 text-purple-700 text-[10px] font-bold inline-flex items-center gap-1">
+                                          <Video className="w-3 h-3" /> Video Attached ({top.duration}m)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {top.description && (
+                                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1 break-words">
+                                        {top.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                    <span
+                                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        top.isFree
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-blue-50 text-blue-700'
+                                      }`}
+                                    >
+                                      {top.isFree ? 'Free Preview' : `₹${top.price}`}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedModuleIndex(mIdx);
+                                        setEditingTopicIndex(tIdx);
+                                        setWizardTopicForm({
+                                          title: top.title || '',
+                                          description: top.description || '',
+                                          price: top.price ?? 0,
+                                          isFree: !!top.isFree,
+                                          duration: top.duration || 30,
+                                          videoUrl: top.videoUrl || (top.lessons?.[0]?.videoUrl ?? ''),
+                                          videoSourceTab: 'url',
+                                        });
+                                        setWizardTopicModal(true);
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 font-bold text-xs cursor-pointer transition-colors"
+                                      title="Edit Topic"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCourseFormData((prev) => ({
+                                          ...prev,
+                                          modules: prev.modules.map((m, i) =>
+                                            i === mIdx
+                                              ? { ...m, topics: m.topics.filter((_, ti) => ti !== tIdx) }
+                                              : m
+                                          ),
+                                        }));
+                                      }}
+                                      className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 font-bold text-xs cursor-pointer transition-colors"
+                                      title="Remove Topic"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dynamic Live Syllabus Preview Summary */}
+                  {courseFormData.modules.length > 0 && (
+                    <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        <span className="font-bold text-blue-900">
+                          Automated Live Syllabus: {courseFormData.modules.length} Modules • {courseFormData.modules.reduce((acc, m) => acc + m.topics.length, 0)} Topics Configured
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-blue-700">✓ Ready for pop-up syllabus preview</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 5: COURSE FOUNDATIONS
+                 ========================================================================= */}
+              {createStep === 5 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">Course Foundations</h3>
+                      <p className="text-slate-500 font-medium text-xs">Outline foundational concepts covered, recommended prior knowledge, and core tools used.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    {/* Foundational Concepts */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Foundational Concepts Covered</label>
+                      {(courseFormData.foundationalConcepts || []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(courseFormData.foundationalConcepts || []).map((fc, idx) => (
+                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-900 font-bold text-xs flex items-center gap-2 border border-amber-200">
+                              <span>• {fc}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, foundationalConcepts: (courseFormData.foundationalConcepts || []).filter((_, i) => i !== idx) })}
+                                className="text-amber-500 hover:text-red-500 font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. REST API Architecture, Relational Databases, Asynchronous JS..."
+                          value={newFoundationalConceptInput}
+                          onChange={(e) => setNewFoundationalConceptInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newFoundationalConceptInput.trim()) {
+                                setCourseFormData({ ...courseFormData, foundationalConcepts: [...(courseFormData.foundationalConcepts || []), newFoundationalConceptInput.trim()] });
+                                setNewFoundationalConceptInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-amber-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newFoundationalConceptInput.trim()) {
+                              setCourseFormData({ ...courseFormData, foundationalConcepts: [...(courseFormData.foundationalConcepts || []), newFoundationalConceptInput.trim()] });
+                              setNewFoundationalConceptInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Concept
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Recommended Prior Knowledge */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Recommended Prior Knowledge</label>
+                      {(courseFormData.recommendedPriorKnowledge || []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(courseFormData.recommendedPriorKnowledge || []).map((pk, idx) => (
+                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 font-bold text-xs flex items-center gap-2 border border-slate-200">
+                              <span>• {pk}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, recommendedPriorKnowledge: (courseFormData.recommendedPriorKnowledge || []).filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Basic command line usage, HTML & CSS fundamentals..."
+                          value={newPriorKnowledgeInput}
+                          onChange={(e) => setNewPriorKnowledgeInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newPriorKnowledgeInput.trim()) {
+                                setCourseFormData({ ...courseFormData, recommendedPriorKnowledge: [...(courseFormData.recommendedPriorKnowledge || []), newPriorKnowledgeInput.trim()] });
+                                setNewPriorKnowledgeInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-slate-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newPriorKnowledgeInput.trim()) {
+                              setCourseFormData({ ...courseFormData, recommendedPriorKnowledge: [...(courseFormData.recommendedPriorKnowledge || []), newPriorKnowledgeInput.trim()] });
+                              setNewPriorKnowledgeInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Knowledge
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Core Tools / Technologies */}
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1.5">Core Tools & Technologies Used</label>
+                      {(courseFormData.coreTools || []).length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(courseFormData.coreTools || []).map((ct, idx) => (
+                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-800 font-bold text-xs flex items-center gap-2 border border-blue-200">
+                              <span>• {ct}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, coreTools: (courseFormData.coreTools || []).filter((_, i) => i !== idx) })}
+                                className="text-blue-400 hover:text-red-500 font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Visual Studio Code, Docker Desktop, Git, Postman..."
+                          value={newCoreToolInput}
+                          onChange={(e) => setNewCoreToolInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newCoreToolInput.trim()) {
+                                setCourseFormData({ ...courseFormData, coreTools: [...(courseFormData.coreTools || []), newCoreToolInput.trim()] });
+                                setNewCoreToolInput('');
+                              }
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newCoreToolInput.trim()) {
+                              setCourseFormData({ ...courseFormData, coreTools: [...(courseFormData.coreTools || []), newCoreToolInput.trim()] });
+                              setNewCoreToolInput('');
+                            }
+                          }}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                        >
+                          + Add Tool
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 6: REQUIREMENTS
+                 ========================================================================= */}
+              {createStep === 6 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+                      <Laptop className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">Requirements & Prerequisites</h3>
+                      <p className="text-slate-500 font-medium text-xs">Specify hardware, software, and account prerequisites for enrolled students.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* General Prerequisites */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-800 block">General Prerequisites</label>
+                        <span className="text-[10px] text-purple-600 font-semibold">Multiple items & Enter supported</span>
+                      </div>
+                      {(courseFormData.requirements || []).length > 0 && (
+                        <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto">
+                          {(courseFormData.requirements || []).map((req, idx) => (
+                            <div key={idx} className="p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs font-semibold">
+                              <span className="text-purple-950 leading-relaxed">• {req}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, requirements: (courseFormData.requirements || []).filter((_, i) => i !== idx) })}
+                                className="text-purple-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
+                                title="Remove prerequisite"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Basic Python, Git basics (or paste comma/multiline list)..."
+                          value={newPrerequisiteInput}
+                          onChange={(e) => setNewPrerequisiteInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddPrerequisites();
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddPrerequisites}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Hardware Requirements */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-800 block">Hardware Requirements</label>
+                        <span className="text-[10px] text-slate-400 font-semibold">Enter or comma-separated</span>
+                      </div>
+                      {(courseFormData.hardwareRequirements || []).length > 0 && (
+                        <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto">
+                          {(courseFormData.hardwareRequirements || []).map((hr, idx) => (
+                            <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-800 leading-relaxed">• {hr}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, hardwareRequirements: (courseFormData.hardwareRequirements || []).filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
+                                title="Remove requirement"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. 8GB RAM, 64-bit OS, 20GB Free Disk..."
+                          value={newHardwareReqInput}
+                          onChange={(e) => setNewHardwareReqInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddHardwareReqs();
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddHardwareReqs}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Software Requirements */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-800 block">Software Requirements</label>
+                        <span className="text-[10px] text-slate-400 font-semibold">Enter or comma-separated</span>
+                      </div>
+                      {(courseFormData.softwareRequirements || []).length > 0 && (
+                        <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto">
+                          {(courseFormData.softwareRequirements || []).map((sr, idx) => (
+                            <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-800 leading-relaxed">• {sr}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, softwareRequirements: (courseFormData.softwareRequirements || []).filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
+                                title="Remove requirement"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Node.js 20+, VS Code, Chrome browser..."
+                          value={newSoftwareReqInput}
+                          onChange={(e) => setNewSoftwareReqInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddSoftwareReqs();
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddSoftwareReqs}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Required Accounts */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-800 block">Required Accounts</label>
+                        <span className="text-[10px] text-slate-400 font-semibold">Enter or comma-separated</span>
+                      </div>
+                      {(courseFormData.requiredAccounts || []).length > 0 && (
+                        <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto">
+                          {(courseFormData.requiredAccounts || []).map((ra, idx) => (
+                            <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-800 leading-relaxed">• {ra}</span>
+                              <button
+                                type="button"
+                                onClick={() => setCourseFormData({ ...courseFormData, requiredAccounts: (courseFormData.requiredAccounts || []).filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
+                                title="Remove account"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g. Free GitHub account, AWS Free Tier..."
+                          value={newRequiredAccountInput}
+                          onChange={(e) => setNewRequiredAccountInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddRequiredAccounts();
+                            }
+                          }}
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddRequiredAccounts}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 7: THIS COURSE INCLUDES
+                 ========================================================================= */}
+              {createStep === 7 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0 border border-cyan-100">
+                      <Award className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">This Course Includes</h3>
+                      <p className="text-slate-500 font-medium text-xs">Configure the package value props, downloadable materials, projects, and certifications included in tuition.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="font-bold text-slate-800 block">Video Content</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 24.5 Hours On-Demand HD Video"
+                        value={courseFormData.courseIncludes.videoHours || ''}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, videoHours: e.target.value } })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-cyan-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="font-bold text-slate-800 block">Downloadable Resources</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 18 Source Code Repos & Cheatsheets"
+                        value={courseFormData.courseIncludes.resourcesCount || ''}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, resourcesCount: e.target.value } })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-cyan-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="font-bold text-slate-800 block">Hands-on Projects</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 3 Production Capstone Projects"
+                        value={courseFormData.courseIncludes.projectsCount || ''}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, projectsCount: e.target.value } })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-cyan-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <label className="font-bold text-slate-800 block">Total Sessions (Optional)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 24 Sessions"
+                        value={courseFormData.totalSessions || ''}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, totalSessions: e.target.value === '' ? '' : Number(e.target.value) })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-cyan-500 focus:outline-none shadow-2xs"
+                      />
+                      <p className="text-[10px] text-slate-400">Total sessions badge shown on course cards (or calculated from curriculum).</p>
+                    </div>
+                  </div>
+
+                  {/* Feature Toggles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <label className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between cursor-pointer hover:border-cyan-400 shadow-2xs transition-colors">
+                      <div>
+                        <p className="font-bold text-slate-900">Certificate of Completion</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Verify completion on LinkedIn</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={courseFormData.courseIncludes.certificate}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, certificate: e.target.checked } })}
+                        className="w-4 h-4 text-cyan-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between cursor-pointer hover:border-cyan-400 shadow-2xs transition-colors">
+                      <div>
+                        <p className="font-bold text-slate-900">Direct Q&A Support</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Instructor forum assistance</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={courseFormData.courseIncludes.qaSupport}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, qaSupport: e.target.checked } })}
+                        className="w-4 h-4 text-cyan-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between cursor-pointer hover:border-cyan-400 shadow-2xs transition-colors">
+                      <div>
+                        <p className="font-bold text-slate-900">Full Lifetime Access</p>
+                        <p className="text-[10px] text-slate-400 font-medium">No expiry on materials</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={courseFormData.courseIncludes.lifetimeAccess}
+                        onChange={(e) => setCourseFormData({ ...courseFormData, courseIncludes: { ...courseFormData.courseIncludes, lifetimeAccess: e.target.checked } })}
+                        className="w-4 h-4 text-cyan-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* =========================================================================
+                  STEP 8: MEDIA & PRICING
+                 ========================================================================= */}
+              {createStep === 8 && (
+                <div className="space-y-6 text-xs max-w-4xl mx-auto">
+                  <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">Media, Pricing & Platform Share</h3>
+                      <p className="text-slate-500 font-medium text-xs">Set promotional preview video, course pricing, and review the automatic 10% platform share.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* Media & Promotional Video */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Promotional Preview Video URL</label>
+                        <input
+                          type="url"
+                          placeholder="https://youtube.com/watch?v=... or Vimeo link"
+                          value={courseFormData.promotionalVideo || ''}
+                          onChange={(e) => setCourseFormData({ ...courseFormData, promotionalVideo: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">This teaser video will appear as the lead preview on the course catalog.</p>
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Access Duration</label>
+                        <select
+                          value={courseFormData.accessDuration || 'Lifetime Access'}
+                          onChange={(e) => setCourseFormData({ ...courseFormData, accessDuration: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                        >
+                          <option value="Lifetime Access">Full Lifetime Access</option>
+                          <option value="1 Year Access">1 Year Access</option>
+                          <option value="6 Months Access">6 Months Access</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-800 block mb-1.5">Attached Syllabus Document (Optional)</label>
+                        <input
+                          type="url"
+                          placeholder="https://.../syllabus.pdf"
+                          value={courseFormData.syllabusUrl || ''}
+                          onChange={(e) => setCourseFormData({ ...courseFormData, syllabusUrl: e.target.value, syllabusFileName: 'Course_Syllabus.pdf' })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pricing Input & Dynamic Commission Breakdown */}
+                    <div className="space-y-4">
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-slate-800">Course Price (INR ₹) *</label>
+                          <span className="px-2.5 py-0.5 rounded-lg bg-blue-100 text-blue-800 font-black text-[11px]">
+                            {courseFormData.coursePrice === 0 ? 'FREE ACCESS' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="0"
+                          value={courseFormData.coursePrice === 0 ? '' : courseFormData.coursePrice}
+                          onChange={(e) => {
+                            const clean = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                            setCourseFormData((prev) => ({
+                              ...prev,
+                              coursePrice: clean === '' ? 0 : Number(clean),
+                            }));
+                          }}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-900 text-xl focus:border-blue-500 focus:outline-none shadow-2xs"
+                        />
+
+                        {/* Commission Breakdown Card */}
+                        {(() => {
+                          const fee = courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.10).toFixed(2)) : 0;
+                          const net = courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.90).toFixed(2)) : 0;
+                          return (
+                            <div className="pt-2 border-t border-slate-200 space-y-1.5 text-[11px]">
+                              <div className="flex justify-between font-semibold text-slate-600">
+                                <span>Platform Fee (10% Share):</span>
+                                <span className="font-bold text-blue-600">₹{fee.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between font-semibold text-slate-600">
+                                <span>Your Net Payout (90% Share):</span>
+                                <span className="font-bold text-emerald-600">₹{net.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Maximum Enrollment Limit (Optional Seat Cap) */}
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-slate-800">
+                            Maximum Enrollment Limit (Optional)
+                          </label>
+                          {courseFormData.maxEnrollmentLimit ? (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-[11px]">
+                              Capped at {courseFormData.maxEnrollmentLimit} Students
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[11px]">
+                              Unlimited Seats
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="e.g., 50 (Leave blank for unlimited access)"
+                          value={courseFormData.maxEnrollmentLimit || ''}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            setCourseFormData((prev) => ({
+                              ...prev,
+                              maxEnrollmentLimit: val === '' ? '' : Math.max(1, parseInt(val, 10)),
+                            }));
+                          }}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 text-base focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        />
+                        <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                          Restrict maximum student signups. Once active enrollments hit this limit, the course automatically locks with a <strong>"Sold Out / Course Full"</strong> badge.
                         </p>
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setCourseFormData({ ...courseFormData, syllabusUrl: '', syllabusFileName: '' })}
-                      className="px-3.5 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs shrink-0"
-                    >
-                      Remove Document
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Dual Mode Switcher */}
-                    <div className="flex rounded-xl bg-slate-100 p-1">
-                      <button
-                        type="button"
-                        onClick={() => setSyllabusUploadTab('device')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                          syllabusUploadTab === 'device' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600'
-                        }`}
-                      >
-                        <HardDrive className="w-4 h-4" />
-                        <span>Upload File from Device</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSyllabusUploadTab('url')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                          syllabusUploadTab === 'url' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600'
-                        }`}
-                      >
-                        <Globe className="w-4 h-4" />
-                        <span>External Document Link (URL)</span>
-                      </button>
-                    </div>
-
-                    {syllabusUploadTab === 'device' ? (
-                      <label className="block w-full p-8 bg-slate-50 hover:bg-indigo-50/40 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-3xl text-center cursor-pointer transition-all">
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          onChange={handleSyllabusFileUpload}
-                          className="hidden"
-                        />
-                        <div className="space-y-2">
-                          <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
-                            <Upload className="w-6 h-6" />
-                          </div>
-                          <p className="font-black text-slate-800 text-sm">Choose Syllabus File from Device</p>
-                          <p className="text-slate-400 text-[11px] font-medium">Supports PDF, DOC, DOCX up to 25MB</p>
-                        </div>
-                      </label>
-                    ) : (
-                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-3">
-                        <label className="font-bold text-slate-700 block">Enter Syllabus Web URL</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            placeholder="https://example.com/syllabus.pdf or Google Drive link"
-                            value={syllabusUrlInput}
-                            onChange={(e) => setSyllabusUrlInput(e.target.value)}
-                            className="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleApplySyllabusUrl}
-                            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-colors"
-                          >
-                            Attach Link
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* =========================================================================
-                STEP 3: CURRICULUM STRUCTURE (Automated Module Numbering & Topics)
-               ========================================================================= */}
-            {createStep === 3 && (
-              <div className="space-y-5 text-xs">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <div>
-                    <h3 className="font-black text-slate-900 text-base">Course Curriculum Hierarchy</h3>
-                    <p className="text-slate-500 font-medium">
-                      Add modules with automatic numbering, standalone atomic topics, pricing, and video lessons.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setWizardModuleModal(true)}
-                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Module</span>
-                  </button>
-                </div>
-
-                {courseFormData.modules.length === 0 ? (
-                  <div className="p-12 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-3">
-                    <Layers className="w-10 h-10 text-slate-400 mx-auto" />
-                    <p className="font-black text-slate-700 text-sm">No curriculum modules added yet</p>
-                    <p className="text-slate-500 text-xs max-w-sm mx-auto">
-                      Click the "+ Add Module" button above to start structuring your course into sequential learning modules.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {courseFormData.modules.map((mod, mIdx) => (
-                      <div key={mIdx} className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3.5 shadow-2xs">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 bg-indigo-600 text-white font-black text-[11px] rounded-lg">
-                              Module {mIdx + 1}
-                            </span>
-                            <h4 className="font-black text-slate-900 text-sm">
-                              {mod.title.replace(/^Module\s*\d+\s*:\s*/i, '')}
-                            </h4>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedModuleIndex(mIdx);
-                                setWizardTopicModal(true);
-                              }}
-                              className="px-3.5 py-1.5 bg-white border border-slate-200 hover:border-indigo-400 text-indigo-600 font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
-                            >
-                              + Add Topic
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCourseFormData((prev) => ({
-                                  ...prev,
-                                  modules: prev.modules.filter((_, i) => i !== mIdx),
-                                }));
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-red-500 rounded-xl cursor-pointer hover:bg-red-50 transition-colors"
-                              title="Delete Module"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {mod.topics.length === 0 ? (
-                          <p className="text-slate-400 text-xs italic py-2 pl-2 border-l-2 border-slate-200">
-                            No topics added to this module yet. Click "+ Add Topic" to add lessons.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {mod.topics.map((top, tIdx) => (
-                              <div
-                                key={tIdx}
-                                className="p-3.5 bg-white rounded-xl border border-slate-100 flex items-center justify-between gap-3 shadow-2xs"
-                              >
-                                <div className="flex items-center gap-2.5 flex-wrap min-w-0">
-                                  <span className="font-bold text-slate-800 text-xs truncate">{top.title}</span>
-                                  {top.videoUrl && (
-                                    <span className="px-2 py-0.5 rounded-md bg-purple-50 border border-purple-100 text-purple-700 text-[10px] font-bold inline-flex items-center gap-1">
-                                      <Video className="w-3 h-3" /> Video Attached ({top.duration}m)
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span
-                                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                      top.isFree
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : 'bg-indigo-50 text-indigo-700'
-                                    }`}
-                                  >
-                                    {top.isFree ? 'Free Preview' : `₹${top.price}`}
-                                  </span>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setCourseFormData((prev) => ({
-                                        ...prev,
-                                        modules: prev.modules.map((m, i) =>
-                                          i === mIdx
-                                            ? { ...m, topics: m.topics.filter((_, ti) => ti !== tIdx) }
-                                            : m
-                                        ),
-                                      }));
-                                    }}
-                                    className="text-slate-400 hover:text-red-500 p-1 font-bold text-sm cursor-pointer"
-                                    title="Remove Topic"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* =========================================================================
-                STEP 4: PRICING & COMPREHENSIVE STRUCTURAL PREVIEW / PUBLISH
-               ========================================================================= */}
-            {createStep === 4 && (
-              <div className="space-y-6 text-xs pt-1">
-                {/* Pricing Input Section (Clean Default 0 & Intuitive Typing) */}
-                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 max-w-xl mx-auto space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-black text-slate-900 text-sm sm:text-base">Full Course Pricing</h3>
-                      <p className="text-slate-500 font-medium text-[11px]">Set ₹0 for a completely free course</p>
-                    </div>
-                    <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-xl font-black text-xs">
-                      {courseFormData.coursePrice === 0 ? 'FREE ACCESS' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Course Price (INR ₹) *</label>
-                    <input
-                      type="text"
-                      placeholder="0"
-                      value={courseFormData.coursePrice === 0 ? '' : courseFormData.coursePrice}
-                      onChange={(e) => {
-                        const clean = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
-                        setCourseFormData((prev) => ({
-                          ...prev,
-                          coursePrice: clean === '' ? 0 : Number(clean),
-                        }));
-                      }}
-                      className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-black text-slate-900 text-xl focus:border-indigo-500 focus:outline-none shadow-2xs"
-                    />
                   </div>
                 </div>
+              )}
 
-                {/* Comprehensive Structural Course Preview (Requirement 3 Redesign) */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              {/* =========================================================================
+                  STEP 9: REVIEW & SUBMIT (Complete Course Review, Student Preview, Fee & Submit)
+                 ========================================================================= */}
+              {createStep === 9 && (
+                <div className="space-y-6 text-xs pt-1">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
-                      <h3 className="font-black text-slate-900 text-base">Course Structural Preview</h3>
-                      <p className="text-slate-500 font-medium">Verify how your course hierarchy and details will appear</p>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900">Step 9: Complete Course Review & Super Admin Submission</h3>
+                      <p className="text-slate-500 font-medium">Verify all course parameters, inspect student view preview, settle 10% platform fee, and submit for review.</p>
                     </div>
                     <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black">
-                      Ready to Publish
+                      Step 9 of 9
                     </span>
                   </div>
 
@@ -2192,13 +3842,13 @@ export const InstructorDashboard: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                       <p className="text-lg font-black text-slate-900">{courseFormData.modules.length}</p>
-                      <p className="text-[11px] font-semibold text-slate-500">Modules</p>
+                      <p className="text-[11px] font-semibold text-slate-500">Modules Configured</p>
                     </div>
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                      <p className="text-lg font-black text-indigo-600">
+                      <p className="text-lg font-black text-blue-600">
                         {courseFormData.modules.reduce((acc, m) => acc + m.topics.length, 0)}
                       </p>
-                      <p className="text-[11px] font-semibold text-slate-500">Topics</p>
+                      <p className="text-[11px] font-semibold text-slate-500">Atomic Topics</p>
                     </div>
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                       <p className="text-lg font-black text-purple-600">
@@ -2213,196 +3863,487 @@ export const InstructorDashboard: React.FC = () => {
                       <p className="text-lg font-black text-emerald-600">
                         {courseFormData.coursePrice === 0 ? 'FREE' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
                       </p>
-                      <p className="text-[11px] font-semibold text-slate-500">Course Access</p>
+                      <p className="text-[11px] font-semibold text-slate-500">Tuition Price</p>
                     </div>
                   </div>
 
-                  {/* Structured Preview Card */}
+                  {/* Student View Live Interactive Card (Matching Image 1 Rich Card Spec) */}
                   <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-6 shadow-xs">
-                    {/* Course Header Preview */}
-                    <div className="flex flex-col sm:flex-row gap-5 items-start">
-                      <div className="w-full sm:w-44 h-28 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                        {courseFormData.thumbnail ? (
-                          <img src={courseFormData.thumbnail} alt={courseFormData.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                            <ImageIcon className="w-6 h-6 mb-1" />
-                            <span className="text-[10px] font-bold">No Image</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider">
-                            {courseFormData.category}
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold">
-                            {courseFormData.level}
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold">
-                            {courseFormData.language}
-                          </span>
-                        </div>
-
-                        <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">
-                          {courseFormData.title || 'Untitled Course'}
-                        </h2>
-
-                        <p className="text-xs text-slate-600 font-medium">
-                          Instructor: <strong className="text-slate-800">{instructorName}</strong>
-                        </p>
-
-                        <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                          {courseFormData.shortDescription || 'No short description provided.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Syllabus Document Attachment Preview */}
-                    <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-indigo-600" />
-                        <span className="font-bold text-slate-800 text-xs">
-                          {courseFormData.syllabusFileName
-                            ? `Syllabus Attached: ${courseFormData.syllabusFileName}`
-                            : courseFormData.syllabusUrl
-                            ? 'Syllabus Attached via Link'
-                            : 'No dedicated syllabus document attached'}
-                        </span>
+                        <Eye className="w-4 h-4 text-blue-600" />
+                        <h4 className="font-extrabold text-slate-900 text-sm">Student View Catalog Preview (Image 1 Layout)</h4>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400">Step 2 Document</span>
+                      <span className="text-[11px] font-bold text-slate-400">Live Simulation</span>
                     </div>
 
-                    {/* Skills Badges */}
-                    {courseFormData.skills.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Skills Included</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {courseFormData.skills.map((s, idx) => (
-                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-[11px]">
-                              {s}
+                    <div className="max-w-md mx-auto sm:max-w-none bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow">
+                      <div>
+                        {/* Top Bar: Schedule & Deadline + Actionable Icons */}
+                        <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 truncate">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="truncate">{courseFormData.schedule || 'Flexible Self-Paced Schedule'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-rose-500 hover:border-rose-200 transition-colors cursor-pointer"
+                              title="Add to Wishlist"
+                            >
+                              <Heart className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer"
+                              title="Bookmark"
+                            >
+                              <Bookmark className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Thumbnail with Mentor Status & Category Badges */}
+                        <div className="relative aspect-16/9 w-full overflow-hidden bg-slate-900">
+                          {courseFormData.thumbnail ? (
+                            <img src={courseFormData.thumbnail} alt={courseFormData.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-800">
+                              <ImageIcon className="w-8 h-8 mb-1" />
+                              <span className="text-xs font-bold">Course Thumbnail</span>
+                            </div>
+                          )}
+
+                          <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                            <span className="px-2.5 py-0.5 bg-slate-900/85 backdrop-blur-md text-white text-[10px] font-black rounded-md uppercase tracking-wider">
+                              {courseFormData.category}
                             </span>
-                          ))}
+                            {courseFormData.mentorStatus && (
+                              <span className="px-2.5 py-0.5 bg-amber-500/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-md flex items-center gap-1 shadow-xs">
+                                <Sparkles className="w-3 h-3 fill-current" />
+                                {courseFormData.mentorStatus}
+                              </span>
+                            )}
+                          </div>
+
+                          {courseFormData.maxEnrollmentLimit && (
+                            <span className="absolute bottom-3 right-3 px-2.5 py-1 bg-indigo-900/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-lg border border-indigo-500/30">
+                              Seat Limit: {courseFormData.maxEnrollmentLimit}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-4.5 space-y-3">
+                          <h3 className="text-base font-extrabold text-slate-900 line-clamp-2 leading-snug">
+                            {courseFormData.title || 'Untitled Course'}
+                          </h3>
+
+                          {/* Professional Summary Tags */}
+                          {courseFormData.professionalTags && courseFormData.professionalTags.length > 0 && (
+                            <div className="text-[11px] font-semibold text-slate-600 flex flex-wrap items-center gap-1">
+                              {courseFormData.professionalTags.map((tag, idx) => (
+                                <span key={idx} className="inline-flex items-center">
+                                  <span>{tag}</span>
+                                  {idx < courseFormData.professionalTags.length - 1 && (
+                                    <span className="mx-1 text-slate-300 font-normal">|</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Experience & Achievement Metrics */}
+                          {courseFormData.experienceMetrics && courseFormData.experienceMetrics.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              {courseFormData.experienceMetrics.map((met, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-black rounded-md border border-emerald-200/60 flex items-center gap-1"
+                                >
+                                  <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                                  {met}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Education & Qualifications (Optional - Omitted if empty) */}
+                          {courseFormData.qualifications && courseFormData.qualifications.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              <GraduationCap className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              {courseFormData.qualifications.map((q, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 bg-purple-50 text-purple-800 text-[10px] font-bold rounded-md border border-purple-200/60"
+                                >
+                                  {q}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Structural Content Badges Row */}
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2">
+                              <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <div className="truncate">
+                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Sessions</p>
+                                <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                                  {courseFormData.totalSessions || courseFormData.modules.reduce((a, m) => a + m.topics.length, 0) || 12}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+                              <div className="truncate">
+                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Duration</p>
+                                <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                                  {courseFormData.courseIncludes.videoHours || '20+ Hrs'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2">
+                              <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <div className="truncate">
+                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Enrolled</p>
+                                <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                                  {courseFormData.maxEnrollmentLimit ? `Max ${courseFormData.maxEnrollmentLimit}` : 'Active'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Formatted Rating Summary */}
+                          <div className="flex items-center justify-between pt-1 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                              <span className="font-extrabold text-slate-900">4.8</span>
+                              <span className="text-[11px] text-slate-400 font-medium">(10.5k)</span>
+                            </div>
+                            <span className="text-slate-500 font-semibold text-[11px]">By {instructorName}</span>
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    {/* Modules & Topics Tree Hierarchy */}
-                    <div className="space-y-3 pt-2 border-t border-slate-100">
-                      <h4 className="font-black text-slate-900 text-xs sm:text-sm">Curriculum Breakdown</h4>
+                      {/* Card Footer: Price & Sold Out / CTA State */}
+                      <div className="px-4.5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tuition</p>
+                          <p className="text-base font-black text-slate-900">
+                            {courseFormData.coursePrice === 0 ? 'FREE' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                        >
+                          Enroll Now
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Syllabus Preview Hierarchy */}
+                    <div className="space-y-3 pt-3 border-t border-slate-100">
+                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">Course Curriculum (Syllabus Preview)</h4>
 
                       {courseFormData.modules.length === 0 ? (
-                        <p className="text-slate-400 italic text-xs py-3">No modules have been added yet.</p>
+                        <p className="text-slate-400 italic text-xs py-2">No modules added yet.</p>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           {courseFormData.modules.map((mod, mIdx) => (
-                            <div key={mIdx} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2.5">
+                            <div key={mIdx} className="p-3.5 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-2">
                               <div className="flex items-center justify-between">
-                                <h5 className="font-bold text-slate-900 text-xs sm:text-sm">
+                                <h5 className="font-bold text-slate-900 text-xs">
                                   Module {mIdx + 1}: {mod.title.replace(/^Module\s*\d+\s*:\s*/i, '')}
                                 </h5>
-                                <span className="text-[11px] font-semibold text-slate-500">
-                                  {mod.topics.length} Topics
-                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500">{mod.topics.length} Topics</span>
                               </div>
-
-                              {mod.topics.length > 0 && (
-                                <div className="space-y-1.5 pl-2 border-l-2 border-slate-200">
-                                  {mod.topics.map((top, tIdx) => (
-                                    <div
-                                      key={tIdx}
-                                      className="p-2.5 bg-white rounded-xl border border-slate-100 flex items-center justify-between text-xs"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-slate-800">{top.title}</span>
-                                        {top.videoUrl && (
-                                          <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold inline-flex items-center gap-1">
-                                            <Video className="w-3 h-3" /> Video Attached
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[11px] text-slate-400 font-medium">{top.duration || 30}m</span>
-                                        <span
-                                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                            top.isFree ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-50 text-indigo-700'
-                                          }`}
-                                        >
-                                          {top.isFree ? 'Free Preview' : `₹${top.price}`}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+                              <div className="space-y-1 pl-2 border-l-2 border-slate-200">
+                                {mod.topics.map((t, tIdx) => (
+                                  <div key={tIdx} className="flex items-center justify-between text-[11px] text-slate-700 bg-white p-2 rounded-lg border border-slate-100">
+                                    <span>• {t.title}</span>
+                                    <span className="font-semibold text-slate-500">{t.isFree ? 'Free Preview' : `₹${t.price}`}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
 
-                    {/* Cashfree Publishing Fee Gatekeeper Card (Workflow 3 Strict Gate) */}
-                    <div
-                      className={`p-5 rounded-2xl border transition-all ${
-                        wizardPublishingFeePaid
-                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                          : 'bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-indigo-200 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div className="flex items-start gap-3.5">
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
-                              wizardPublishingFeePaid
-                                ? 'bg-emerald-500 text-white shadow-emerald-500/20'
-                                : 'bg-indigo-600 text-white shadow-indigo-600/20'
-                            }`}
-                          >
-                            {wizardPublishingFeePaid ? <CheckCircle2 className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-extrabold text-sm text-slate-900">
-                                Platform Publishing & Verification Fee (₹499)
-                              </h4>
-                              {wizardPublishingFeePaid ? (
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-300 inline-flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" /> Fee Paid & Verified
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
-                                  <Lock className="w-3 h-3" /> Payment Required to Unlock Submission
-                                </span>
-                              )}
+                    {/* Platform Publishing Fee Gatekeeper Card (10% Platform Fee - Genuine Cashfree Integration) */}
+                    {(() => {
+                      const dynamicFee = courseFormData.coursePrice > 0
+                        ? Number((courseFormData.coursePrice * 0.10).toFixed(2))
+                        : 0;
+                      const instructorNet = courseFormData.coursePrice > 0
+                        ? Number((courseFormData.coursePrice * 0.90).toFixed(2))
+                        : 0;
+
+                      return (
+                        <div className="space-y-4">
+                          {/* 1. STATE: SUCCESS / PAID */}
+                          {(cashfreePaymentState === 'SUCCESS' || wizardPublishingFeePaid) && (
+                            <div className="p-6 rounded-2xl border bg-emerald-50/90 border-emerald-300 text-emerald-950 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
+                                    <CheckCircle2 className="w-6 h-6" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-black text-base text-emerald-950">
+                                        ✓ Payment Successful
+                                      </h4>
+                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900 border border-emerald-400">
+                                        Cashfree Verified • PAID
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+                                      Course is verified and ready for submission. Your 10% platform publishing fee has been confirmed by Cashfree PG.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="p-4 rounded-xl bg-white/90 border border-emerald-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                <div>
+                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Platform Fee Paid</span>
+                                  <p className="font-black text-emerald-700 text-base">
+                                    ₹{(verifiedPaymentData?.amount ?? dynamicFee).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Order ID</span>
+                                  <p className="font-mono font-bold text-slate-800 text-xs truncate">
+                                    {verifiedPaymentData?.orderId || feeOrderData?.orderId || 'PUBFEE_VERIFIED'}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Payment ID</span>
+                                  <p className="font-mono font-bold text-slate-800 text-xs truncate">
+                                    {verifiedPaymentData?.paymentId || 'CF_PAID_CONFIRMED'}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
-                              {wizardPublishingFeePaid
-                                ? 'Your publishing fee has been verified via Cashfree. You can now submit this course to the Super Admin approval queue.'
-                                : 'Instructors must pay a platform verification fee of ₹499 via Cashfree sandbox before submitting the course for Super Admin review.'}
-                            </p>
-                          </div>
+                          )}
+
+                          {/* 2. STATE: PROCESSING PAYMENT */}
+                          {cashfreePaymentState === 'PROCESSING' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-blue-50 border-blue-300 text-blue-950 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 animate-pulse shadow-md shadow-blue-600/20">
+                                  <RefreshCw className="w-6 h-6 animate-spin" />
+                                </div>
+                                <div>
+                                  <h4 className="font-black text-base text-blue-950">Processing Payment</h4>
+                                  <p className="text-xs text-blue-700 font-medium">
+                                    Waiting for payment confirmation from Cashfree Payment Gateway... Do not close this window.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. STATE: PENDING VERIFICATION */}
+                          {cashfreePaymentState === 'PENDING' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-amber-50 border-amber-300 text-amber-950 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
+                                    <Clock className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-base text-amber-950">Payment Verification Pending</h4>
+                                    <p className="text-xs text-amber-800 font-medium">
+                                      Cashfree is still processing the payment. Please wait or check status.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => verifyBackendPaymentStatus(editingCourseId || '', feeOrderData?.orderId)}
+                                  disabled={processingFee}
+                                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
+                                >
+                                  <RefreshCw className={`w-3.5 h-3.5 ${processingFee ? 'animate-spin' : ''}`} />
+                                  <span>Check Payment Status</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 4. STATE: FAILED */}
+                          {cashfreePaymentState === 'FAILED' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-rose-50 border-rose-300 text-rose-950 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/20">
+                                    <X className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-base text-rose-950">✕ Payment Failed</h4>
+                                    <p className="text-xs text-rose-700 font-medium">
+                                      Payment failed. No platform fee was charged successfully. Please try again.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleWizardPayFee}
+                                  disabled={processingFee}
+                                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>Try Again</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 5. STATE: USER DROPPED */}
+                          {cashfreePaymentState === 'USER_DROPPED' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-slate-100 border-slate-300 text-slate-900 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-md">
+                                    <AlertTriangle className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-base text-slate-900">Payment Not Completed</h4>
+                                    <p className="text-xs text-slate-600 font-medium">
+                                      You exited the payment process. No successful payment was recorded.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleWizardPayFee}
+                                  disabled={processingFee}
+                                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span>Try Again</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 6. STATE: EXPIRED */}
+                          {cashfreePaymentState === 'EXPIRED' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-amber-50 border-amber-300 text-amber-950 space-y-4 shadow-sm animate-in fade-in">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0">
+                                    <Clock className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-base text-amber-950">Payment Session Expired</h4>
+                                    <p className="text-xs text-amber-700 font-medium">
+                                      The Cashfree checkout session expired. A fresh payment session will be created.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleWizardPayFee}
+                                  disabled={processingFee}
+                                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>Try Again</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 7. STATE: IDLE (BEFORE PAYMENT) */}
+                          {cashfreePaymentState === 'IDLE' && !wizardPublishingFeePaid && (
+                            <div className="p-6 rounded-2xl border bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border-blue-200 text-slate-800 space-y-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
+                                    <CreditCard className="w-6 h-6" />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-black text-base text-slate-900">
+                                        Platform Publishing Fee
+                                      </h4>
+                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">
+                                        10% Share • Cashfree PG
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
+                                      {courseFormData.coursePrice === 0
+                                        ? 'This is a free course (₹0), so the platform fee is waived (₹0).'
+                                        : `Instructors pay a 10% platform fee of ₹${dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })} via Cashfree gateway before submitting the course for Super Admin review.`}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleWizardPayFee}
+                                  disabled={processingFee}
+                                  className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
+                                >
+                                  {processingFee ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <CreditCard className="w-4 h-4" />
+                                  )}
+                                  <span>
+                                    {checkoutButtonStep === 'CREATING'
+                                      ? 'Creating Payment...'
+                                      : checkoutButtonStep === 'OPENING'
+                                      ? 'Opening Secure Checkout...'
+                                      : `Pay Platform Fee ₹${dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                                  </span>
+                                </button>
+                              </div>
+
+                              {/* Fee Calculation Breakdown Card */}
+                              <div className="p-4 bg-white/90 rounded-xl border border-blue-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                <div className="space-y-0.5">
+                                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Course Price</span>
+                                  <p className="font-black text-slate-900 text-sm">
+                                    {courseFormData.coursePrice > 0 ? `₹${courseFormData.coursePrice.toLocaleString('en-IN')}` : 'FREE (₹0)'}
+                                  </p>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <span className="text-blue-600 text-[10px] font-bold uppercase tracking-wider">Platform Fee (10%)</span>
+                                  <p className="font-black text-blue-700 text-sm">
+                                    ₹{dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                                <div className="space-y-0.5">
+                                  <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider">Total Payable</span>
+                                  <p className="font-black text-emerald-700 text-base">
+                                    ₹{dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      );
+                    })()}
 
-                        {!wizardPublishingFeePaid && (
-                          <button
-                            type="button"
-                            onClick={handleWizardPayFee}
-                            disabled={processingFee}
-                            className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            <span>Pay ₹499 via Cashfree</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Final Action Buttons in Preview */}
+                    {/* Final Actions in Step 9 */}
                     <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
                       <button
                         type="button"
-                        onClick={() => setCreateStep(3)}
+                        onClick={() => setCreateStep(4)}
                         className="w-full sm:w-auto px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
                       >
                         ← Edit Curriculum
@@ -2421,7 +4362,7 @@ export const InstructorDashboard: React.FC = () => {
                           onClick={handleWizardPayFee}
                           disabled={processingFee}
                           className="w-full sm:w-auto px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 border border-slate-300"
-                          title="Click Pay ₹499 via Cashfree above to unlock submission"
+                          title="Pay 10% platform fee via Cashfree above to unlock submission"
                         >
                           <Lock className="w-4 h-4 text-slate-500" />
                           <span>Submit for Review (Pay Fee to Unlock)</span>
@@ -2449,8 +4390,8 @@ export const InstructorDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
@@ -2547,7 +4488,17 @@ export const InstructorDashboard: React.FC = () => {
                     </tr>
                   ) : (
                     webinarsList.map((w) => {
-                      const isLive = w.isLive || w.status === 'LIVE';
+                      const nowMs = Date.now();
+                      const startMs = new Date(w.startTime).getTime();
+                      const endMs = new Date(w.endTime || startMs + 7200000).getTime();
+                      const isExpired = nowMs > endMs;
+                      const isStarted =
+                        !isExpired &&
+                        (w.isLive ||
+                        w.status === 'LIVE' ||
+                        w.status === 'Started' ||
+                        (startMs <= nowMs && endMs >= nowMs));
+
                       return (
                         <tr key={w._id} className="hover:bg-slate-50">
                           <td className="py-3.5 px-4 font-bold text-slate-900">
@@ -2555,9 +4506,11 @@ export const InstructorDashboard: React.FC = () => {
                             <span className="text-[10px] text-slate-400 font-semibold">{w.category}</span>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 font-medium">
-                            <div>{new Date(w.startTime).toLocaleDateString()}</div>
-                            <div className="text-[11px] text-slate-400 font-semibold">
-                              {new Date(w.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <div className="font-bold text-slate-800">
+                              Start: {new Date(w.startTime).toLocaleDateString()} {new Date(w.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="text-[11px] text-amber-700 font-semibold mt-0.5">
+                              Expiry: {new Date(endMs).toLocaleDateString()} {new Date(endMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </td>
                           <td className="py-3.5 px-4 font-bold text-indigo-600">
@@ -2566,38 +4519,66 @@ export const InstructorDashboard: React.FC = () => {
                           <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 100}</td>
                           <td className="py-3.5 px-4">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                isLive
-                                  ? 'bg-red-100 text-red-700 animate-pulse font-black'
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                                isExpired
+                                  ? 'bg-slate-100 text-slate-600'
+                                  : isStarted
+                                  ? 'bg-emerald-100 text-emerald-800 animate-pulse flex items-center gap-1 w-fit'
                                   : 'bg-blue-100 text-blue-700'
                               }`}
                             >
-                              {isLive ? '🔴 LIVE NOW' : w.status || 'SCHEDULED'}
+                              {isExpired ? (
+                                'COMPLETED'
+                              ) : isStarted ? (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                  <span>Started</span>
+                                </>
+                              ) : (
+                                w.status || 'SCHEDULED'
+                              )}
                             </span>
                           </td>
                           <td className="py-3.5 px-4">
                             {w.meetingUrl ? (
-                              <a
-                                href={w.meetingUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-indigo-600 hover:text-indigo-800 underline font-semibold max-w-[140px] truncate block"
-                              >
-                                Open Meeting ↗
-                              </a>
+                              w.meetingUrl.startsWith('/webinars/live/') || w.meetingUrl.startsWith('/webinar/live/') ? (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(w.meetingUrl)}
+                                  className="text-indigo-600 hover:text-indigo-800 underline font-bold max-w-[140px] truncate block text-left cursor-pointer text-xs"
+                                >
+                                  In-Platform Room ↗
+                                </button>
+                              ) : (
+                                <a
+                                  href={w.meetingUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-indigo-600 hover:text-indigo-800 underline font-semibold max-w-[140px] truncate block text-xs"
+                                >
+                                  External Link ↗
+                                </a>
+                              )
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">Not configured</span>
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {isLive && w.meetingUrl && (
+                              {w.meetingUrl && (
                                 <button
                                   type="button"
-                                  onClick={() => window.open(w.meetingUrl, '_blank')}
-                                  className="px-2.5 py-1 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition cursor-pointer text-[11px]"
+                                  onClick={() => {
+                                    if (w.meetingUrl.startsWith('/webinars/live/') || w.meetingUrl.startsWith('/webinar/live/')) {
+                                      navigate(w.meetingUrl);
+                                    } else {
+                                      window.open(w.meetingUrl, '_blank');
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-indigo-600 text-white font-extrabold rounded-lg hover:bg-indigo-700 transition cursor-pointer text-[11px] flex items-center gap-1 shadow-xs"
                                 >
-                                  Host Live
+                                  <Video className="w-3 h-3" />
+                                  <span>Host Room</span>
                                 </button>
                               )}
                               <button
@@ -2608,9 +4589,15 @@ export const InstructorDashboard: React.FC = () => {
                                         .toISOString()
                                         .slice(0, 16)
                                     : '';
+                                  const localEndIso = w.endTime
+                                    ? new Date(new Date(w.endTime).getTime() - new Date().getTimezoneOffset() * 60000)
+                                        .toISOString()
+                                        .slice(0, 16)
+                                    : (w.startTime ? new Date(new Date(w.startTime).getTime() + 7200000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
                                   setEditingWebinar({
                                     ...w,
                                     startTime: localIso,
+                                    endTime: localEndIso,
                                   });
                                   setShowEditWebinarModal(true);
                                 }}
@@ -3100,107 +5087,275 @@ export const InstructorDashboard: React.FC = () => {
         )}
 
         {/* =========================================================================
-            VIEW 7: PROFILE & 4-TIER VERIFICATION (Image 2)
+            VIEW 7: PROFILE & 4-TIER VERIFICATION (Image 2 Redesigned)
            ========================================================================= */}
         {activeNav === 'profile' && (
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Profile & Verification</h2>
-              <p className="text-xs text-slate-500 font-medium">Manage your personal information, professional details and verification status.</p>
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900">Profile & Verification</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Manage your public instructor profile, professional bio, photo, and 4-tier platform verification status.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={isSavingProfile}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 self-start sm:self-auto"
+              >
+                {isSavingProfile ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Save Profile Changes</span>
+                  </>
+                )}
+              </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-xs">
-              <div className="lg:col-span-3 space-y-4">
-                <h3 className="font-bold text-slate-900 text-sm">Personal Information</h3>
-                <div className="flex flex-col items-center gap-3 p-4 bg-slate-50 rounded-2xl">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center">
-                    {instructorName[0] || 'I'}
+              {/* Left Column: Personal Information & Profile Photo */}
+              <div className="lg:col-span-4 space-y-5 bg-slate-50/70 p-6 rounded-3xl border border-slate-200/80">
+                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                  <User className="w-4 h-4 text-indigo-600" />
+                  <span>Personal Information</span>
+                </h3>
+
+                {/* Profile Photo Display with Direct Upload / URL Trigger */}
+                <div className="flex flex-col items-center gap-3 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+                  {profileData.profilePhoto ? (
+                    <img
+                      src={profileData.profilePhoto}
+                      alt={profileData.fullName || instructorName}
+                      className="w-24 h-24 rounded-2xl object-cover border-2 border-indigo-200 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white font-black text-3xl flex items-center justify-center shadow-md shadow-indigo-600/20">
+                      {(profileData.fullName || instructorName)[0] || 'I'}
+                    </div>
+                  )}
+
+                  <div className="w-full space-y-1.5 pt-1">
+                    <label className="text-[11px] font-bold text-slate-600 block text-center">
+                      Profile Photo URL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://.../photo.jpg"
+                      value={profileData.profilePhoto || ''}
+                      onChange={(e) => setProfileData({ ...profileData, profilePhoto: e.target.value })}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Full Name *</label>
-                  <input type="text" defaultValue={instructorName} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold" />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Email</label>
-                  <input type="email" disabled defaultValue={user?.email} className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-semibold" />
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      value={profileData.fullName || instructorName}
+                      onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Professional Headline / Title</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Senior Technology Lead & Cloud Architect"
+                      value={profileData.headline || ''}
+                      onChange={(e) => setProfileData({ ...profileData, headline: e.target.value })}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Email Address (Primary)</label>
+                    <input
+                      type="email"
+                      disabled
+                      value={user?.email || profileData.email || ''}
+                      className="w-full p-2.5 bg-slate-100/80 border border-slate-200 rounded-xl text-slate-500 font-semibold cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Phone Number</label>
+                    <input
+                      type="text"
+                      placeholder="+91 98765 43210"
+                      value={profileData.phone || ''}
+                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="lg:col-span-5 space-y-4">
-                <h3 className="font-bold text-slate-900 text-sm">Professional Information</h3>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Bio *</label>
-                  <textarea
-                    rows={3}
-                    value={profileData.bio}
-                    onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
-                </div>
+              {/* Middle Column: Professional Bio, Experience & Expertise */}
+              <div className="lg:col-span-5 space-y-5 bg-slate-50/70 p-6 rounded-3xl border border-slate-200/80">
+                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-purple-600" />
+                  <span>Professional Details</span>
+                </h3>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Expertise</label>
-                  <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-1.5">
-                    {profileData.expertise.map((exp: string, idx: number) => (
-                      <span key={idx} className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold text-[11px]">
-                        {exp}
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700">Instructor Bio *</label>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {(profileData.bio || '').length} characters
                       </span>
-                    ))}
+                    </div>
+                    <textarea
+                      rows={5}
+                      placeholder="Write a compelling bio highlighting your engineering career, teaching philosophy, and specializations..."
+                      value={profileData.bio || ''}
+                      onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-medium text-slate-800 focus:border-indigo-500 focus:outline-none shadow-2xs leading-relaxed"
+                    />
                   </div>
-                </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Current Organization</label>
-                  <input
-                    type="text"
-                    value={profileData.currentOrganization}
-                    onChange={(e) => setProfileData({ ...profileData, currentOrganization: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Areas of Expertise & Skills</label>
+                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-2xl mb-2 shadow-2xs min-h-[42px] items-center">
+                      {(profileData.expertise || []).map((exp: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] border border-indigo-100 flex items-center gap-1.5"
+                        >
+                          <span>{exp}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filtered = (profileData.expertise || []).filter((_: any, i: number) => i !== idx);
+                              setProfileData({ ...profileData, expertise: filtered });
+                            }}
+                            className="text-indigo-400 hover:text-indigo-800 font-bold cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Add skill (e.g. Kubernetes, React)..."
+                        value={newExpertiseInput}
+                        onChange={(e) => setNewExpertiseInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newExpertiseInput.trim()) {
+                              const current = Array.isArray(profileData.expertise) ? profileData.expertise : [];
+                              if (!current.includes(newExpertiseInput.trim())) {
+                                setProfileData({ ...profileData, expertise: [...current, newExpertiseInput.trim()] });
+                              }
+                              setNewExpertiseInput('');
+                            }
+                          }
+                        }}
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newExpertiseInput.trim()) {
+                            const current = Array.isArray(profileData.expertise) ? profileData.expertise : [];
+                            if (!current.includes(newExpertiseInput.trim())) {
+                              setProfileData({ ...profileData, expertise: [...current, newExpertiseInput.trim()] });
+                            }
+                            setNewExpertiseInput('');
+                          }
+                        }}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-2xs cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Current Organization</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Tech Solutions Pvt Ltd"
+                        value={profileData.currentOrganization || ''}
+                        onChange={(e) => setProfileData({ ...profileData, currentOrganization: e.target.value })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Total Experience</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 8+ Years"
+                        value={profileData.experience || ''}
+                        onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="lg:col-span-4 space-y-3">
-                <h3 className="font-bold text-slate-900 text-sm">Verification Status</h3>
-                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-between">
+              {/* Right Column: Dynamic 4-Tier Verification Status */}
+              <div className="lg:col-span-3 space-y-4">
+                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Verification Status</span>
+                </h3>
+
+                <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between shadow-2xs">
                   <div>
                     <p className="font-bold text-slate-900">Identity Verification</p>
-                    <p className="text-[11px] text-slate-500 font-medium">Verify your identity document</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Verify your official government ID</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-800">
-                    Verified
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Verified</span>
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-between">
+                <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-center justify-between shadow-2xs">
                   <div>
                     <p className="font-bold text-slate-900">Instructor Verification</p>
-                    <p className="text-[11px] text-slate-500 font-medium">Review of your instructor profile</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Platform review of your credentials</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-800">
-                    Under Review
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-200 text-amber-800 border border-amber-300">
+                    {profileData.verificationStatus === 'VERIFIED' ? 'Verified' : 'Under Review'}
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between shadow-2xs">
                   <div>
                     <p className="font-bold text-slate-900">KYC Verification</p>
-                    <p className="text-[11px] text-slate-500 font-medium">Complete KYC for payouts</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Compliance verification for payouts</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
-                    Not Started
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
+                    {profileData.kycStatus === 'VERIFIED' ? 'Verified' : 'Not Started'}
                   </span>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-between">
+                <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between shadow-2xs">
                   <div>
                     <p className="font-bold text-slate-900">Payout Setup</p>
-                    <p className="text-[11px] text-slate-500 font-medium">Connect your payment account</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Bank account for direct earnings</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-200 text-red-800">
-                    Not Connected
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-200 text-rose-800">
+                    {profileData.payoutStatus === 'CONNECTED' ? 'Connected' : 'Not Connected'}
                   </span>
                 </div>
               </div>
@@ -3299,20 +5454,33 @@ export const InstructorDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* In-UI Modal: Add Topic in Wizard (with Video Upload / Embed - Requirement 4) */}
+        {/* In-UI Modal: Add / Edit Topic in Wizard (with Strict Validations & Mandatory Description) */}
         {wizardTopicModal && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Add Standalone Topic & Video</h3>
-                  <p className="text-[11px] text-slate-500 font-medium">Topic for Module {(selectedModuleIndex ?? 0) + 1}</p>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {editingTopicIndex !== null ? 'Edit Standalone Topic & Video' : 'Add Standalone Topic & Video'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {editingTopicIndex !== null
+                      ? 'Update topic details, description, and lesson content'
+                      : `Topic for Module ${(selectedModuleIndex ?? 0) + 1}`}
+                  </p>
                 </div>
-                <button onClick={() => setWizardTopicModal(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">
+                <button
+                  onClick={() => {
+                    setWizardTopicModal(false);
+                    setEditingTopicIndex(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                >
                   ✕
                 </button>
               </div>
-              <form onSubmit={handleWizardAddTopic} className="space-y-4 text-xs">
+              <form onSubmit={handleWizardSaveTopic} className="space-y-4 text-xs">
+                {/* 1. Topic Title (Mandatory) */}
                 <div>
                   <label className="font-bold text-slate-700 block mb-1.5">Topic Title *</label>
                   <input
@@ -3321,16 +5489,29 @@ export const InstructorDashboard: React.FC = () => {
                     placeholder="e.g. Asynchronous JS & Promises"
                     value={wizardTopicForm.title}
                     onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, title: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
 
-                {/* Video / Lesson Upload & Embed Feature (Requirement 4) */}
+                {/* 2. Topic Description (Mandatory for new and edited topics) */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1.5">Topic Description *</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="Comprehensive description of concepts, skills, and outcomes covered in this topic... (Mandatory)"
+                    value={wizardTopicForm.description}
+                    onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, description: e.target.value })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                {/* 3. Video / Lesson Upload & Embed (Mandatory) */}
                 <div className="p-3.5 bg-purple-50/60 border border-purple-100 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
                       <Video className="w-4 h-4 text-purple-600" />
-                      <span>Topic Video / Lesson Content</span>
+                      <span>Topic Video / Lesson Content *</span>
                     </span>
                     <div className="flex rounded-lg bg-white p-0.5 border border-purple-200 text-[10px] font-bold">
                       <button
@@ -3356,9 +5537,10 @@ export const InstructorDashboard: React.FC = () => {
 
                   {wizardTopicForm.videoSourceTab === 'url' ? (
                     <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Embed Video / Stream Link</label>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Embed Video / Stream Link *</label>
                       <input
                         type="url"
+                        required
                         placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
                         value={wizardTopicForm.videoUrl}
                         onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, videoUrl: e.target.value })}
@@ -3367,7 +5549,7 @@ export const InstructorDashboard: React.FC = () => {
                     </div>
                   ) : (
                     <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Select Video File (.mp4, .webm)</label>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Select Video File (.mp4, .webm) *</label>
                       <label className="flex items-center justify-center gap-2 p-3 bg-white border border-dashed border-purple-300 rounded-xl font-bold text-xs text-purple-700 hover:bg-purple-50 cursor-pointer transition-colors">
                         <Upload className="w-4 h-4" />
                         <span>{wizardTopicForm.videoUrl ? 'Video File Selected ✓' : 'Choose Video from Device...'}</span>
@@ -3388,54 +5570,75 @@ export const InstructorDashboard: React.FC = () => {
                   )}
                 </div>
 
+                {/* 4. Standalone Price & Duration */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Standalone Price (₹)</label>
+                    <label className="font-bold text-slate-700 block mb-1.5">
+                      Standalone Price (₹) {wizardTopicForm.isFree ? '(Locked)' : '*'}
+                    </label>
                     <input
                       type="text"
-                      placeholder="e.g. 499"
-                      value={wizardTopicForm.price === 0 ? '' : wizardTopicForm.price}
+                      disabled={wizardTopicForm.isFree}
+                      placeholder={wizardTopicForm.isFree ? '0 (Free Access)' : 'e.g. 499'}
+                      value={wizardTopicForm.isFree ? '0' : (wizardTopicForm.price === 0 ? '' : wizardTopicForm.price)}
                       onChange={(e) => {
                         const clean = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
                         setWizardTopicForm({ ...wizardTopicForm, price: clean === '' ? 0 : Number(clean) });
                       }}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className={`w-full p-2.5 rounded-xl font-bold focus:outline-none transition-all ${
+                        wizardTopicForm.isFree
+                          ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:border-indigo-500'
+                      }`}
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Duration (minutes)</label>
+                    <label className="font-bold text-slate-700 block mb-1.5">Duration (minutes) *</label>
                     <input
                       type="number"
-                      value={wizardTopicForm.duration}
-                      onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, duration: Number(e.target.value) })}
+                      min={1}
+                      required
+                      value={wizardTopicForm.duration || ''}
+                      onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, duration: Math.max(1, Number(e.target.value)) })}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
                     />
                   </div>
                 </div>
 
+                {/* 5. Free Topic Checkbox Toggle */}
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer pt-1">
                   <input
                     type="checkbox"
                     checked={wizardTopicForm.isFree}
-                    onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, isFree: e.target.checked })}
-                    className="w-4 h-4 text-indigo-600 rounded"
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setWizardTopicForm({
+                        ...wizardTopicForm,
+                        isFree: isChecked,
+                        price: isChecked ? 0 : (wizardTopicForm.price || 99),
+                      });
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
                   />
-                  <span>Mark as Free Preview Topic</span>
+                  <span>Mark as Free Preview Topic (Resets price to ₹0 and locks price field)</span>
                 </label>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setWizardTopicModal(false)}
-                    className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                    onClick={() => {
+                      setWizardTopicModal(false);
+                      setEditingTopicIndex(null);
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer hover:bg-slate-200 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-md shadow-indigo-600/20 transition-all"
                   >
-                    Add Topic & Video
+                    {editingTopicIndex !== null ? 'Update Topic & Video' : 'Add Topic & Video'}
                   </button>
                 </div>
               </form>
@@ -3444,99 +5647,209 @@ export const InstructorDashboard: React.FC = () => {
         )}
         {/* In-UI Modal: Create Webinar */}
         {showCreateWebinarModal && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h3 className="font-bold text-slate-900 text-base">Create Live Webinar</h3>
-                <button onClick={() => setShowCreateWebinarModal(false)} className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer">
-                  ✕
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto">
+              <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100 shrink-0 bg-white">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Create Live Webinar</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Schedule a new live interactive session</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateWebinarModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  aria-label="Close modal"
+                >
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <form onSubmit={handleCreateWebinar} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">Webinar Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Masterclass on Kubernetes Architecture"
-                    value={newWebinar.title}
-                    onChange={(e) => setNewWebinar({ ...newWebinar, title: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleCreateWebinar} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Category</label>
-                    <select
-                      value={newWebinar.category}
-                      onChange={(e) => setNewWebinar({ ...newWebinar, category: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
-                    >
-                      <option value="DevOps / Cloud">DevOps / Cloud</option>
-                      <option value="Web Development">Web Development</option>
-                      <option value="Data Science">Data Science</option>
-                      <option value="AI & ML">AI & ML</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Max Capacity</label>
+                    <label className="font-bold text-slate-700 block mb-1.5">Webinar Title *</label>
                     <input
-                      type="number"
-                      value={newWebinar.capacity}
-                      onChange={(e) => setNewWebinar({ ...newWebinar, capacity: Number(e.target.value) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      type="text"
+                      required
+                      placeholder="e.g. Masterclass on Kubernetes Architecture"
+                      value={newWebinar.title}
+                      onChange={(e) => setNewWebinar({ ...newWebinar, title: e.target.value })}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
                     />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">Category</label>
+                      <select
+                        value={newWebinar.category}
+                        onChange={(e) => setNewWebinar({ ...newWebinar, category: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                      >
+                        <option value="DevOps / Cloud">DevOps / Cloud</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Data Science">Data Science</option>
+                        <option value="AI & ML">AI & ML</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">Max Capacity</label>
+                      <input
+                        type="number"
+                        value={newWebinar.capacity}
+                        onChange={(e) => setNewWebinar({ ...newWebinar, capacity: Number(e.target.value) })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">Scheduled Start Time *</label>
+                      <input
+                        type="datetime-local"
+                        required
+                        value={newWebinar.startTime}
+                        onChange={(e) => {
+                          const startVal = e.target.value;
+                          let autoEnd = newWebinar.endTime;
+                          if (startVal && !newWebinar.endTime) {
+                            const dt = new Date(startVal);
+                            dt.setHours(dt.getHours() + 2);
+                            autoEnd = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                          }
+                          setNewWebinar({ ...newWebinar, startTime: startVal, endTime: autoEnd });
+                        }}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="font-bold text-slate-700 block">Expiry / End Time *</label>
+                        <span className="text-[10px] text-indigo-600 font-semibold">Auto 2h default</span>
+                      </div>
+                      <input
+                        type="datetime-local"
+                        required
+                        value={newWebinar.endTime}
+                        onChange={(e) => setNewWebinar({ ...newWebinar, endTime: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Ticket Price (₹, 0 for Free)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newWebinar.price}
+                      onChange={(e) => setNewWebinar({ ...newWebinar, price: Math.max(0, Number(e.target.value)) })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    />
+
+                    {/* Automatic Platform Fee & Instructor Share Calculation */}
+                    <div className="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">Platform Share (10% Fee):</span>
+                        <span className="font-bold text-slate-700">
+                          {newWebinar.price > 0 ? `₹${Math.round(newWebinar.price * 0.10).toLocaleString('en-IN')}` : '₹0'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-100 font-bold">
+                        <span className="text-indigo-900">Your Net Payout:</span>
+                        <span className="text-indigo-900 font-black">
+                          {newWebinar.price > 0
+                            ? `₹${(newWebinar.price - Math.round(newWebinar.price * 0.10)).toLocaleString('en-IN')}`
+                            : '₹0 (Free Webinar)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Meeting Room Mode Selector */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">
+                      Live Room Mode
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewWebinar({ ...newWebinar, meetingType: 'IN_PLATFORM' })}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                          newWebinar.meetingType === 'IN_PLATFORM'
+                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-bold flex items-center gap-1.5 text-xs">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          In-Platform Live Room
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium leading-tight">
+                          Built-in video, screen share, chat & Q&A. Auto-generated room URL!
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewWebinar({ ...newWebinar, meetingType: 'EXTERNAL' })}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                          newWebinar.meetingType === 'EXTERNAL'
+                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-bold flex items-center gap-1.5 text-xs">
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                          External Link
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium leading-tight">
+                          Google Meet, Zoom or custom third-party meeting URL.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {newWebinar.meetingType === 'IN_PLATFORM' ? (
+                    <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-950">
+                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span>Zero Setup Required</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                        A unique live room link <code className="bg-indigo-100/70 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-800">/webinars/live/wb-...</code> will be generated automatically upon creation with built-in paywalls and host streaming controls.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">
+                        Live Meeting Link (Google Meet / Zoom) *
+                      </label>
+                      <input
+                        type="url"
+                        required={newWebinar.meetingType === 'EXTERNAL'}
+                        placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
+                        value={newWebinar.meetingUrl}
+                        onChange={(e) => setNewWebinar({ ...newWebinar, meetingUrl: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        This link becomes live for registered attendees when the scheduled time arrives.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={newWebinar.startTime}
-                    onChange={(e) => setNewWebinar({ ...newWebinar, startTime: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">Ticket Price (₹, 0 for Free)</label>
-                  <input
-                    type="number"
-                    value={newWebinar.price}
-                    onChange={(e) => setNewWebinar({ ...newWebinar, price: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">
-                    Live Meeting Link (Zoom / Google Meet / LiveKit)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
-                    value={newWebinar.meetingUrl}
-                    onChange={(e) => setNewWebinar({ ...newWebinar, meetingUrl: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    This link becomes live for registered attendees when the scheduled time arrives.
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex items-center justify-end gap-2.5 p-4 sm:px-6 bg-slate-50/80 border-t border-slate-100 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowCreateWebinarModal(false)}
-                    className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl cursor-pointer transition text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
                   >
                     Schedule Webinar
                   </button>
@@ -3548,9 +5861,9 @@ export const InstructorDashboard: React.FC = () => {
 
         {/* In-UI Modal: Edit Webinar with 2-Hour Strict Cutoff */}
         {showEditWebinarModal && editingWebinar && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto">
+              <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100 shrink-0 bg-white">
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">Edit Webinar</h3>
                   <p className="text-[11px] text-slate-500 font-medium">Update webinar schedule or meeting link</p>
@@ -3561,126 +5874,228 @@ export const InstructorDashboard: React.FC = () => {
                     setShowEditWebinarModal(false);
                     setEditingWebinar(null);
                   }}
-                  className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  aria-label="Close modal"
                 >
-                  ✕
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* 2-Hour Cutoff Logic Indicator */}
-              {(editingWebinar.isTimingLocked ||
-                (editingWebinar.startTime &&
-                  new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
-                  <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="block font-bold">Timing Locked (2-Hour Window)</strong>
-                    <span>
-                      Webinar date & time cannot be rescheduled within 2 hours of the event start time. Other details can still be updated.
-                    </span>
-                  </div>
-                </div>
-              )}
+              <form onSubmit={handleUpdateWebinar} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                  {/* 2-Hour Cutoff Logic Indicator */}
+                  {(editingWebinar.isTimingLocked ||
+                    (editingWebinar.startTime &&
+                      new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
+                      <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-bold">Timing Locked (2-Hour Window)</strong>
+                        <span>
+                          Webinar date & time cannot be rescheduled within 2 hours of the event start time. Other details can still be updated.
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
-              <form onSubmit={handleUpdateWebinar} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">Webinar Title *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingWebinar.title || ''}
-                    onChange={(e) => setEditingWebinar({ ...editingWebinar, title: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Category</label>
-                    <select
-                      value={editingWebinar.category || 'DevOps / Cloud'}
-                      onChange={(e) => setEditingWebinar({ ...editingWebinar, category: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
-                    >
-                      <option value="DevOps / Cloud">DevOps / Cloud</option>
-                      <option value="Web Development">Web Development</option>
-                      <option value="Data Science">Data Science</option>
-                      <option value="AI & ML">AI & ML</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1.5">Max Capacity</label>
+                    <label className="font-bold text-slate-700 block mb-1.5">Webinar Title *</label>
                     <input
-                      type="number"
-                      value={editingWebinar.capacity || 100}
-                      onChange={(e) => setEditingWebinar({ ...editingWebinar, capacity: Number(e.target.value) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      type="text"
+                      required
+                      value={editingWebinar.title || ''}
+                      onChange={(e) => setEditingWebinar({ ...editingWebinar, title: e.target.value })}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
                     />
                   </div>
-                </div>
 
-                {/* Date & Time Field with strict 2-hour locking */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="font-bold text-slate-700 block">Date & Time</label>
-                    {(editingWebinar.isTimingLocked ||
-                      (editingWebinar.startTime &&
-                        new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
-                      <span className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Locked
-                      </span>
-                    )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">Category</label>
+                      <select
+                        value={editingWebinar.category || 'DevOps / Cloud'}
+                        onChange={(e) => setEditingWebinar({ ...editingWebinar, category: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
+                      >
+                        <option value="DevOps / Cloud">DevOps / Cloud</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Data Science">Data Science</option>
+                        <option value="AI & ML">AI & ML</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">Max Capacity</label>
+                      <input
+                        type="number"
+                        value={editingWebinar.capacity || 100}
+                        onChange={(e) => setEditingWebinar({ ...editingWebinar, capacity: Number(e.target.value) })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="datetime-local"
-                    disabled={
-                      editingWebinar.isTimingLocked ||
-                      (editingWebinar.startTime &&
-                        new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)
-                    }
-                    value={editingWebinar.startTime || ''}
-                    onChange={(e) => setEditingWebinar({ ...editingWebinar, startTime: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-60 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                  />
+
+                  {/* Date & Time Fields with strict 2-hour locking */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="font-bold text-slate-700 block">Start Date & Time</label>
+                        {(editingWebinar.isTimingLocked ||
+                          (editingWebinar.startTime &&
+                            new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
+                          <span className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Locked
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="datetime-local"
+                        disabled={
+                          editingWebinar.isTimingLocked ||
+                          (editingWebinar.startTime &&
+                            new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)
+                        }
+                        value={editingWebinar.startTime || ''}
+                        onChange={(e) => setEditingWebinar({ ...editingWebinar, startTime: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-60 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="font-bold text-slate-700 block">Expiry / End Time</label>
+                        {(editingWebinar.isTimingLocked ||
+                          (editingWebinar.startTime &&
+                            new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)) && (
+                          <span className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Locked
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="datetime-local"
+                        disabled={
+                          editingWebinar.isTimingLocked ||
+                          (editingWebinar.startTime &&
+                            new Date(editingWebinar.startTime).getTime() - Date.now() <= 2 * 60 * 60 * 1000)
+                        }
+                        value={editingWebinar.endTime || ''}
+                        onChange={(e) => setEditingWebinar({ ...editingWebinar, endTime: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium disabled:opacity-60 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">Ticket Price (₹, 0 for Free)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingWebinar.price ?? 0}
+                      onChange={(e) => setEditingWebinar({ ...editingWebinar, price: Math.max(0, Number(e.target.value)) })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    />
+
+                    {/* Automatic Platform Fee & Instructor Share Calculation */}
+                    <div className="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">Platform Share (10% Fee):</span>
+                        <span className="font-bold text-slate-700">
+                          {(editingWebinar.price ?? 0) > 0 ? `₹${Math.round((editingWebinar.price ?? 0) * 0.10).toLocaleString('en-IN')}` : '₹0'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-100 font-bold">
+                        <span className="text-indigo-900">Your Net Payout:</span>
+                        <span className="text-indigo-900 font-black">
+                          {(editingWebinar.price ?? 0) > 0
+                            ? `₹${((editingWebinar.price ?? 0) - Math.round((editingWebinar.price ?? 0) * 0.10)).toLocaleString('en-IN')}`
+                            : '₹0 (Free Webinar)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live Room Mode */}
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1.5">
+                      Live Room Mode
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingWebinar({ ...editingWebinar, meetingType: 'IN_PLATFORM' })}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                          (editingWebinar.meetingType || 'IN_PLATFORM') === 'IN_PLATFORM'
+                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-bold flex items-center gap-1.5 text-xs">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          In-Platform Live Room
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium leading-tight">
+                          Built-in video room hosted directly on platform.
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingWebinar({ ...editingWebinar, meetingType: 'EXTERNAL' })}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                          editingWebinar.meetingType === 'EXTERNAL'
+                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-bold flex items-center gap-1.5 text-xs">
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                          External Link
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium leading-tight">
+                          Custom Zoom or Google Meet URL.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {(editingWebinar.meetingType || 'IN_PLATFORM') === 'IN_PLATFORM' ? (
+                    <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-950">
+                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span>In-Platform Live Room Active</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium break-all">
+                        Live Room Link: <code className="bg-indigo-100/70 px-1 py-0.5 rounded font-mono text-[10px] text-indigo-800">{editingWebinar.meetingUrl || (editingWebinar.roomCode ? `/webinars/live/${editingWebinar.roomCode}` : 'Auto-generated upon save')}</code>
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1.5">
+                        Live Meeting Link (Zoom / Meet / LiveKit)
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
+                        value={editingWebinar.meetingUrl || ''}
+                        onChange={(e) => setEditingWebinar({ ...editingWebinar, meetingUrl: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">Ticket Price (₹, 0 for Free)</label>
-                  <input
-                    type="number"
-                    value={editingWebinar.price ?? 0}
-                    onChange={(e) => setEditingWebinar({ ...editingWebinar, price: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1.5">
-                    Live Meeting Link (Zoom / Meet / LiveKit)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
-                    value={editingWebinar.meetingUrl || ''}
-                    onChange={(e) => setEditingWebinar({ ...editingWebinar, meetingUrl: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex items-center justify-end gap-2.5 p-4 sm:px-6 bg-slate-50/80 border-t border-slate-100 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
                       setShowEditWebinarModal(false);
                       setEditingWebinar(null);
                     }}
-                    className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl cursor-pointer transition text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-indigo-700 transition"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
                   >
                     Save Changes
                   </button>
@@ -3690,103 +6105,7 @@ export const InstructorDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* =========================================================================
-            MODAL: CASHFREE PUBLISHING FEE PAYMENT (Workflow 3)
-           ========================================================================= */}
-        {showFeeModal && feeModalCourse && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-slate-100 shadow-2xl space-y-5 animate-in fade-in">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shadow-xs">
-                    <CreditCard className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-slate-900 text-base">Cashfree Payment Gateway</h3>
-                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                      Sandbox Mode • Verified PG
-                    </span>
-                  </div>
-                </div>
 
-                <button
-                  onClick={() => {
-                    setShowFeeModal(false);
-                    setFeeModalCourse(null);
-                    setFeeOrderData(null);
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Order Info Card */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Course:</span>
-                  <span className="font-bold text-slate-900 truncate max-w-[200px]">{feeModalCourse.title}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 font-medium">Fee Purpose:</span>
-                  <span className="font-bold text-slate-900">Platform Publishing Fee</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                  <span className="text-slate-700 font-bold">Total Payable:</span>
-                  <span className="font-black text-slate-900 text-base">₹499.00</span>
-                </div>
-              </div>
-
-              {/* Cashfree Session Details */}
-              {feeOrderData && (
-                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[11px] text-slate-600 space-y-1">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-slate-500">Order ID:</span>
-                    <span className="font-mono font-bold text-indigo-700">{feeOrderData.orderId}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-slate-500">Gateway Status:</span>
-                    <span className="font-bold text-emerald-600">Active Sandbox Session</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="pt-2 space-y-2">
-                <button
-                  type="button"
-                  disabled={processingFee}
-                  onClick={handleVerifyFeePayment}
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                >
-                  {processingFee ? (
-                    <div className="flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Processing Payment Verification...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Complete Cashfree Payment (₹499)</span>
-                    </div>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowFeeModal(false);
-                    setFeeModalCourse(null);
-                    setFeeOrderData(null);
-                  }}
-                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                >
-                  Cancel Payment
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* =========================================================================
             MODAL: COURSE REJECTION FEEDBACK

@@ -174,6 +174,7 @@ export const instructorApi = {
     workExperience: string;
     yearsOfExperience: number;
     profilePhoto?: string;
+    qualification?: string;
   }) {
     const res = await apiClient.post('/instructor/profile/onboarding', payload);
     return res.data;
@@ -185,13 +186,20 @@ export const instructorApi = {
     return res.data;
   },
 
-  async createPublishingFeeOrder(courseId: string) {
-    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/create-order`);
+  async createPublishingFeeOrder(courseId: string, returnUrl?: string) {
+    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/create-order`, { returnUrl });
     return res.data;
   },
 
-  async verifyPublishingFee(courseId: string, payload: { cashfreeOrderId: string }) {
+  async verifyPublishingFee(courseId: string, payload: { cashfreeOrderId?: string; orderId?: string; simulation?: boolean }) {
     const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/verify`, payload);
+    return res.data;
+  },
+
+  async getPublishingFeeStatus(courseId: string, orderId?: string, simulation?: boolean) {
+    const res = await apiClient.get(`/instructor/courses/${courseId}/publishing-fee/status`, {
+      params: { ...(orderId ? { orderId } : {}), ...(simulation ? { simulation: true } : {}) },
+    });
     return res.data;
   },
 

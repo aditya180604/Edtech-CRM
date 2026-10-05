@@ -4,13 +4,17 @@ import { config } from './config/env.js';
 
 // Import all models to ensure schemas are registered with Mongoose
 import './models/index.js';
+import { startWebinarExpiryCron, stopWebinarExpiryCron } from './modules/webinars/webinarExpiry.cron.js';
 
 async function startServer() {
   try {
     // 1. Connect to MongoDB Atlas
     await connectDB();
 
-    // 2. Start Express Listener
+    // 2. Start automated 2-hour webinar expiry cron
+    startWebinarExpiryCron();
+
+    // 3. Start Express Listener
     const server = app.listen(config.port, () => {
       console.log(`[Server] Edutech LMS backend running on port ${config.port} [${config.env}]`);
       console.log(`[Server] Health check: http://localhost:${config.port}/api/v1/health`);
@@ -18,6 +22,7 @@ async function startServer() {
 
     const shutdown = async (signal) => {
       console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
+      stopWebinarExpiryCron();
       server.close(async () => {
         console.log('[Server] HTTP server closed.');
         process.exit(0);

@@ -1,5 +1,5 @@
 {
-  "name": "edtech_frontend",
+  "name": "frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,9 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@cashfreepayments/cashfree-js": "^1.0.7",
+    "@livekit/components-react": "^2.9.24",
+    "@livekit/components-styles": "^1.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.20.0",
     "clsx": "^2.1.1",
+    "livekit-client": "^2.22.3",
     "lucide-react": "^1.49.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

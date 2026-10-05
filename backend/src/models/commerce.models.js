@@ -283,3 +283,40 @@ const financialLedgerSchema = new mongoose.Schema(
 
 export const FinancialLedger =
   mongoose.models.FinancialLedger || mongoose.model('FinancialLedger', financialLedgerSchema);
+
+// ==========================================
+// 24. PlatformFee Model (Collection: platform_fees)
+// ==========================================
+const platformFeeSchema = new mongoose.Schema(
+  {
+    order_id: { type: String, unique: true, required: true, index: true },
+    course_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
+    instructor_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    amount: { type: Number, required: true },
+    coursePrice: { type: Number, required: true, default: 0 },
+    currency: { type: String, default: 'INR' },
+    payment_status: {
+      type: String,
+      enum: ['PENDING', 'SUCCESS', 'FAILED', 'USER_DROPPED', 'EXPIRED'],
+      default: 'PENDING',
+      index: true,
+    },
+    cashfreePaymentSessionId: { type: String },
+    cashfreeOrderId: { type: String },
+    cashfreePaymentId: { type: String },
+    paymentMethod: { type: String },
+    errorMessage: { type: String },
+    paidAt: { type: Date },
+  },
+  {
+    collection: 'platform_fees',
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  }
+);
+
+platformFeeSchema.index({ instructor_id: 1, created_at: -1 });
+platformFeeSchema.index({ course_id: 1, created_at: -1 });
+
+export const PlatformFee =
+  mongoose.models.PlatformFee || mongoose.model('PlatformFee', platformFeeSchema);
+

@@ -239,17 +239,28 @@ export class AuthService {
 
     try {
       const decoded = jwt.verify(incomingRefreshToken, config.jwt.refreshSecret);
-      const user = await User.findById(decoded.userId).select('+refreshTokenHash');
+      const user = await User.findById(decoded.userId).select(
+        '+refreshTokenHash +previousRefreshTokenHash +previousRefreshTokenExpiresAt'
+      );
 
       if (!user || user.status !== USER_STATUS.ACTIVE) {
         throw new AppError('User not found or inactive.', 401);
       }
 
-      // Check against stored single-use token hash
+      // Check against stored single-use token hash or active grace period
       const incomingHash = this.hashToken(incomingRefreshToken);
-      if (!user.refreshTokenHash || user.refreshTokenHash !== incomingHash) {
+      const isCurrentMatch = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
+      const isGracePeriodMatch =
+        user.previousRefreshTokenHash &&
+        user.previousRefreshTokenHash === incomingHash &&
+        user.previousRefreshTokenExpiresAt &&
+        user.previousRefreshTokenExpiresAt > new Date();
+
+      if (!isCurrentMatch && !isGracePeriodMatch) {
         // Token reuse or revoked session detected: revoke session completely
         user.refreshTokenHash = undefined;
+        user.previousRefreshTokenHash = undefined;
+        user.previousRefreshTokenExpiresAt = undefined;
         await user.save();
 
         await AuditLogger.log({
@@ -262,8 +273,10 @@ export class AuthService {
         throw new AppError('Invalid or expired refresh token. Please log in again.', 401);
       }
 
-      // Rotate: Issue new token pair and update hash
+      // Rotate: Issue new token pair and update hash with 30s grace window for previous hash
       const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(user);
+      user.previousRefreshTokenHash = user.refreshTokenHash || incomingHash;
+      user.previousRefreshTokenExpiresAt = new Date(Date.now() + 30000);
       user.refreshTokenHash = this.hashToken(newRefreshToken);
       await user.save();
 

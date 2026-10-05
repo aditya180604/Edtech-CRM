@@ -38,6 +38,7 @@ export interface CourseDetailsResponse {
     topics: Array<{
       _id: string;
       title: string;
+      description?: string;
       price: number;
       isFree: boolean;
       duration: number;
@@ -58,6 +59,7 @@ export interface TopicItem {
   id: string;
   _id: string;
   title: string;
+  description?: string;
   price: number;
   duration: number;
   isFree: boolean;

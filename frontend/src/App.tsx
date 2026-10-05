@@ -20,11 +20,13 @@ import { LearningPathDetailPage } from './pages/LearningPathDetailPage';
 import { TopicDetailPage } from './pages/TopicDetailPage';
 import { OfferingDetailPage } from './pages/OfferingDetailPage';
 import { StudentProfilePage } from './pages/StudentProfilePage';
+import { LiveWebinarRoomPage } from './pages/LiveWebinarRoomPage';
 
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
 import { InstructorDashboard } from './pages/dashboards/InstructorDashboard';
 import { InstructorOnboardingPage } from './pages/InstructorOnboardingPage';
+import { InstructorLobbyPage } from './pages/InstructorLobbyPage';
 import { AdminDashboard } from './pages/dashboards/AdminDashboard';
 import { SuperAdminDashboard } from './pages/dashboards/SuperAdminDashboard';
 
@@ -52,6 +54,8 @@ export const App: React.FC = () => {
             <Route path="/offerings/:offeringId" element={<OfferingDetailPage />} />
             <Route path="/instructors" element={<InstructorsPage />} />
             <Route path="/webinars" element={<WebinarsPage />} />
+            <Route path="/webinars/live/:roomCode" element={<LiveWebinarRoomPage />} />
+            <Route path="/webinar/live/:roomCode" element={<LiveWebinarRoomPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/course/:slug" element={<CourseDetailPage />} />
 
@@ -62,8 +66,10 @@ export const App: React.FC = () => {
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/dashboard/student" element={<StudentDashboard />} />
 
-            {/* Instructor Dashboards */}
+            {/* Instructor Dashboards & Verification Lobby */}
             <Route path="/instructor/onboarding" element={<InstructorOnboardingPage />} />
+            <Route path="/instructor/pending-verification" element={<InstructorLobbyPage />} />
+            <Route path="/instructor/lobby" element={<InstructorLobbyPage />} />
             <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
 

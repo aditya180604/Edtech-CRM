@@ -144,16 +144,23 @@ export class InstructorController {
 
   static createPublishingFeeOrder = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { returnUrl } = req.body;
+    const { returnUrl } = req.body || {};
     const result = await InstructorService.createPublishingFeeOrder(req.user.userId, id, returnUrl);
     return ApiResponse.success(res, result, 'Cashfree publishing fee order created.');
   });
 
   static verifyPublishingFee = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { orderId } = req.body;
+    const orderId = req.body?.orderId || req.body?.cashfreeOrderId || req.query?.orderId;
     const result = await InstructorService.verifyPublishingFee(req.user.userId, id, orderId);
-    return ApiResponse.success(res, result, 'Publishing fee payment verified.');
+    return ApiResponse.success(res, result, result.message || 'Publishing fee payment verified.');
+  });
+
+  static getPublishingFeeStatus = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const orderId = req.query?.orderId || req.body?.orderId;
+    const result = await InstructorService.verifyPublishingFee(req.user.userId, id, orderId);
+    return ApiResponse.success(res, result, result.message || 'Publishing fee status retrieved.');
   });
 
   static publishCourse = asyncHandler(async (req, res) => {

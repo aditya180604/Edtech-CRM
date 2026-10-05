@@ -17,6 +17,7 @@ import {
   Plus,
   X,
   ArrowRight,
+  GraduationCap,
 } from 'lucide-react';
 
 const SUGGESTED_EXPERTISE = [
@@ -47,6 +48,7 @@ export const InstructorOnboardingPage: React.FC = () => {
   const [expertise, setExpertise] = useState<string[]>(['React', 'Node.js']);
   const [customExpertiseInput, setCustomExpertiseInput] = useState('');
   const [currentOrganization, setCurrentOrganization] = useState('');
+  const [qualification, setQualification] = useState('');
   const [workExperience, setWorkExperience] = useState('');
   const [yearsOfExperience, setYearsOfExperience] = useState<number>(3);
   const [profilePhoto, setProfilePhoto] = useState('');
@@ -116,6 +118,7 @@ export const InstructorOnboardingPage: React.FC = () => {
         bio: bio.trim(),
         expertise,
         currentOrganization: currentOrganization.trim() || undefined,
+        qualification: qualification.trim() || undefined,
         workExperience: workExperience.trim(),
         yearsOfExperience: Number(yearsOfExperience),
         profilePhoto: profilePhoto.trim() || undefined,
@@ -130,11 +133,14 @@ export const InstructorOnboardingPage: React.FC = () => {
           profilePhoto: profilePhoto.trim() || user?.profilePhoto,
         });
 
-        // Trigger welcome toast
-        toast.success('Profile completed successfully!', 'Welcome to your Instructor Dashboard.');
+        // Trigger notification
+        toast.success(
+          'Profile Submitted for Review!',
+          'Your credentials have been submitted for Super Admin verification.'
+        );
 
-        // Navigate to instructor dashboard
-        navigate('/dashboard/instructor');
+        // Navigate to pending verification lobby
+        navigate('/instructor/pending-verification');
       } else {
         setErrorMsg(res.message || 'Failed to save instructor profile.');
       }
@@ -355,7 +361,7 @@ export const InstructorOnboardingPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Row 5: Current Organization & Profile Photo URL */}
+            {/* Row 5: Current Organization, Qualifications & Profile Photo URL */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -377,20 +383,39 @@ export const InstructorOnboardingPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Profile Photo URL <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                  Education & Qualifications <span className="text-slate-400 font-normal lowercase">(optional)</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Image className="w-4 h-4" />
+                    <GraduationCap className="w-4 h-4" />
                   </div>
                   <input
-                    type="url"
-                    value={profilePhoto}
-                    onChange={(e) => setProfilePhoto(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
+                    type="text"
+                    value={qualification}
+                    onChange={(e) => setQualification(e.target.value)}
+                    placeholder="e.g. PG Diploma in Art & Design / B.Tech CS"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all font-medium"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Row 6: Profile Photo URL */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Profile Photo URL <span className="text-slate-400 font-normal lowercase">(optional)</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Image className="w-4 h-4" />
+                </div>
+                <input
+                  type="url"
+                  value={profilePhoto}
+                  onChange={(e) => setProfilePhoto(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all font-medium"
+                />
               </div>
             </div>
 

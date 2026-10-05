@@ -33,8 +33,19 @@ import {
   Video,
   AlertTriangle,
   Sparkles,
+  UserCheck,
+  Clock,
+  Building,
+  Briefcase,
+  Mail,
+  Phone,
+  Calendar,
+  ArrowRight,
+  PlusCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { NotificationBell } from '../../components/dashboard/NotificationBell';
+import { CreateCourseOnBehalfView } from '../../components/dashboard/CreateCourseOnBehalfView';
 import {
   superAdminApi,
   type SuperAdminDashboardOverview,
@@ -46,6 +57,7 @@ import {
   type SuperAdminCountry,
   type SuperAdminCurrency,
   type SuperAdminTax,
+  type SuperAdminInstructorVerification,
 } from '../../api/superAdmin';
 
 export const SuperAdminDashboard: React.FC = () => {
@@ -58,9 +70,12 @@ export const SuperAdminDashboard: React.FC = () => {
     | 'dashboard'
     | 'users'
     | 'creators'
+    | 'instructor-verifications'
     | 'courses'
+    | 'create-on-behalf'
     | 'approvals'
     | 'orders'
+    | 'platform-fees'
     | 'refunds'
     | 'payouts'
     | 'countries'
@@ -71,6 +86,25 @@ export const SuperAdminDashboard: React.FC = () => {
 
   // Loading States
   const [refreshing, setRefreshing] = useState(false);
+
+  // Platform Fees Management State (Image & Real Cashfree Fees)
+  const [platformFeesList, setPlatformFeesList] = useState<any[]>([]);
+  const [platformFeesMetrics, setPlatformFeesMetrics] = useState<{
+    totalCollected: number;
+    successfulTransactions: number;
+    pendingTransactions: number;
+    failedTransactions: number;
+    totalTransactions: number;
+  }>({
+    totalCollected: 0,
+    successfulTransactions: 0,
+    pendingTransactions: 0,
+    failedTransactions: 0,
+    totalTransactions: 0,
+  });
+  const [platformFeesSearch, setPlatformFeesSearch] = useState('');
+  const [platformFeesStatusFilter, setPlatformFeesStatusFilter] = useState('ALL');
+  const [platformFeesLoading, setPlatformFeesLoading] = useState(false);
 
   // Data States
   const [overview, setOverview] = useState<SuperAdminDashboardOverview | null>(null);
@@ -150,36 +184,24 @@ export const SuperAdminDashboard: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
 
-  // Super Admin Create Course On Behalf of Instructor State
-  const [showCreateOnBehalfModal, setShowCreateOnBehalfModal] = useState(false);
-  const [instructorsList, setInstructorsList] = useState<any[]>([]);
-  const [creatingCourseOnBehalf, setCreatingCourseOnBehalf] = useState(false);
-  const [adminSkillInput, setAdminSkillInput] = useState('');
-  const [createCourseForm, setCreateCourseForm] = useState({
-    instructorId: '',
-    title: '',
-    shortDescription: '',
-    description: '',
-    category: 'Development',
-    subcategory: 'Full-Stack',
-    level: 'Beginner',
-    language: 'English',
-    coursePrice: 1999,
-    thumbnail: '',
-    banner: '',
-    syllabusUrl: '',
-    syllabusFileName: '',
-    skills: ['React', 'Node.js', 'MongoDB'],
-    modules: [
-      {
-        title: 'Getting Started & Architecture',
-        topics: [
-          { title: 'Introduction & Setup', price: 0, isFree: true, duration: 25, videoUrl: '' },
-          { title: 'Core Principles', price: 499, isFree: false, duration: 40, videoUrl: '' },
-        ],
-      },
-    ],
+  // Instructor Verifications Queue State (Workflow 1 & 2)
+  const [instructorVerificationsList, setInstructorVerificationsList] = useState<SuperAdminInstructorVerification[]>([]);
+  const [verificationCounts, setVerificationCounts] = useState<{ all: number; pending: number; approved: number; rejected: number }>({
+    all: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
   });
+  const [verificationStatusFilter, setVerificationStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
+  const [verificationSearch, setVerificationSearch] = useState('');
+  const [selectedVerification, setSelectedVerification] = useState<SuperAdminInstructorVerification | null>(null);
+  const [showInspectVerificationModal, setShowInspectVerificationModal] = useState(false);
+  const [showRejectVerificationModal, setShowRejectVerificationModal] = useState(false);
+  const [verificationRejectReason, setVerificationRejectReason] = useState('');
+  const [processingVerification, setProcessingVerification] = useState(false);
+
+  // Super Admin Registered Instructors List (For On Behalf Creation)
+  const [instructorsList, setInstructorsList] = useState<any[]>([]);
 
   // Load Dashboard Overview and active sub-view data
   const loadData = useCallback(
@@ -192,16 +214,10 @@ export const SuperAdminDashboard: React.FC = () => {
           setOverview(overviewRes.data);
         }
 
-        // Fetch registered instructors list for dropdown
+        // Fetch registered instructors list for dropdown & on-behalf creation
         const instRes = await superAdminApi.getInstructorsList().catch(() => null);
         if (instRes?.success && instRes.data) {
           setInstructorsList(instRes.data);
-          if (instRes.data.length > 0) {
-            setCreateCourseForm((prev) => ({
-              ...prev,
-              instructorId: prev.instructorId || instRes.data[0].id || instRes.data[0]._id,
-            }));
-          }
         }
 
         // Sub-view data loading
@@ -224,6 +240,17 @@ export const SuperAdminDashboard: React.FC = () => {
           setApprovalsList(appRes.data);
         }
 
+        // Always fetch instructor verifications for live sidebar badge and queue pipeline
+        const verRes = await superAdminApi.getInstructorVerifications({
+          status: activeNav === 'instructor-verifications' ? (verificationStatusFilter === 'ALL' ? undefined : verificationStatusFilter) : undefined,
+          search: activeNav === 'instructor-verifications' ? (verificationSearch.trim() || undefined) : undefined,
+          limit: 100,
+        }).catch(() => null);
+        if (verRes?.success && verRes.data) {
+          setInstructorVerificationsList(verRes.data.instructors || []);
+          setVerificationCounts(verRes.data.counts || { all: 0, pending: 0, approved: 0, rejected: 0 });
+        }
+
         if (activeNav === 'courses' || activeNav === 'approvals' || activeNav === 'dashboard') {
           const cRes = await superAdminApi.getCourses({
             status: courseStatusFilter === 'ALL' ? undefined : courseStatusFilter,
@@ -242,6 +269,27 @@ export const SuperAdminDashboard: React.FC = () => {
           if (oRes?.success && oRes.data?.orders) {
             setOrdersList(oRes.data.orders);
           }
+        }
+
+        // Platform Fees Ledger Data (Cashfree Real-Time Fees)
+        if (activeNav === 'platform-fees' || activeNav === 'dashboard') {
+          setPlatformFeesLoading(true);
+          const pfRes = await superAdminApi.getPlatformFees({
+            status: platformFeesStatusFilter === 'ALL' ? undefined : platformFeesStatusFilter,
+            search: platformFeesSearch.trim() || undefined,
+            limit: 100,
+          }).catch(() => null);
+          if (pfRes?.success && pfRes.data) {
+            setPlatformFeesList(pfRes.data.fees || []);
+            setPlatformFeesMetrics(pfRes.data.metrics || {
+              totalCollected: 0,
+              successfulTransactions: 0,
+              pendingTransactions: 0,
+              failedTransactions: 0,
+              totalTransactions: 0,
+            });
+          }
+          setPlatformFeesLoading(false);
         }
 
         if (activeNav === 'refunds') {
@@ -274,7 +322,20 @@ export const SuperAdminDashboard: React.FC = () => {
         setRefreshing(false);
       }
     },
-    [activeNav, userRoleFilter, userStatusFilter, userSearch, courseStatusFilter, courseSearch, orderStatusFilter, orderSearch]
+    [
+      activeNav,
+      userRoleFilter,
+      userStatusFilter,
+      userSearch,
+      courseStatusFilter,
+      courseSearch,
+      orderStatusFilter,
+      orderSearch,
+      verificationStatusFilter,
+      verificationSearch,
+      platformFeesStatusFilter,
+      platformFeesSearch,
+    ]
   );
 
   useEffect(() => {
@@ -289,9 +350,9 @@ export const SuperAdminDashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, [loadData]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
   };
 
   // User Provisioning (Student, Instructor, Admin)
@@ -396,106 +457,58 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
-  // Super Admin Create Course On Behalf Handlers
-  const handleAddAdminModule = () => {
-    setCreateCourseForm((prev) => ({
-      ...prev,
-      modules: [
-        ...prev.modules,
-        {
-          title: `Module ${prev.modules.length + 1}: New Section`,
-          topics: [{ title: 'Topic 1: Overview', price: 0, isFree: false, duration: 30, videoUrl: '' }],
-        },
-      ],
-    }));
+  // Instructor Verification Handlers (Workflow 1 & 3)
+  const handleOpenInspectVerification = (item: SuperAdminInstructorVerification) => {
+    setSelectedVerification(item);
+    setShowInspectVerificationModal(true);
   };
 
-  const handleRemoveAdminModule = (mIdx: number) => {
-    setCreateCourseForm((prev) => ({
-      ...prev,
-      modules: prev.modules.filter((_, idx) => idx !== mIdx),
-    }));
-  };
-
-  const handleAddAdminTopic = (mIdx: number) => {
-    setCreateCourseForm((prev) => {
-      const updated = [...prev.modules];
-      updated[mIdx].topics.push({
-        title: `Topic ${updated[mIdx].topics.length + 1}: Lesson`,
-        price: 0,
-        isFree: false,
-        duration: 30,
-        videoUrl: '',
-      });
-      return { ...prev, modules: updated };
-    });
-  };
-
-  const handleRemoveAdminTopic = (mIdx: number, tIdx: number) => {
-    setCreateCourseForm((prev) => {
-      const updated = [...prev.modules];
-      updated[mIdx].topics = updated[mIdx].topics.filter((_, idx) => idx !== tIdx);
-      return { ...prev, modules: updated };
-    });
-  };
-
-  const handleCreateCourseOnBehalf = async (publishDirectly = true) => {
-    if (!createCourseForm.instructorId) {
-      toastError('Instructor Required', 'Please select a registered instructor from the dropdown.');
-      return;
-    }
-    if (!createCourseForm.title.trim()) {
-      toastError('Title Required', 'Please enter a course title.');
-      return;
-    }
-
+  const handleApproveInstructor = async (id: string) => {
     try {
-      setCreatingCourseOnBehalf(true);
-      const res = await superAdminApi.createCourseOnBehalf({
-        ...createCourseForm,
-        publishDirectly,
-      });
-
+      setProcessingVerification(true);
+      const res = await superAdminApi.approveInstructorVerification(id);
       if (res.success) {
-        const selectedInstructor = instructorsList.find(
-          (i) => (i.id || i._id) === createCourseForm.instructorId
+        success('Instructor Approved', 'Instructor has been verified and successfully moved to Creators & Instructors.');
+        setShowInspectVerificationModal(false);
+        setSelectedVerification(null);
+        // Immediately remove approved instructor from pending view and adjust counts
+        setInstructorVerificationsList((prev) =>
+          prev.filter((i) => i.id !== id && i._id !== id && i.userId !== id && i.profileId !== id)
         );
-        success(
-          publishDirectly ? 'Course Created & Published!' : 'Course Draft Created!',
-          `Course "${createCourseForm.title}" is now successfully assigned to ${selectedInstructor?.name || 'Instructor'} with publishing fee waived.`
-        );
-
-        setShowCreateOnBehalfModal(false);
-        setCreateCourseForm({
-          instructorId: instructorsList[0]?.id || instructorsList[0]?._id || '',
-          title: '',
-          shortDescription: '',
-          description: '',
-          category: 'Development',
-          subcategory: '',
-          level: 'Beginner',
-          language: 'English',
-          coursePrice: 1999,
-          thumbnail: '',
-          banner: '',
-          syllabusUrl: '',
-          syllabusFileName: '',
-          skills: ['React', 'Node.js'],
-          modules: [
-            {
-              title: 'Getting Started & Architecture',
-              topics: [{ title: 'Introduction & Setup', price: 0, isFree: true, duration: 25, videoUrl: '' }],
-            },
-          ],
-        });
-
-        loadData(true);
+        setVerificationCounts((prev) => ({
+          ...prev,
+          pending: Math.max(0, prev.pending - 1),
+          approved: prev.approved + 1,
+        }));
+        await loadData(true);
       }
     } catch (err: any) {
-      console.error('Error creating course on behalf:', err);
-      toastError('Creation Failed', err.response?.data?.message || err.message || 'Could not create course.');
+      toastError('Approval Failed', err.response?.data?.message || err.message || 'Could not approve instructor.');
     } finally {
-      setCreatingCourseOnBehalf(false);
+      setProcessingVerification(false);
+    }
+  };
+
+  const handleRejectInstructor = async () => {
+    if (!selectedVerification) return;
+    try {
+      setProcessingVerification(true);
+      const res = await superAdminApi.rejectInstructorVerification(
+        selectedVerification.id || selectedVerification._id || selectedVerification.userId,
+        verificationRejectReason.trim() || undefined
+      );
+      if (res.success) {
+        success('Application Rejected', 'The instructor application has been rejected with feedback.');
+        setShowRejectVerificationModal(false);
+        setShowInspectVerificationModal(false);
+        setSelectedVerification(null);
+        setVerificationRejectReason('');
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Rejection Failed', err.response?.data?.message || err.message || 'Could not reject instructor.');
+    } finally {
+      setProcessingVerification(false);
     }
   };
 
@@ -565,9 +578,12 @@ export const SuperAdminDashboard: React.FC = () => {
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
               { id: 'users', label: 'Users', icon: Users },
               { id: 'creators', label: 'Creators', icon: GraduationCap },
+              { id: 'instructor-verifications', label: 'Instructor Verification', icon: UserCheck, badge: verificationCounts.pending },
               { id: 'courses', label: 'Courses', icon: BookOpen },
+              { id: 'create-on-behalf', label: 'Add on Behalf', icon: PlusCircle },
               { id: 'approvals', label: 'Course Approvals', icon: ShieldCheck, badge: approvalsList.length },
               { id: 'orders', label: 'Orders', icon: ShoppingBag },
+              { id: 'platform-fees', label: 'Platform Fees (10%)', icon: DollarSign, badge: platformFeesMetrics?.successfulTransactions },
               { id: 'refunds', label: 'Refunds', icon: RotateCcw },
               { id: 'payouts', label: 'Payouts', icon: CreditCard },
               { id: 'countries', label: 'Countries', icon: Globe },
@@ -656,6 +672,8 @@ export const SuperAdminDashboard: React.FC = () => {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
+
+            <NotificationBell />
 
             <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
               <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center">
@@ -776,6 +794,37 @@ export const SuperAdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Pending Instructor Verifications Banner */}
+              {verificationCounts.pending > 0 && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                      <Clock className="w-5 h-5 animate-pulse text-amber-700" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-sm text-slate-900">
+                          {verificationCounts.pending} Instructor Profile{verificationCounts.pending === 1 ? '' : 's'} Awaiting Verification
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">
+                          Action Required
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        New instructors have completed their onboarding form. Dashboard access is restricted until Super Admin approval.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveNav('instructor-verifications')}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer transition shrink-0 inline-flex items-center gap-1.5"
+                  >
+                    <span>Review Queue</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Charts Row: GMV & Revenue Trend + Dynamic Users by Role Breakdown */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1142,19 +1191,19 @@ export const SuperAdminDashboard: React.FC = () => {
                             <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
                               {u.name?.[0] || 'I'}
                             </div>
-                            <span className="font-bold text-slate-900">{u.name}</span>
+                            <div>
+                              <span className="font-bold text-slate-900 block">{u.name}</span>
+                              {u.headline && <span className="text-[10px] text-slate-400 font-medium">{u.headline}</span>}
+                            </div>
                           </div>
                         </td>
                         <td className="py-3 px-4 text-slate-600">{u.email}</td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              u.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}
+                            className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-max"
                           >
-                            {u.status}
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Verified Creator
                           </span>
                         </td>
                         <td className="py-3 px-4 text-slate-500">{u.joinedDate}</td>
@@ -1168,6 +1217,255 @@ export const SuperAdminDashboard: React.FC = () => {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              VIEW 3.5: INSTRUCTOR VERIFICATIONS QUEUE (Workflow 1, 2 & 3)
+             ========================================================================= */}
+          {activeNav === 'instructor-verifications' && (
+            <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-xl font-extrabold text-slate-900">Instructor Verification Queue</h2>
+                    {verificationCounts.pending > 0 && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                        {verificationCounts.pending} Pending Review
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Review credentials, professional background, organization, and expertise submitted during onboarding before unlocking instructor dashboard access.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => loadData(false)}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto font-bold"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+                  <span>Refresh Queue</span>
+                </button>
+              </div>
+
+              {/* Status Filter Tabs & Search Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl">
+                  {[
+                    { id: 'PENDING', label: 'Pending Review', count: verificationCounts.pending },
+                    { id: 'APPROVED', label: 'Approved & Verified', count: verificationCounts.approved },
+                    { id: 'REJECTED', label: 'Rejected', count: verificationCounts.rejected },
+                    { id: 'ALL', label: 'All Applications', count: verificationCounts.all },
+                  ].map((tab) => {
+                    const isSelected = verificationStatusFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setVerificationStatusFilter(tab.id as any)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                            isSelected
+                              ? tab.id === 'PENDING'
+                                ? 'bg-amber-100 text-amber-800'
+                                : tab.id === 'APPROVED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-200 text-slate-800'
+                              : 'bg-slate-200/80 text-slate-600'
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search by instructor, email, skill, company..."
+                    value={verificationSearch}
+                    onChange={(e) => setVerificationSearch(e.target.value)}
+                    className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500 w-full sm:w-64"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                      <th className="py-3 px-4">Instructor</th>
+                      <th className="py-3 px-4">Role & Organization</th>
+                      <th className="py-3 px-4">Expertise / Skills</th>
+                      <th className="py-3 px-4">Submitted Date</th>
+                      <th className="py-3 px-4">Verification Status</th>
+                      <th className="py-3 px-4 text-right">Review & Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {instructorVerificationsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center">
+                          <div className="max-w-sm mx-auto flex flex-col items-center">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                              <UserCheck className="w-6 h-6" />
+                            </div>
+                            <h4 className="font-bold text-slate-900 text-sm">No Applications Found</h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {verificationStatusFilter === 'PENDING'
+                                ? 'All instructor onboarding profiles have been reviewed! No pending applications.'
+                                : 'No instructor verification records match the selected filter.'}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      instructorVerificationsList.map((inst) => {
+                        const status = (inst.verificationStatus || 'PENDING').toUpperCase();
+                        const isPending = status === 'PENDING' || status === 'UNDER_REVIEW';
+                        const isApproved = status === 'VERIFIED' || status === 'APPROVED';
+
+                        return (
+                          <tr key={inst.id || inst._id || inst.profileId} className="hover:bg-slate-50/80 transition-colors">
+                            {/* Instructor Info */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs overflow-hidden">
+                                  {inst.avatar ? (
+                                    <img src={inst.avatar} alt={inst.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    inst.name?.[0] || 'I'
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-bold text-slate-900 block truncate max-w-[160px]">{inst.name}</span>
+                                  <span className="text-[11px] text-slate-500 block truncate max-w-[160px]">{inst.email}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Organization & Role */}
+                            <td className="py-3.5 px-4">
+                              <div>
+                                <p className="font-bold text-slate-900 truncate max-w-[180px]">
+                                  {inst.currentOrganization || 'Independent Instructor'}
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[180px]">
+                                  {inst.workExperience || 'Educator'} • {inst.yearsOfExperience || inst.experience || '3+'} Yrs Exp
+                                </p>
+                              </div>
+                            </td>
+
+                            {/* Expertise / Skills */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                {inst.expertise && inst.expertise.length > 0 ? (
+                                  inst.expertise.slice(0, 3).map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-100"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">General IT</span>
+                                )}
+                                {inst.expertise && inst.expertise.length > 3 && (
+                                  <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                    +{inst.expertise.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Submitted Date */}
+                            <td className="py-3.5 px-4 text-slate-600 font-medium whitespace-nowrap">
+                              {inst.submittedAt ? new Date(inst.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent'}
+                            </td>
+
+                            {/* Status */}
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1.5 ${
+                                  isPending
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : isApproved
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    isPending ? 'bg-amber-500 animate-pulse' : isApproved ? 'bg-emerald-600' : 'bg-rose-600'
+                                  }`}
+                                />
+                                <span>
+                                  {isPending ? 'Pending Review' : isApproved ? 'Verified & Unlocked' : 'Rejected'}
+                                </span>
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenInspectVerification(inst)}
+                                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs inline-flex items-center gap-1 cursor-pointer transition"
+                                  title="Inspect full profile and credentials"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Inspect</span>
+                                </button>
+
+                                {isPending && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={processingVerification}
+                                      onClick={() => handleApproveInstructor(inst.id || inst._id || inst.userId)}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-lg text-xs shadow-xs inline-flex items-center gap-1 cursor-pointer transition disabled:opacity-50"
+                                      title="Approve profile and unlock instructor dashboard"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Approve</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVerification(inst);
+                                        setShowRejectVerificationModal(true);
+                                      }}
+                                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs border border-rose-200 cursor-pointer transition"
+                                      title="Reject application with reason"
+                                    >
+                                      <span>Reject</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1208,17 +1506,12 @@ export const SuperAdminDashboard: React.FC = () => {
                   </select>
 
                   <button
-                    onClick={() => {
-                      if (instructorsList.length > 0 && !createCourseForm.instructorId) {
-                        setCreateCourseForm((prev) => ({ ...prev, instructorId: instructorsList[0].id || instructorsList[0]._id }));
-                      }
-                      setShowCreateOnBehalfModal(true);
-                    }}
+                    onClick={() => setActiveNav('create-on-behalf')}
                     className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
-                    title="Create and directly publish a course for any registered instructor (Fee Waived)"
+                    title="Go to dedicated management section to create and publish a course on behalf of an instructor (Fee Waived)"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create Course on Behalf</span>
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Add Course on Behalf</span>
                   </button>
                 </div>
               </div>
@@ -1287,6 +1580,20 @@ export const SuperAdminDashboard: React.FC = () => {
                 </table>
               </div>
             </div>
+          )}
+
+          {/* =========================================================================
+              VIEW 4a: DEDICATED CREATE COURSE ON BEHALF OF INSTRUCTOR (Full 9-Step Parity)
+             ========================================================================= */}
+          {activeNav === 'create-on-behalf' && (
+            <CreateCourseOnBehalfView
+              instructors={instructorsList}
+              onSuccess={() => {
+                loadData(true);
+                setActiveNav('courses');
+              }}
+              onCancel={() => setActiveNav('courses')}
+            />
           )}
 
           {/* =========================================================================
@@ -1526,6 +1833,234 @@ export const SuperAdminDashboard: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              VIEW: PLATFORM FEES (10% CASHFREE GATEWAY CHARGES & REVENUE LEDGER)
+             ========================================================================= */}
+          {activeNav === 'platform-fees' && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Header Banner */}
+              <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xl shadow-indigo-950/20">
+                <div className="space-y-2 max-w-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      Live Cashfree PG Gateway
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-white border border-white/20">
+                      10% Take Rate Policy
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+                    Platform Fees Collection & Gateway Ledger
+                  </h2>
+                  <p className="text-xs text-indigo-200 leading-relaxed font-medium">
+                    Audit, track, and reconcile all 10% platform publishing fees charged to instructors upon course creation via Cashfree Payment Gateway.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => loadData(false)}
+                    disabled={platformFeesLoading}
+                    className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/20 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${platformFeesLoading ? 'animate-spin' : ''}`} />
+                    <span>Sync Gateway</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Summary KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+                    <span>Total Fees Collected</span>
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-slate-900 tracking-tight">
+                    ₹{platformFeesMetrics.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                    <span>✓ Realized platform revenue</span>
+                  </p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+                    <span>Verified Transactions</span>
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-blue-700 tracking-tight">
+                    {platformFeesMetrics.successfulTransactions}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    100% Cashfree verified payments
+                  </p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+                    <span>Pending Processing</span>
+                    <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-amber-600 tracking-tight">
+                    {platformFeesMetrics.pendingTransactions}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Awaiting webhook / payment completion
+                  </p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+                    <span>Exited / Failed</span>
+                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-rose-600 tracking-tight">
+                    {platformFeesMetrics.failedTransactions}
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    User dropped or failed attempts
+                  </p>
+                </div>
+              </div>
+
+              {/* Transactions Table & Filter Container */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">Platform Fee Transactions</h3>
+                    <p className="text-xs text-slate-500">Every 10% platform fee transaction recorded with cryptographic audit parameters.</p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by Order ID, Course, Instructor..."
+                        value={platformFeesSearch}
+                        onChange={(e) => setPlatformFeesSearch(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500 w-full sm:w-64"
+                      />
+                    </div>
+
+                    <select
+                      value={platformFeesStatusFilter}
+                      onChange={(e) => setPlatformFeesStatusFilter(e.target.value)}
+                      aria-label="Filter platform fees by status"
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="ALL">All Status</option>
+                      <option value="SUCCESS">Verified (SUCCESS)</option>
+                      <option value="PENDING">Pending (PENDING)</option>
+                      <option value="USER_DROPPED">User Dropped</option>
+                      <option value="FAILED">Failed</option>
+                      <option value="EXPIRED">Expired</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">Course</th>
+                        <th className="py-3 px-4">Instructor</th>
+                        <th className="py-3 px-4">Course Price</th>
+                        <th className="py-3 px-4">Platform Fee (10%)</th>
+                        <th className="py-3 px-4">Cashfree Payment ID</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {platformFeesList.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-slate-400 font-medium">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <DollarSign className="w-8 h-8 text-slate-300" />
+                              <p className="text-slate-500 font-bold text-sm">No platform fee records found</p>
+                              <p className="text-xs text-slate-400">Transactions will automatically appear here as instructors pay fees via Cashfree.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        platformFeesList.map((fee) => (
+                          <tr key={fee.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 font-mono font-bold text-indigo-700">
+                              <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                                {fee.orderId}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-bold text-slate-900 max-w-[200px] truncate" title={fee.courseTitle}>
+                                {fee.courseTitle}
+                              </p>
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-bold text-slate-800">{fee.instructor?.name || 'Instructor'}</p>
+                              <p className="text-[10px] text-slate-400 truncate max-w-[150px]">{fee.instructor?.email || '—'}</p>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700 font-medium">
+                              {fee.coursePrice > 0 ? `₹${fee.coursePrice.toLocaleString('en-IN')}` : 'FREE (₹0)'}
+                            </td>
+                            <td className="py-3 px-4 font-black text-emerald-700">
+                              ₹{fee.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
+                              {fee.cashfreePaymentId && fee.cashfreePaymentId !== '—' ? (
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  {fee.cashfreePaymentId}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">Pending</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
+                                  fee.paymentStatus === 'SUCCESS'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                    : fee.paymentStatus === 'PENDING'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                                    : fee.paymentStatus === 'FAILED'
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-300'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-300'
+                                }`}
+                              >
+                                {fee.paymentStatus === 'SUCCESS' && <CheckCircle2 className="w-3 h-3" />}
+                                {fee.paymentStatus}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-500 text-[11px]">
+                              {fee.paidAt ? new Date(fee.paidAt).toLocaleString('en-IN', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              }) : fee.createdAt ? new Date(fee.createdAt).toLocaleString('en-IN', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              }) : '—'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2538,425 +3073,208 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
       {/* =========================================================================
-          MODAL: CREATE COURSE ON BEHALF OF INSTRUCTOR (Admin Privilege Mode)
+          INSPECT INSTRUCTOR APPLICATION MODAL (Requirement 2 & 3)
          ========================================================================= */}
-      {showCreateOnBehalfModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in">
+      {showInspectVerificationModal && selectedVerification && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl space-y-6 my-8 max-h-[90vh] overflow-y-auto border border-slate-200">
             {/* Modal Header */}
-            <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-                  <Sparkles className="w-5 h-5" />
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-md overflow-hidden">
+                  {selectedVerification.avatar ? (
+                    <img src={selectedVerification.avatar} alt={selectedVerification.name} className="w-full h-full object-cover" />
+                  ) : (
+                    selectedVerification.name?.[0] || 'I'
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-slate-900 text-base">
-                      Create Course on Behalf of Instructor
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
-                      Admin Privilege Mode
+                    <h3 className="font-extrabold text-slate-900 text-lg">{selectedVerification.name}</h3>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        (selectedVerification.verificationStatus || '').toUpperCase() === 'VERIFIED' || (selectedVerification.verificationStatus || '').toUpperCase() === 'APPROVED'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : (selectedVerification.verificationStatus || '').toUpperCase() === 'REJECTED'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {selectedVerification.verificationStatus || 'PENDING REVIEW'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 font-medium">
-                    Assign ownership to any registered instructor • Fee Waived (₹0) • Instant Pre-Approval & Direct Publication
+                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-3">
+                    <span>{selectedVerification.email}</span>
+                    {selectedVerification.phone && <span>• {selectedVerification.phone}</span>}
                   </p>
                 </div>
               </div>
 
               <button
-                onClick={() => setShowCreateOnBehalfModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                type="button"
+                onClick={() => setShowInspectVerificationModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6 text-xs flex-1">
-              {/* Section 1: Instructor Selection Dropdown */}
-              <div className="p-5 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-black text-slate-900 uppercase tracking-wider">
-                    1. Select Target Instructor <span className="text-red-500">*</span>
-                  </label>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
-                    {instructorsList.length} Active Instructors Found
-                  </span>
-                </div>
-
-                {instructorsList.length === 0 ? (
-                  <p className="text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-200">
-                    No registered instructors found. Please invite or register an instructor first.
+            {/* Onboarding Form Fields (Requirement 2) */}
+            <div className="space-y-4 text-xs">
+              {/* Field Group 1: Organization, Title & Experience */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current Organization / Employer</span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {selectedVerification.currentOrganization || 'Independent / Freelance'}
                   </p>
-                ) : (
-                  <select
-                    value={createCourseForm.instructorId}
-                    onChange={(e) => setCreateCourseForm({ ...createCourseForm, instructorId: e.target.value })}
-                    className="w-full p-3 bg-white border border-indigo-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  >
-                    {instructorsList.map((inst) => (
-                      <option key={inst.id || inst._id} value={inst.id || inst._id}>
-                        {inst.name} ({inst.email})
-                      </option>
-                    ))}
-                  </select>
-                )}
+                </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-indigo-900 bg-white/80 p-2.5 rounded-xl border border-indigo-100">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    The course will be assigned to this instructor's account, appear under their "My Courses", and publish directly with platform fees waived.
-                  </span>
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Job Title / Work Experience</span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {selectedVerification.workExperience || 'Educator / Specialist'}
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Years of Experience</span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {selectedVerification.yearsOfExperience || selectedVerification.experience || '3'} Years
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Submission Timestamp</span>
+                  <p className="font-bold text-slate-900 text-sm">
+                    {selectedVerification.submittedAt ? new Date(selectedVerification.submittedAt).toLocaleString() : 'N/A'}
+                  </p>
                 </div>
               </div>
 
-              {/* Section 2: Course Information */}
-              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-                <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
-                  2. Course Information & Metadata
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Course Title *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Master Full-Stack Web Development & Microservices"
-                      value={createCourseForm.title}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, title: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Category</label>
-                    <select
-                      value={createCourseForm.category}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, category: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800"
-                    >
-                      <option value="Development">Development</option>
-                      <option value="DevOps / Cloud">DevOps / Cloud</option>
-                      <option value="Data Science">Data Science</option>
-                      <option value="AI & ML">AI & ML</option>
-                      <option value="Cybersecurity">Cybersecurity</option>
-                      <option value="Business">Business</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Subcategory</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Cloud Native / Backend"
-                      value={createCourseForm.subcategory}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, subcategory: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Experience Level</label>
-                    <select
-                      value={createCourseForm.level}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, level: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800"
-                    >
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="All Levels">All Levels</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Language</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. English"
-                      value={createCourseForm.language}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, language: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Course Price (INR ₹) *</label>
-                    <input
-                      type="number"
-                      placeholder="0 for free"
-                      value={createCourseForm.coursePrice}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, coursePrice: Number(e.target.value) || 0 })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black text-slate-900"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Thumbnail Image URL</label>
-                    <input
-                      type="text"
-                      placeholder="https://images.unsplash.com/..."
-                      value={createCourseForm.thumbnail}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, thumbnail: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Syllabus PDF Link or Document URL</label>
-                    <input
-                      type="text"
-                      placeholder="https://example.com/syllabus.pdf"
-                      value={createCourseForm.syllabusUrl}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, syllabusUrl: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Short Description</label>
-                    <input
-                      type="text"
-                      placeholder="A punchy 1-2 sentence overview of what students will achieve"
-                      value={createCourseForm.shortDescription}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, shortDescription: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Full Course Description</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Comprehensive overview of modules, topics, and real-world outcomes..."
-                      value={createCourseForm.description}
-                      onChange={(e) => setCreateCourseForm({ ...createCourseForm, description: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                    />
-                  </div>
-
-                  {/* Skills Tags */}
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="block font-bold text-slate-700">Skills / Tags</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Add skill tag (e.g. Docker, TypeScript)..."
-                        value={adminSkillInput}
-                        onChange={(e) => setAdminSkillInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (adminSkillInput.trim() && !createCourseForm.skills.includes(adminSkillInput.trim())) {
-                              setCreateCourseForm({ ...createCourseForm, skills: [...createCourseForm.skills, adminSkillInput.trim()] });
-                              setAdminSkillInput('');
-                            }
-                          }
-                        }}
-                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (adminSkillInput.trim() && !createCourseForm.skills.includes(adminSkillInput.trim())) {
-                            setCreateCourseForm({ ...createCourseForm, skills: [...createCourseForm.skills, adminSkillInput.trim()] });
-                            setAdminSkillInput('');
-                          }
-                        }}
-                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl"
+              {/* Field Group 2: Declared Expertise & Skills */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Declared Technical Expertise & Skills ({selectedVerification.expertise?.length || 0})
+                </span>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {selectedVerification.expertise && selectedVerification.expertise.length > 0 ? (
+                    selectedVerification.expertise.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-xs shadow-2xs"
                       >
-                        Add Tag
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {createCourseForm.skills.map((skill, idx) => (
-                        <span key={idx} className="px-2.5 py-1 bg-slate-200 text-slate-800 rounded-lg font-bold text-[11px] inline-flex items-center gap-1.5">
-                          <span>{skill}</span>
-                          <button
-                            type="button"
-                            onClick={() => setCreateCourseForm({ ...createCourseForm, skills: createCourseForm.skills.filter((_, sIdx) => sIdx !== idx) })}
-                            className="text-slate-400 hover:text-slate-700"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                        {tag}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-400 italic">No expertise tags specified.</span>
+                  )}
                 </div>
               </div>
 
-              {/* Section 3: Curriculum Structure (Modules & Topics) */}
-              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
-                      3. Curriculum Structure ({createCourseForm.modules.length} Modules)
-                    </h4>
-                    <p className="text-[11px] text-slate-500 font-medium">Add structured modules and video lesson topics</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddAdminModule}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Module</span>
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {createCourseForm.modules.map((mod, mIdx) => (
-                    <div key={mIdx} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase">Module {mIdx + 1} Title</label>
-                          <input
-                            type="text"
-                            value={mod.title}
-                            onChange={(e) => {
-                              const updated = [...createCourseForm.modules];
-                              updated[mIdx].title = e.target.value;
-                              setCreateCourseForm({ ...createCourseForm, modules: updated });
-                            }}
-                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-xs focus:bg-white"
-                          />
-                        </div>
-                        {createCourseForm.modules.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAdminModule(mIdx)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg self-end cursor-pointer"
-                            title="Remove Module"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Topics under this Module */}
-                      <div className="pl-3 border-l-2 border-indigo-200 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">Topics ({mod.topics.length})</span>
-                          <button
-                            type="button"
-                            onClick={() => handleAddAdminTopic(mIdx)}
-                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                          >
-                            + Add Topic
-                          </button>
-                        </div>
-
-                        {mod.topics.map((top, tIdx) => (
-                          <div key={tIdx} className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                placeholder="Topic Title..."
-                                value={top.title}
-                                onChange={(e) => {
-                                  const updated = [...createCourseForm.modules];
-                                  updated[mIdx].topics[tIdx].title = e.target.value;
-                                  setCreateCourseForm({ ...createCourseForm, modules: updated });
-                                }}
-                                className="flex-1 p-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs"
-                              />
-                              <input
-                                type="number"
-                                placeholder="Mins"
-                                value={top.duration || 30}
-                                onChange={(e) => {
-                                  const updated = [...createCourseForm.modules];
-                                  updated[mIdx].topics[tIdx].duration = Number(e.target.value) || 30;
-                                  setCreateCourseForm({ ...createCourseForm, modules: updated });
-                                }}
-                                className="w-16 p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
-                                title="Duration in minutes"
-                              />
-                              <label className="flex items-center gap-1 text-[10px] font-bold text-slate-600 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={top.isFree}
-                                  onChange={(e) => {
-                                    const updated = [...createCourseForm.modules];
-                                    updated[mIdx].topics[tIdx].isFree = e.target.checked;
-                                    setCreateCourseForm({ ...createCourseForm, modules: updated });
-                                  }}
-                                />
-                                <span>Free</span>
-                              </label>
-                              {mod.topics.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveAdminTopic(mIdx, tIdx)}
-                                  className="text-slate-400 hover:text-rose-600 p-1"
-                                >
-                                  ×
-                                </button>
-                              )}
-                            </div>
-                            <input
-                              type="text"
-                              placeholder="Video Stream URL (MP4 / HLS / YouTube)..."
-                              value={top.videoUrl || ''}
-                              onChange={(e) => {
-                                const updated = [...createCourseForm.modules];
-                                updated[mIdx].topics[tIdx].videoUrl = e.target.value;
-                                setCreateCourseForm({ ...createCourseForm, modules: updated });
-                              }}
-                              className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-mono text-slate-700"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {/* Field Group 3: Complete Professional Bio */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Full Professional Biography (Submitted during onboarding)
+                </span>
+                <p className="text-slate-700 text-xs leading-relaxed italic bg-white p-3.5 rounded-xl border border-slate-200 whitespace-pre-wrap">
+                  "{selectedVerification.bio || 'No biography submitted.'}"
+                </p>
               </div>
+
+              {/* Audit & Rejection Info (if exists) */}
+              {selectedVerification.rejectionReason && (
+                <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 text-rose-800 space-y-1">
+                  <strong className="block font-bold">Previous Rejection Feedback:</strong>
+                  <p className="text-xs">{selectedVerification.rejectionReason}</p>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="p-4 sm:p-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setShowCreateOnBehalfModal(false)}
-                className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                onClick={() => setShowInspectVerificationModal(false)}
+                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer transition"
               >
-                Cancel
+                Close
               </button>
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
                 <button
                   type="button"
-                  disabled={creatingCourseOnBehalf}
-                  onClick={() => handleCreateCourseOnBehalf(false)}
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs cursor-pointer transition-colors"
+                  onClick={() => {
+                    setShowRejectVerificationModal(true);
+                  }}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs border border-rose-200 cursor-pointer transition"
                 >
-                  Save as Draft for Instructor
+                  Reject Application
                 </button>
 
                 <button
                   type="button"
-                  disabled={creatingCourseOnBehalf}
-                  onClick={() => handleCreateCourseOnBehalf(true)}
-                  className="flex-1 sm:flex-initial px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 transition-all"
+                  disabled={processingVerification}
+                  onClick={() => handleApproveInstructor(selectedVerification.id || selectedVerification._id || selectedVerification.userId)}
+                  className="flex-1 sm:flex-initial px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 transition"
                 >
-                  {creatingCourseOnBehalf ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Publishing Course...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Create & Publish Live (Pre-Approved)</span>
-                    </>
-                  )}
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Approve & Unlock Dashboard</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Reason Modal */}
+      {showRejectVerificationModal && selectedVerification && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-extrabold text-slate-900 text-sm">Reject Instructor Application</h3>
+              <button
+                type="button"
+                onClick={() => setShowRejectVerificationModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600">
+                Provide feedback for <strong className="text-slate-900">{selectedVerification.name}</strong> explaining what details need revision before their profile can be approved.
+              </p>
+              <textarea
+                rows={4}
+                required
+                placeholder="e.g. Please provide a more detailed professional bio and specify your years of teaching or production experience..."
+                value={verificationRejectReason}
+                onChange={(e) => setVerificationRejectReason(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRejectVerificationModal(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer hover:bg-slate-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={processingVerification}
+                onClick={handleRejectInstructor}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer transition disabled:opacity-60"
+              >
+                {processingVerification ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
             </div>
           </div>
         </div>

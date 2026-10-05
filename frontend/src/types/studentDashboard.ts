@@ -64,8 +64,11 @@ export interface ActiveEnrolledCourse {
 
 export interface UpcomingLiveSession {
   sessionId: string;
+  webinarId?: string;
   title: string;
   type: 'WEBINAR' | 'LIVE_CLASS';
+  status?: string;
+  isLive?: boolean;
   scheduledAt: string;
   durationMinutes: number;
   instructorName: string;

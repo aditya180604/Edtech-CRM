@@ -253,6 +253,7 @@ export class CatalogService {
             topicId: t._id.toString(),
             title: t.title || '',
             slug: t.slug || t._id.toString(),
+            description: t.description || '',
             price: t.price != null ? t.price : 0,
             currency: t.currency || course.currency || 'INR',
             duration: t.duration != null ? t.duration : 0,
@@ -283,21 +284,41 @@ export class CatalogService {
 
     return {
       id: course._id.toString(),
+      _id: course._id.toString(),
       courseId: course.courseId || course._id.toString(),
       title: title,
       slug: slug,
       description: course.description || course.shortDescription || '',
       shortDescription: course.shortDescription || '',
+      detailedOverview: course.detailedOverview || course.description || '',
       thumbnail: course.thumbnail || course.banner || course.image || null,
+      banner: course.banner || null,
       category: categoryName,
       subcategory: course.subcategory || null,
       level: course.level || null,
       language: course.language || null,
       price: price,
+      coursePrice: price,
+      discountPrice: course.discountPrice,
       currency: course.currency || 'INR',
-      requirements: Array.isArray(course.requirements) ? course.requirements : [],
-      learningObjectives: Array.isArray(course.learningObjectives) ? course.learningObjectives : [],
-      skills: Array.isArray(course.skills) ? course.skills : [],
+      requirements: Array.isArray(course.requirements) ? course.requirements : (course.requirements ? [course.requirements] : []),
+      hardwareRequirements: Array.isArray(course.hardwareRequirements) ? course.hardwareRequirements : (course.hardwareRequirements ? [course.hardwareRequirements] : []),
+      softwareRequirements: Array.isArray(course.softwareRequirements) ? course.softwareRequirements : (course.softwareRequirements ? [course.softwareRequirements] : []),
+      requiredAccounts: Array.isArray(course.requiredAccounts) ? course.requiredAccounts : (course.requiredAccounts ? [course.requiredAccounts] : []),
+      foundationalConcepts: Array.isArray(course.foundationalConcepts) ? course.foundationalConcepts : (course.foundationalConcepts ? [course.foundationalConcepts] : []),
+      recommendedPriorKnowledge: Array.isArray(course.recommendedPriorKnowledge) ? course.recommendedPriorKnowledge : (course.recommendedPriorKnowledge ? [course.recommendedPriorKnowledge] : []),
+      coreTools: Array.isArray(course.coreTools) ? course.coreTools : (course.coreTools ? [course.coreTools] : []),
+      learningObjectives: Array.isArray(course.learningObjectives) ? course.learningObjectives : (course.learningObjectives ? [course.learningObjectives] : []),
+      targetAudience: Array.isArray(course.targetAudience) ? course.targetAudience : (course.targetAudience ? [course.targetAudience] : []),
+      courseGoals: Array.isArray(course.courseGoals) ? course.courseGoals : (course.courseGoals ? [course.courseGoals] : []),
+      teachingMethodology: Array.isArray(course.teachingMethodology) ? course.teachingMethodology : (course.teachingMethodology ? [course.teachingMethodology] : []),
+      courseIncludes: course.courseIncludes || {},
+      skills: Array.isArray(course.skills) ? course.skills : (course.skills ? [course.skills] : []),
+      accessDuration: course.accessDuration || 'Lifetime',
+      certificateEnabled: course.certificateEnabled !== false,
+      promotionalVideo: course.promotionalVideo || '',
+      syllabusUrl: course.syllabusUrl || '',
+      syllabusFileName: course.syllabusFileName || '',
       rating: rating,
       reviewCount: reviewCount,
       instructor: {
@@ -408,8 +429,74 @@ export class CatalogService {
         currency: w.currency || 'INR',
         category: w.category || null,
         badge: w.status === 'LIVE' ? 'LIVE NOW' : 'Upcoming',
+        meetingUrl: w.meetingUrl || (w.roomCode ? `/webinars/live/${w.roomCode}` : ''),
+        meetingType: w.meetingType || 'IN_PLATFORM',
+        roomCode: w.roomCode || '',
       };
     });
+  }
+
+  /**
+   * Get Live Webinar Room Details & Access Verification
+   */
+  static async getWebinarRoom(roomCodeOrId, userId) {
+    const orClauses = [
+      { roomCode: roomCodeOrId },
+      { slug: roomCodeOrId },
+    ];
+    if (mongoose.Types.ObjectId.isValid(roomCodeOrId)) {
+      orClauses.push({ _id: new mongoose.Types.ObjectId(roomCodeOrId) });
+    }
+
+    const webinar = await Webinar.findOne({ $or: orClauses })
+      .populate('instructorId', 'firstName lastName profilePhoto headline bio email')
+      .lean();
+
+    if (!webinar) {
+      return null;
+    }
+
+    const instructor = webinar.instructorId;
+    const instructorName = instructor
+      ? `${instructor.firstName || ''} ${instructor.lastName || ''}`.trim()
+      : 'Host Instructor';
+
+    const isHost = userId ? (instructor?._id?.toString() === userId.toString()) : false;
+    const isRegistered = userId
+      ? (Array.isArray(webinar.registrations) && webinar.registrations.some((r) => r.toString() === userId.toString()))
+      : false;
+
+    const isFree = (webinar.price || 0) === 0;
+    const hasAccess = isHost || isRegistered || isFree;
+
+    return {
+      id: webinar._id.toString(),
+      _id: webinar._id.toString(),
+      webinarId: webinar.webinarId || webinar._id.toString(),
+      title: webinar.title,
+      slug: webinar.slug,
+      roomCode: webinar.roomCode || roomCodeOrId,
+      description: webinar.description || '',
+      thumbnail: webinar.thumbnail,
+      category: webinar.category || 'General',
+      startTime: webinar.startTime,
+      endTime: webinar.endTime,
+      price: webinar.price || 0,
+      currency: webinar.currency || 'INR',
+      capacity: webinar.capacity || 100,
+      meetingType: webinar.meetingType || 'IN_PLATFORM',
+      meetingUrl: webinar.meetingUrl || `/webinars/live/${webinar.roomCode || roomCodeOrId}`,
+      status: webinar.status || 'SCHEDULED',
+      isHost,
+      isRegistered,
+      hasAccess,
+      instructor: {
+        id: instructor?._id?.toString() || '',
+        name: instructorName,
+        avatar: instructor?.profilePhoto || null,
+        headline: instructor?.headline || 'Lead Instructor & Workshop Host',
+      },
+    };
   }
 
   /**

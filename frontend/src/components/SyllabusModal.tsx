@@ -136,6 +136,13 @@ export const SyllabusModal: React.FC<SyllabusModalProps> = ({ course, onClose })
                             </div>
                           </div>
 
+                          {/* Dynamic Topic Description */}
+                          {topic.description && (
+                            <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                              {topic.description}
+                            </p>
+                          )}
+
                           {/* Lessons inside topic */}
                           {topic.lessons && topic.lessons.length > 0 && (
                             <div className="pl-3 border-l-2 border-slate-200 space-y-1.5 pt-1">
@@ -169,13 +176,14 @@ export const SyllabusModal: React.FC<SyllabusModalProps> = ({ course, onClose })
         <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-base font-black text-slate-900">
-              ₹{course.price?.toLocaleString('en-IN')}
+              {course.price === 0 ? 'FREE' : `₹${course.price?.toLocaleString('en-IN')}`}
             </span>
             <span className="text-xs text-slate-500 font-medium">Full Lifetime Access</span>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
+              type="button"
               onClick={() => {
                 const targetSyllabusUrl = details?.course?.syllabusUrl || course.syllabusUrl;
                 const targetFileName = details?.course?.syllabusFileName || course.syllabusFileName || `${course.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Syllabus.txt`;
@@ -192,26 +200,50 @@ export const SyllabusModal: React.FC<SyllabusModalProps> = ({ course, onClose })
                   // External Hosted PDF URL Download
                   window.open(targetSyllabusUrl, '_blank');
                 } else {
-                  // Generate and download curriculum syllabus outline document
+                  // Generate and download curriculum syllabus outline document dynamically
+                  const crs: any = details?.course || course;
                   const lines = [
                     `=============================================================`,
-                    `COURSE SYLLABUS: ${course.title.toUpperCase()}`,
+                    `COURSE SYLLABUS: ${crs.title?.toUpperCase()}`,
                     `=============================================================`,
-                    `Instructor: ${course.instructorName}`,
-                    `Category: ${course.category}`,
-                    `Level: ${course.level || 'All Levels'}`,
-                    `Price: ₹${course.price?.toLocaleString('en-IN')}`,
-                    `Generated On: ${new Date().toLocaleDateString()}`,
+                    `Instructor: ${crs.instructorName || 'Lead Instructor'}`,
+                    `Category: ${crs.category || 'Technology'}`,
+                    `Level: ${crs.level || 'All Levels'}`,
+                    `Language: ${crs.language || 'English'}`,
+                    `Course Price: ${crs.price === 0 ? 'FREE' : `₹${crs.price?.toLocaleString('en-IN')}`}`,
+                    `Generated On: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
                     `\n-------------------------------------------------------------`,
-                    `CURRICULUM MODULES & TOPICS`,
+                    `COURSE OVERVIEW`,
                     `-------------------------------------------------------------`,
+                    crs.description || crs.shortDescription || 'Comprehensive hands-on course curriculum.',
                   ];
+
+                  if (crs.learningObjectives && crs.learningObjectives.length > 0) {
+                    lines.push(`\n-------------------------------------------------------------`);
+                    lines.push(`WHAT YOU WILL LEARN`);
+                    lines.push(`-------------------------------------------------------------`);
+                    crs.learningObjectives.forEach((obj: string) => lines.push(`• ${obj}`));
+                  }
+
+                  if (crs.requirements && crs.requirements.length > 0) {
+                    lines.push(`\n-------------------------------------------------------------`);
+                    lines.push(`PREREQUISITES & REQUIREMENTS`);
+                    lines.push(`-------------------------------------------------------------`);
+                    crs.requirements.forEach((req: string) => lines.push(`• ${req}`));
+                  }
+
+                  lines.push(`\n-------------------------------------------------------------`);
+                  lines.push(`CURRICULUM MODULES & TOPICS`);
+                  lines.push(`-------------------------------------------------------------`);
 
                   syllabus.forEach((mod, mIdx) => {
                     lines.push(`\nMODULE ${mIdx + 1}: ${mod.title}`);
                     if (mod.topics && mod.topics.length > 0) {
                       mod.topics.forEach((top: any, tIdx: number) => {
                         lines.push(`   ${mIdx + 1}.${tIdx + 1} ${top.title} [${top.isFree ? 'Free Preview' : `₹${top.price}`}] (${top.duration || 30} mins)`);
+                        if (top.description) {
+                          lines.push(`       Description: ${top.description}`);
+                        }
                         if (top.lessons && top.lessons.length > 0) {
                           top.lessons.forEach((les: any, lIdx: number) => {
                             lines.push(`       - Lesson ${lIdx + 1}: ${les.title} (${les.duration || 15} mins)`);
@@ -231,7 +263,7 @@ export const SyllabusModal: React.FC<SyllabusModalProps> = ({ course, onClose })
                   const url = URL.createObjectURL(blob);
                   const link = document.createElement('a');
                   link.href = url;
-                  link.download = targetFileName.endsWith('.pdf') ? targetFileName.replace('.pdf', '_Curriculum.txt') : `${course.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Syllabus.txt`;
+                  link.download = targetFileName.endsWith('.pdf') ? targetFileName.replace('.pdf', '_Curriculum.txt') : `${crs.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Syllabus.txt`;
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);

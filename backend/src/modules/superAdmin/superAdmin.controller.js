@@ -176,6 +176,41 @@ export class SuperAdminController {
 
   static getFraud = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getFraudReports();
-    return ApiResponse.success(res, data, 'Fraud monitoring reports retrieved.');
+    return ApiResponse.success(res, data, 'Fraud telemetry and reports retrieved.');
+  });
+
+  // 11. Instructor Verifications Workflow
+  static getInstructorVerifications = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getInstructorVerifications(req.query);
+    return ApiResponse.success(res, data, 'Instructor verification applications retrieved successfully.');
+  });
+
+  static getInstructorVerificationById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const data = await SuperAdminService.getInstructorVerificationDetails(id);
+    return ApiResponse.success(res, data, 'Instructor profile details retrieved.');
+  });
+
+  static approveInstructorVerification = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const data = await SuperAdminService.approveInstructorVerification(id, req.user.userId);
+    return ApiResponse.success(res, data, 'Instructor verified and approved successfully. Dashboard access unlocked.');
+  });
+
+  static rejectInstructorVerification = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const data = await SuperAdminService.rejectInstructorVerification(id, {
+      reason,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Instructor verification application rejected.');
+  });
+
+  // 12. Platform Fees Ledger
+  static getPlatformFees = asyncHandler(async (req, res) => {
+    const { PaymentsService } = await import('../payments/payments.service.js');
+    const data = await PaymentsService.getPlatformFeesOverview(req.query);
+    return ApiResponse.success(res, data, 'Platform fees overview retrieved successfully.');
   });
 }

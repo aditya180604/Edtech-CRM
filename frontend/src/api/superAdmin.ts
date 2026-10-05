@@ -22,6 +22,7 @@ export interface SuperAdminDashboardOverview {
     ordersGrowth: string;
     refunds: number;
     payouts: number;
+    pendingVerifications?: number;
   };
   charts: {
     gmvRevenueTrend: {
@@ -72,8 +73,12 @@ export interface SuperAdminUser {
   status: 'ACTIVE' | 'PENDING' | 'TERMINATED' | 'INACTIVE';
   joinedDate: string;
   avatar?: string | null;
+  headline?: string | null;
+  bio?: string | null;
   phone?: string | null;
   department?: string;
+  coursesEnrolled?: number;
+  coursesCreated?: number;
 }
 
 export interface SuperAdminCourse {
@@ -121,6 +126,33 @@ export interface SuperAdminPayout {
   paymentMethod: string;
   status: 'COMPLETED' | 'PENDING' | 'FAILED';
   date: string;
+}
+
+export interface SuperAdminInstructorVerification {
+  id: string;
+  _id: string;
+  profileId: string;
+  userId: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  avatar?: string | null;
+  headline?: string;
+  bio: string;
+  expertise: string[];
+  skills: string[];
+  experience?: string;
+  workExperience?: string;
+  yearsOfExperience?: string;
+  currentOrganization?: string;
+  isCompleted: boolean;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'VERIFIED' | 'REJECTED';
+  rejectionReason?: string | null;
+  submittedAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
 }
 
 export interface SuperAdminCountry {
@@ -334,6 +366,78 @@ export const superAdminApi = {
 
   async getFraud(): Promise<{ success: boolean; data: any[] }> {
     const res = await apiClient.get('/super-admin/fraud');
+    return res.data;
+  },
+
+  // 11. Instructor Verifications Workflow
+  async getInstructorVerifications(params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{
+    success: boolean;
+    data: {
+      instructors: SuperAdminInstructorVerification[];
+      counts: { all: number; pending: number; approved: number; rejected: number };
+      pagination: { total: number; page: number; limit: number; pages: number };
+    };
+  }> {
+    const res = await apiClient.get('/super-admin/instructor-verifications', { params });
+    return res.data;
+  },
+
+  async getInstructorVerificationById(id: string): Promise<{ success: boolean; data: SuperAdminInstructorVerification }> {
+    const res = await apiClient.get(`/super-admin/instructor-verifications/${id}`);
+    return res.data;
+  },
+
+  async approveInstructorVerification(id: string): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/instructor-verifications/${id}/approve`);
+    return res.data;
+  },
+
+  async rejectInstructorVerification(id: string, reason?: string): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/instructor-verifications/${id}/reject`, { reason });
+    return res.data;
+  },
+
+  // 12. Platform Fees Ledger & Oversight
+  async getPlatformFees(params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{
+    success: boolean;
+    data: {
+      fees: Array<{
+        id: string;
+        orderId: string;
+        courseId: string;
+        courseTitle: string;
+        coursePrice: number;
+        amount: number;
+        currency: string;
+        paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'USER_DROPPED' | 'EXPIRED';
+        cashfreePaymentId: string;
+        paymentMethod: string;
+        instructor: {
+          id: string;
+          name: string;
+          email: string;
+          avatar?: string;
+        };
+        createdAt: string;
+        paidAt?: string;
+        errorMessage?: string;
+      }>;
+      metrics: {
+        totalCollected: number;
+        successfulTransactions: number;
+        pendingTransactions: number;
+        failedTransactions: number;
+        totalTransactions: number;
+      };
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    };
+  }> {
+    const res = await apiClient.get('/super-admin/platform-fees', { params });
     return res.data;
   },
 };

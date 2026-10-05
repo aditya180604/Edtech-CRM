@@ -96,10 +96,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await authApi.login(payload);
       if (res.success && res.data) {
-        const { user: authUser, accessToken: token } = res.data;
+        const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
         return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
@@ -116,10 +117,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await authApi.register(payload);
       if (res.success && res.data) {
-        const { user: authUser, accessToken: token } = res.data;
+        const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
         return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
@@ -138,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ignore network errors on logout
     } finally {
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       setUser(null);
       setAccessToken(null);

@@ -83,7 +83,7 @@ export const LearningPathsSection: React.FC = () => {
           {paths.map((path) => (
             <Link
               key={path.id}
-              to={`/courses`}
+              to={path.slug ? `/learning-paths/${path.slug}` : `/learning-paths`}
               className="group bg-white rounded-2xl border border-slate-100 shadow-xs hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-150 overflow-hidden flex flex-col justify-between"
             >
               <div>

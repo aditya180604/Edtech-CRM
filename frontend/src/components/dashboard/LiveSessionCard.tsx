@@ -44,9 +44,16 @@ export const LiveSessionCard: React.FC<LiveSessionCardProps> = ({ sessions }) =>
             <div key={session.sessionId} className="py-3.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.color}`}>
-                    {badge.label}
-                  </span>
+                  {(session.status === 'Started' || session.isLive || new Date(session.scheduledAt).getTime() <= Date.now()) ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 flex items-center gap-1 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      Started
+                    </span>
+                  ) : (
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                  )}
                   <span className="text-[11px] text-slate-400 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
                     <span>{formattedDate}</span>
@@ -58,15 +65,17 @@ export const LiveSessionCard: React.FC<LiveSessionCardProps> = ({ sessions }) =>
                 <p className="text-[11px] text-slate-500">Instructor: {session.instructorName}</p>
               </div>
 
-              {session.isBooked && session.meetingUrl ? (
+              {session.meetingUrl ? (
                 <a
                   href={session.meetingUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors shrink-0"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs rounded-xl transition-colors shrink-0 shadow-xs flex items-center gap-1"
                 >
-                  Join Live
+                  <span>Join Live Meeting ↗</span>
                 </a>
+              ) : session.isBooked ? (
+                <span className="text-[11px] text-slate-400 italic">Starting soon...</span>
               ) : (
                 <button className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 font-bold text-xs rounded-xl transition-colors shrink-0 cursor-pointer flex items-center gap-1">
                   <span>View</span>

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { config } from '../config/env.js';
 
 export class CashfreeService {
@@ -45,20 +46,31 @@ export class CashfreeService {
     customerEmail,
     customerPhone = '9999999999',
     returnUrl,
-    orderNote = 'Publishing Fee',
+    notifyUrl,
+    orderNote = 'Platform Publishing Fee (10%)',
   }) {
+    const formattedAmount = Number(Number(orderAmount).toFixed(2));
+    const sanitizedCustomerId = (customerId || 'CUST_DEFAULT')
+      .toString()
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 50);
+
     const body = {
       order_id: orderId,
-      order_amount: Number(orderAmount),
+      order_amount: formattedAmount,
       order_currency: currency,
       customer_details: {
-        customer_id: customerId.replace(/[^a-zA-Z0-9_-]/g, '_'),
+        customer_id: sanitizedCustomerId,
         customer_name: customerName || 'Instructor',
         customer_email: customerEmail || 'instructor@example.com',
-        customer_phone: customerPhone || '9999999999',
+        customer_phone:
+          customerPhone && customerPhone.length >= 10
+            ? customerPhone.replace(/\D/g, '').slice(-10)
+            : '9999999999',
       },
       order_meta: {
-        return_url: returnUrl || 'http://localhost:5173/instructor/courses',
+        return_url: returnUrl || 'http://localhost:5173/dashboard/instructor',
+        ...(notifyUrl ? { notify_url: notifyUrl } : {}),
       },
       order_note: orderNote,
     };
@@ -74,6 +86,8 @@ export class CashfreeService {
       paymentSessionId: result.payment_session_id,
       orderStatus: result.order_status,
       orderAmount: result.order_amount,
+      orderCurrency: result.order_currency,
+      environment: config.cashfree.env,
     };
   }
 
@@ -93,5 +107,30 @@ export class CashfreeService {
     return await this.request(`/orders/${orderId}/payments`, {
       method: 'GET',
     });
+  }
+
+  /**
+   * 4. Verify Cashfree Webhook Signature (HMAC-SHA256)
+   */
+  static verifyWebhookSignature(signature, rawBody, timestamp) {
+    if (!signature || !rawBody || !timestamp) {
+      return false;
+    }
+    try {
+      const secretKey = config.cashfree.secretKey;
+      const signatureData = `${timestamp}${rawBody}`;
+      const computedSignature = crypto
+        .createHmac('sha256', secretKey)
+        .update(signatureData)
+        .digest('base64');
+
+      return crypto.timingSafeEqual(
+        Buffer.from(signature, 'utf8'),
+        Buffer.from(computedSignature, 'utf8')
+      );
+    } catch (err) {
+      console.error('[Cashfree Signature Verification Error]:', err.message);
+      return false;
+    }
   }
 }

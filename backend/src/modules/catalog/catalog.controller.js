@@ -42,6 +42,19 @@ export class CatalogController {
   });
 
   /**
+   * GET /api/v1/catalog/webinars/room/:roomCode
+   */
+  static getWebinarRoom = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const userId = req.user?.userId || req.user?._id;
+    const room = await CatalogService.getWebinarRoom(roomCode, userId);
+    if (!room) {
+      return ApiResponse.notFound(res, 'Webinar room not found.');
+    }
+    return ApiResponse.success(res, room, 'Webinar live room data retrieved successfully');
+  });
+
+  /**
    * GET /api/v1/catalog/instructors or /api/v1/instructors
    */
   static getInstructors = asyncHandler(async (req, res) => {

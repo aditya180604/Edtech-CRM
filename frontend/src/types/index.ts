@@ -26,6 +26,7 @@ export interface AuthResponse {
   data: {
     user: User;
     accessToken: string;
+    refreshToken?: string;
   };
 }
 
@@ -74,8 +75,33 @@ export interface Course {
   badge?: string;
   description?: string;
   shortDescription?: string;
+  detailedOverview?: string;
+  language?: string;
+  skills?: string[];
+  requirements?: string[];
+  learningObjectives?: string[];
+  hardwareRequirements?: string[];
+  softwareRequirements?: string[];
+  requiredAccounts?: string[];
+  foundationalConcepts?: string[];
+  recommendedPriorKnowledge?: string[];
+  coreTools?: string[];
+  courseIncludes?: any;
   syllabusUrl?: string;
   syllabusFileName?: string;
+  // Optional Enrollment Cap & Rich Card Attributes (Image 1)
+  maxEnrollmentLimit?: number | null;
+  enrolledCount?: number;
+  isSoldOut?: boolean;
+  remainingSeats?: number | null;
+  schedule?: string;
+  mentorStatus?: string;
+  professionalTags?: string[];
+  experienceMetrics?: string[];
+  qualifications?: string[];
+  totalSessions?: number | null;
+  durationHours?: string;
+  isWishlisted?: boolean;
 }
 
 export interface CartItem {

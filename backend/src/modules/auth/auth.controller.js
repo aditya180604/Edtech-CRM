@@ -67,7 +67,10 @@ export class AuthController {
 
     return ApiResponse.success(
       res,
-      { accessToken: tokens.accessToken },
+      {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      },
       'Token refreshed successfully.'
     );
   });

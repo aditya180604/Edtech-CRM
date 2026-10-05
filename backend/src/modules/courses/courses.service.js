@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Course, Module, Topic, Lesson, Resource, User, Review } from '../../models/index.js';
+import { Course, Module, Topic, Lesson, Resource, User, Review, InstructorProfile } from '../../models/index.js';
 
 export class CoursesService {
   /**
@@ -14,22 +14,41 @@ export class CoursesService {
 
     const badges = ['BEST SELLER', 'POPULAR', 'HOT & NEW', 'TOP RATED'];
 
-    return courses.map((c, idx) => ({
-      id: c._id.toString(),
-      _id: c._id.toString(),
-      title: c.title,
-      slug: c.slug || c._id.toString(),
-      instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
-      instructorAvatar: c.instructorId?.profilePhoto || null,
-      rating: 4.8,
-      reviewCount: '12K',
-      price: c.coursePrice ?? 0,
-      thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
-      category: (c.category || 'DEVELOPMENT').toUpperCase(),
-      level: c.level || 'Beginner',
-      badge: badges[idx % badges.length],
-      shortDescription: c.shortDescription || c.description,
-    }));
+    return courses.map((c, idx) => {
+      const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
+      const enrolled = c.enrolledCount || 0;
+      const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
+      const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+
+      return {
+        id: c._id.toString(),
+        _id: c._id.toString(),
+        title: c.title,
+        slug: c.slug || c._id.toString(),
+        instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+        instructorAvatar: c.instructorId?.profilePhoto || null,
+        rating: 4.8,
+        reviewCount: '12K',
+        price: c.coursePrice ?? 0,
+        thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+        category: (c.category || 'DEVELOPMENT').toUpperCase(),
+        level: c.level || 'Beginner',
+        badge: badges[idx % badges.length],
+        shortDescription: c.shortDescription || c.description,
+        // Optional Enrollment Cap & Rich Card Attributes
+        maxEnrollmentLimit: maxLimit,
+        enrolledCount: enrolled,
+        isSoldOut,
+        remainingSeats,
+        schedule: c.schedule || '',
+        mentorStatus: c.mentorStatus || '',
+        professionalTags: Array.isArray(c.professionalTags) ? c.professionalTags : [],
+        experienceMetrics: Array.isArray(c.experienceMetrics) ? c.experienceMetrics : [],
+        qualifications: Array.isArray(c.qualifications) ? c.qualifications : [],
+        totalSessions: c.totalSessions ?? null,
+        durationHours: c.courseIncludes?.videoHours || '20+ Hours',
+      };
+    });
   }
 
   /**
@@ -96,21 +115,40 @@ export class CoursesService {
       { name: 'Advanced', count: levelCountMap['Advanced'] || 0 },
     ];
 
-    const formatted = courses.map((c) => ({
-      id: c._id.toString(),
-      _id: c._id.toString(),
-      title: c.title,
-      slug: c.slug || c._id.toString(),
-      instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
-      instructorAvatar: c.instructorId?.profilePhoto || null,
-      rating: 4.8,
-      reviewCount: '10K',
-      price: c.coursePrice ?? 0,
-      thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
-      category: (c.category || 'Development').toUpperCase(),
-      level: c.level || 'Beginner',
-      shortDescription: c.shortDescription || c.description,
-    }));
+    const formatted = courses.map((c) => {
+      const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
+      const enrolled = c.enrolledCount || 0;
+      const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
+      const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+
+      return {
+        id: c._id.toString(),
+        _id: c._id.toString(),
+        title: c.title,
+        slug: c.slug || c._id.toString(),
+        instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+        instructorAvatar: c.instructorId?.profilePhoto || null,
+        rating: 4.8,
+        reviewCount: '10K',
+        price: c.coursePrice ?? 0,
+        thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+        category: (c.category || 'Development').toUpperCase(),
+        level: c.level || 'Beginner',
+        shortDescription: c.shortDescription || c.description,
+        // Optional Enrollment Cap & Rich Card Attributes
+        maxEnrollmentLimit: maxLimit,
+        enrolledCount: enrolled,
+        isSoldOut,
+        remainingSeats,
+        schedule: c.schedule || '',
+        mentorStatus: c.mentorStatus || '',
+        professionalTags: Array.isArray(c.professionalTags) ? c.professionalTags : [],
+        experienceMetrics: Array.isArray(c.experienceMetrics) ? c.experienceMetrics : [],
+        qualifications: Array.isArray(c.qualifications) ? c.qualifications : [],
+        totalSessions: c.totalSessions ?? null,
+        durationHours: c.courseIncludes?.videoHours || '20+ Hours',
+      };
+    });
 
     return {
       courses: formatted,
@@ -147,10 +185,36 @@ export class CoursesService {
     const moduleIds = modules.map((m) => m._id);
     const topics = await Topic.find({ moduleId: { $in: moduleIds } }).sort({ order: 1 }).lean();
     const topicIds = topics.map((t) => t._id);
-    const lessons = await Lesson.find({ topicId: { $in: topicIds } }).sort({ order: 1 }).lean();
+    const lessons = await Lesson.find({
+      topicId: { $in: topicIds },
+      contentOfferingId: { $in: [null, undefined] },
+    }).sort({ order: 1 }).lean();
 
-    const syllabus = modules.map((mod) => {
-      const modTopics = topics.filter((t) => t.moduleId.toString() === mod._id.toString());
+    // Deduplicate modules by title
+    const uniqueModules = [];
+    const seenModTitles = new Set();
+    for (const mod of modules) {
+      const normModTitle = (mod.title || '').trim().toLowerCase();
+      if (!seenModTitles.has(normModTitle)) {
+        seenModTitles.add(normModTitle);
+        uniqueModules.push(mod);
+      }
+    }
+
+    const syllabus = uniqueModules.map((mod) => {
+      const modTopicsRaw = topics.filter((t) => t.moduleId.toString() === mod._id.toString());
+      
+      // Deduplicate topics within module
+      const modTopics = [];
+      const seenTopTitles = new Set();
+      for (const top of modTopicsRaw) {
+        const normTopTitle = (top.title || '').trim().toLowerCase();
+        if (!seenTopTitles.has(normTopTitle)) {
+          seenTopTitles.add(normTopTitle);
+          modTopics.push(top);
+        }
+      }
+
       const modTopicIds = modTopics.map((t) => t._id.toString());
       const modLessons = lessons.filter((l) => modTopicIds.includes(l.topicId.toString()));
       const durationSum = modTopics.reduce((acc, t) => acc + (t.duration || 30), 0);
@@ -163,27 +227,51 @@ export class CoursesService {
         lessonsCount: modLessons.length || (modTopics.length * 2),
         duration: `${Math.floor(durationSum / 60)}h ${durationSum % 60}m`,
         topics: modTopics.map((t) => {
-          const topicLessons = lessons
-            .filter((l) => l.topicId.toString() === t._id.toString())
-            .map((les) => ({
-              _id: les._id,
-              title: les.title,
-              duration: les.duration || 15,
-              playbackReference: les.playbackReference || '',
-              videoUrl: les.playbackReference || '',
+          const rawTopicLessons = lessons.filter((l) => l.topicId.toString() === t._id.toString());
+          
+          // Deduplicate lessons within topic by title
+          const topicLessons = [];
+          const seenLesTitles = new Set();
+          for (const les of rawTopicLessons) {
+            const normLesTitle = (les.title || '').trim().toLowerCase();
+            if (!seenLesTitles.has(normLesTitle)) {
+              seenLesTitles.add(normLesTitle);
+              topicLessons.push({
+                _id: les._id,
+                title: les.title,
+                duration: les.duration || 15,
+                playbackReference: les.playbackReference || '',
+                videoUrl: les.playbackReference || '',
+                resources: [
+                  { name: 'Lecture Slides.pdf', type: 'PDF', size: '2.4 MB' },
+                  { name: 'Starter Code.zip', type: 'ZIP', size: '4.8 MB' },
+                ],
+              });
+            }
+          }
+
+          if (topicLessons.length === 0) {
+            topicLessons.push({
+              _id: t._id,
+              title: t.title,
+              duration: t.duration || 30,
+              playbackReference: t.videoUrl || '',
+              videoUrl: t.videoUrl || '',
               resources: [
                 { name: 'Lecture Slides.pdf', type: 'PDF', size: '2.4 MB' },
                 { name: 'Starter Code.zip', type: 'ZIP', size: '4.8 MB' },
               ],
-            }));
+            });
+          }
 
           return {
             _id: t._id,
             title: t.title,
+            description: t.description || '',
             price: t.price ?? 0,
             isFree: t.isFree,
             duration: t.duration || 30,
-            videoUrl: topicLessons[0]?.playbackReference || '',
+            videoUrl: topicLessons[0]?.playbackReference || t.videoUrl || '',
             lessons: topicLessons,
           };
         }),
@@ -192,16 +280,44 @@ export class CoursesService {
 
     const finalPrice = course.coursePrice ?? 0;
 
+    const instProfile = course.instructorId?._id
+      ? await InstructorProfile.findOne({ userId: course.instructorId._id }).lean()
+      : null;
+
+    const instructorName = [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor';
+    const instructorAvatar = course.instructorId?.profilePhoto || instProfile?.profilePhoto || null;
+    const instructorHeadline = instProfile?.headline || instProfile?.title || course.instructorId?.headline || 'Senior Technology Lead & Certified Cloud Architect';
+    const instructorBio = instProfile?.bio || course.instructorId?.bio || 'Passionate engineering educator and technical architect with industry experience in cloud systems, production microservices, and modern development workflows.';
+    const instructorExperience = instProfile?.experience || '8+ Years';
+
+    const maxLimit = typeof course.maxEnrollmentLimit === 'number' && course.maxEnrollmentLimit > 0 ? course.maxEnrollmentLimit : null;
+    const enrolled = course.enrolledCount || 0;
+    const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
+    const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+
     return {
       course: {
         ...course,
         price: finalPrice,
         coursePrice: finalPrice,
-        instructorName: [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
-        instructorAvatar: course.instructorId?.profilePhoto || null,
+        instructorName,
+        instructorAvatar,
+        instructorHeadline,
+        instructorBio,
+        instructorExperience,
         rating: 4.8,
         reviewCount: '12,450 ratings',
         studentCount: '45,820 students',
+        maxEnrollmentLimit: maxLimit,
+        enrolledCount: enrolled,
+        isSoldOut,
+        remainingSeats,
+        schedule: course.schedule || '',
+        mentorStatus: course.mentorStatus || '',
+        professionalTags: Array.isArray(course.professionalTags) ? course.professionalTags : [],
+        experienceMetrics: Array.isArray(course.experienceMetrics) ? course.experienceMetrics : [],
+        qualifications: Array.isArray(course.qualifications) ? course.qualifications : [],
+        totalSessions: course.totalSessions ?? null,
       },
       syllabus,
     };
@@ -254,6 +370,7 @@ export class CoursesService {
         id: t._id.toString(),
         _id: t._id.toString(),
         title: t.title,
+        description: t.description || '',
         price: t.price ?? 0,
         duration: t.duration || 30,
         isFree: !!t.isFree,

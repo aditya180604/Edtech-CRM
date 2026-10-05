@@ -10,6 +10,8 @@ import { EnrolledCourseCard } from '../../components/dashboard/EnrolledCourseCar
 import { TopicCreditBanner } from '../../components/dashboard/TopicCreditBanner';
 import { StreakCard } from '../../components/dashboard/StreakCard';
 import { LiveSessionCard } from '../../components/dashboard/LiveSessionCard';
+import { NotificationBell } from '../../components/dashboard/NotificationBell';
+import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
 import { ProfileCompletionWidget } from '../../components/dashboard/ProfileCompletionWidget';
 import { RecommendationsSection } from '../../components/dashboard/RecommendationsSection';
 import { RecentOrdersSection } from '../../components/dashboard/RecentOrdersSection';
@@ -82,6 +84,9 @@ export const StudentDashboard: React.FC = () => {
           </div>
         ) : dashboardData ? (
           <div className="space-y-8">
+            {/* Real-time Live Webinar Started Notification Banner */}
+            <LiveStartedBanner />
+
             {/* 1. Header & Welcome Banner */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-900/10">
               <div className="flex items-center gap-4">
@@ -119,6 +124,9 @@ export const StudentDashboard: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <div className="bg-white/10 rounded-xl p-0.5 border border-white/10">
+                  <NotificationBell />
+                </div>
                 <button
                   onClick={() => navigate('/profile')}
                   className="px-4 py-2 bg-indigo-600/50 hover:bg-indigo-600 border border-indigo-500/30 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"

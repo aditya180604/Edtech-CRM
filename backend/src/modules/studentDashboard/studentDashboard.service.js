@@ -754,17 +754,24 @@ export class StudentDashboardService {
     const bookedWebinarIds = new Set();
     const rankedList = [];
 
-    // 1. Booked Sessions
+    // 1. Booked Sessions via Booking collection
     for (const b of userBookings) {
       const ls = b.liveSessionId;
       const w = ls?.webinarId;
       if (w) {
         bookedWebinarIds.add(w._id.toString());
         const instructor = w.instructorId;
+        const startTime = new Date(w.startTime);
+        const endTime = new Date(w.endTime);
+        const isStarted = startTime <= now && endTime >= now;
+
         rankedList.push({
           sessionId: ls._id.toString(),
+          webinarId: w._id.toString(),
           title: w.title || 'Live Workshop',
           type: 'WEBINAR',
+          status: isStarted ? 'Started' : (now < startTime ? 'SCHEDULED' : 'COMPLETED'),
+          isLive: isStarted,
           scheduledAt: w.startTime ? new Date(w.startTime).toISOString() : new Date().toISOString(),
           durationMinutes: Math.round(((w.endTime || w.startTime) - w.startTime) / 60000) || 60,
           instructorName: instructor
@@ -781,35 +788,57 @@ export class StudentDashboardService {
     const entitledTopicIdStrs = new Set(entitledTopicObjectIds.map((id) => id.toString()));
     const userInterests = new Set(user.interests || []);
 
-    // 2-5: Evaluate remaining upcoming webinars
+    // 2-5: Evaluate remaining upcoming / live webinars
     for (const w of upcomingWebinars) {
       const wId = w._id.toString();
       if (bookedWebinarIds.has(wId)) continue;
 
-      let priorityReason = 'PUBLIC';
-      if (w.courseId && entitledCourseIdStrs.has(w.courseId.toString())) {
-        priorityReason = 'ENROLLED_COURSE';
-      } else if (w.topicId && entitledTopicIdStrs.has(w.topicId.toString())) {
-        priorityReason = 'ENROLLED_TOPIC';
-      } else if (w.category && userInterests.has(w.category)) {
-        priorityReason = 'INTEREST_MATCH';
+      const isRegisteredInWebinar = Array.isArray(w.registrations) && w.registrations.some(
+        (id) => id.toString() === userId.toString()
+      );
+
+      const startTime = new Date(w.startTime);
+      const endTime = new Date(w.endTime);
+      const isStarted = startTime <= now && endTime >= now;
+
+      let priorityReason = isRegisteredInWebinar ? 'BOOKED' : 'PUBLIC';
+      if (!isRegisteredInWebinar) {
+        if (w.courseId && entitledCourseIdStrs.has(w.courseId.toString())) {
+          priorityReason = 'ENROLLED_COURSE';
+        } else if (w.topicId && entitledTopicIdStrs.has(w.topicId.toString())) {
+          priorityReason = 'ENROLLED_TOPIC';
+        } else if (w.category && userInterests.has(w.category)) {
+          priorityReason = 'INTEREST_MATCH';
+        }
       }
 
       const instructor = w.instructorId;
       rankedList.push({
         sessionId: w._id.toString(),
+        webinarId: w._id.toString(),
         title: w.title || 'Live Session',
         type: 'WEBINAR',
+        status: isStarted ? 'Started' : (now < startTime ? 'SCHEDULED' : 'COMPLETED'),
+        isLive: isStarted,
         scheduledAt: w.startTime ? new Date(w.startTime).toISOString() : new Date().toISOString(),
         durationMinutes: Math.round(((w.endTime || w.startTime) - w.startTime) / 60000) || 60,
         instructorName: instructor
           ? `${instructor.firstName || ''} ${instructor.lastName || ''}`.trim() || 'Lead Instructor'
           : 'Lead Instructor',
-        isBooked: false,
+        isBooked: isRegisteredInWebinar,
         priorityReason,
-        meetingUrl: null, // meetingUrl protected until booked
+        meetingUrl: isRegisteredInWebinar ? w.meetingUrl || null : null,
       });
     }
+
+    // Sort so BOOKED and Started sessions come first
+    rankedList.sort((a, b) => {
+      if (a.isLive && !b.isLive) return -1;
+      if (!a.isLive && b.isLive) return 1;
+      if (a.isBooked && !b.isBooked) return -1;
+      if (!a.isBooked && b.isBooked) return 1;
+      return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
+    });
 
     // Sort by priority order: BOOKED -> ENROLLED_COURSE -> ENROLLED_TOPIC -> INTEREST_MATCH -> PUBLIC
     const priorityWeight = {

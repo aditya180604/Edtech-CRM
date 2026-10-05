@@ -255,6 +255,9 @@ export const TopicsPage: React.FC = () => {
                     <h3 className="text-sm font-black text-slate-900 leading-snug line-clamp-2">
                       {topic.title}
                     </h3>
+                    {topic.description && (
+                      <p className="text-[11px] text-slate-500 font-medium line-clamp-1 mt-0.5">{topic.description}</p>
+                    )}
                     <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400 font-medium truncate">
                       <span>{topic.duration}m</span>
                       <span>•</span>
