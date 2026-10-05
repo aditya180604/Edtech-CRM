@@ -12,6 +12,7 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   emailVerified: boolean;
+  isProfileCompleted?: boolean;
   skills?: string[];
   interests?: string[];
   createdAt: string;

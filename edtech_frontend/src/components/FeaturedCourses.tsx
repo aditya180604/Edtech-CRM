@@ -173,9 +173,9 @@ export const FeaturedCourses: React.FC = () => {
                 ) : (
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-sm sm:text-base font-black text-slate-900">
-                      ₹{course.price.toLocaleString('en-IN')}
+                      {course.price === 0 ? 'FREE' : `₹${course.price.toLocaleString('en-IN')}`}
                     </span>
-                    {course.originalPrice && (
+                    {course.originalPrice && course.originalPrice > course.price && (
                       <span className="text-[11px] text-slate-400 line-through">
                         ₹{course.originalPrice.toLocaleString('en-IN')}
                       </span>

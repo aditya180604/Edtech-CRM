@@ -34,7 +34,7 @@ export const AuthModal: React.FC = () => {
 
     if (result.success && result.role) {
       closeAuth();
-      const redirectPath = getRedirectPathForRole(result.role);
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
       navigate(redirectPath);
     } else {
       setErrorMessage(result.message || 'Invalid email or password.');
@@ -66,7 +66,7 @@ export const AuthModal: React.FC = () => {
 
     if (result.success && result.role) {
       closeAuth();
-      const redirectPath = getRedirectPathForRole(result.role);
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
       navigate(redirectPath);
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');

@@ -4,8 +4,9 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { coursesApi, type CourseDetailsResponse } from '../api/courses';
 import { couponApi, type AvailableOffersResponse } from '../api/coupons';
-import { useCart } from '../context/CartContext';
 import { featuredCoursesData } from '../data/mockData';
+import { useCart } from '../context/CartContext';
+import { useToast } from '../context/ToastContext';
 import {
   Star,
   CheckCircle2,
@@ -30,7 +31,7 @@ export const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { addToCart, isInCart } = useCart();
-
+  const { success } = useToast();
   const [courseData, setCourseData] = useState<CourseDetailsResponse | null>(null);
   const [offers, setOffers] = useState<AvailableOffersResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -425,7 +426,7 @@ export const CourseDetailPage: React.FC = () => {
                                         if (top.videoUrl && top.videoUrl.startsWith('http')) {
                                           window.open(top.videoUrl, '_blank');
                                         } else {
-                                          alert(`Opening video for topic: ${top.title}`);
+                                          success('Lesson Preview', `Opening video content for topic: ${top.title}`);
                                         }
                                       }}
                                       className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer shadow-2xs"
@@ -556,7 +557,7 @@ export const CourseDetailPage: React.FC = () => {
                     </button>
 
                     <Link
-                      to="/topics"
+                      to={`/topics?courseId=${encodeURIComponent(course._id || course.id || '')}&category=${encodeURIComponent(course.category || '')}`}
                       className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center cursor-pointer text-center"
                     >
                       Buy Standalone Topics (from ₹499)

@@ -59,6 +59,7 @@ export interface ActiveEnrolledCourse {
     lessonId: string;
     title: string;
     topicId: string;
+    duration?: string | number;
   } | null;
 }
 
@@ -121,6 +122,8 @@ export interface RecommendationItem {
   slug: string;
   thumbnail: string | null;
   coursePrice: number;
+  price?: number;
+  rating?: number;
   currency: string;
   category: string;
   level: string;

@@ -84,4 +84,10 @@ export class AuthController {
 
     return ApiResponse.success(res, null, 'Logged out successfully.');
   });
+
+  static getMe = asyncHandler(async (req, res) => {
+    const userId = req.user?.userId;
+    const user = await AuthService.getMe(userId);
+    return ApiResponse.success(res, { user }, 'User profile retrieved.');
+  });
 }

@@ -6,11 +6,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useAuthModal } from '../context/AuthModalContext';
+import { useToast } from '../context/ToastContext';
 
 export const CartPage: React.FC = () => {
   const {
     items,
     removeFromCart,
+    clearCart,
     subtotal,
     discount,
     total,
@@ -21,6 +23,7 @@ export const CartPage: React.FC = () => {
   } = useCart();
   const { isAuthenticated } = useAuth();
   const { openLogin } = useAuthModal();
+  const { success } = useToast();
   const navigate = useNavigate();
 
   const [couponInput, setCouponInput] = useState('');

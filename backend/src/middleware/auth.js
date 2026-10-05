@@ -53,7 +53,7 @@ export async function optionalAuthenticate(req, res, next) {
         role: decoded.role,
       };
     }
-  } catch (err) {
+  } catch (error) {
     // Silently continue for optional auth
   }
   return next();

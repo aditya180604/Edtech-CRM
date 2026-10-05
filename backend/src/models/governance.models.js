@@ -318,3 +318,88 @@ const analyticsSchema = new mongoose.Schema(
 analyticsSchema.index({ metric: 1, date: -1 });
 
 export const Analytics = mongoose.models.Analytics || mongoose.model('Analytics', analyticsSchema);
+
+// ==========================================
+// 55. Country Model (Collection: countries)
+// ==========================================
+const countrySchema = new mongoose.Schema(
+  {
+    countryCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    currencyCode: { type: String, required: true, uppercase: true, trim: true },
+    timezone: { type: String, default: 'UTC' },
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+  },
+  { collection: 'countries', timestamps: true }
+);
+
+export const Country = mongoose.models.Country || mongoose.model('Country', countrySchema);
+
+// ==========================================
+// 56. Currency Model (Collection: currencies)
+// ==========================================
+const currencySchema = new mongoose.Schema(
+  {
+    currencyCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    symbol: { type: String, required: true },
+    exchangeRate: { type: Number, required: true, default: 1.0 }, // Base rate against INR
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+  },
+  { collection: 'currencies', timestamps: true }
+);
+
+export const Currency = mongoose.models.Currency || mongoose.model('Currency', currencySchema);
+
+// ==========================================
+// 57. Tax Model (Collection: taxes)
+// ==========================================
+const taxSchema = new mongoose.Schema(
+  {
+    countryCode: { type: String, required: true, uppercase: true, trim: true },
+    taxName: { type: String, required: true, trim: true },
+    taxType: { type: String, enum: ['DIRECT', 'INDIRECT', 'GST', 'VAT', 'SALES_TAX'], default: 'INDIRECT' },
+    taxRate: { type: Number, required: true }, // e.g. 18 for 18%
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+  },
+  { collection: 'taxes', timestamps: true }
+);
+
+export const Tax = mongoose.models.Tax || mongoose.model('Tax', taxSchema);
+
+// ==========================================
+// 58. FraudRecord Model (Collection: fraud_records)
+// ==========================================
+const fraudRecordSchema = new mongoose.Schema(
+  {
+    eventId: { type: String, unique: true, required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+    type: { type: String, required: true },
+    riskScore: { type: Number, min: 0, max: 100, default: 0 },
+    status: { type: String, enum: ['FLAGGED', 'INVESTIGATING', 'CLEARED', 'BLOCKED'], default: 'FLAGGED' },
+    reason: { type: String },
+    metadata: { type: mongoose.Schema.Types.Mixed },
+  },
+  { collection: 'fraud_records', timestamps: true }
+);
+
+export const FraudRecord = mongoose.models.FraudRecord || mongoose.model('FraudRecord', fraudRecordSchema);
+
+// ==========================================
+// 59. InfrastructureStatus Model (Collection: infrastructure_status)
+// ==========================================
+const infrastructureStatusSchema = new mongoose.Schema(
+  {
+    deploymentId: { type: String, required: true },
+    releaseVersion: { type: String, required: true },
+    environment: { type: String, default: 'production' },
+    healthStatus: { type: String, enum: ['HEALTHY', 'DEGRADED', 'DOWN'], default: 'HEALTHY' },
+    rollbackVersion: { type: String },
+  },
+  { collection: 'infrastructure_status', timestamps: true }
+);
+
+export const InfrastructureStatus =
+  mongoose.models.InfrastructureStatus || mongoose.model('InfrastructureStatus', infrastructureStatusSchema);
+
