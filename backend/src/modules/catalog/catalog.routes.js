@@ -12,6 +12,7 @@ router.get('/topics', CatalogController.getTopics);
 
 // Webinars / Live Workshops
 router.get('/webinars', CatalogController.getWebinars);
+router.get('/webinars/room/:roomCode', CatalogController.getWebinarRoom);
 
 // Instructors
 router.get('/instructors', CatalogController.getInstructors);

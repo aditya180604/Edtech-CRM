@@ -239,26 +239,29 @@ export class AuthService {
 
     try {
       const decoded = jwt.verify(incomingRefreshToken, config.jwt.refreshSecret);
-      const user = await User.findById(decoded.userId).select('+refreshTokenHash +previousRefreshTokenHash +refreshTokenRotatedAt');
+      const user = await User.findById(decoded.userId).select(
+        '+refreshTokenHash +previousRefreshTokenHash +refreshTokenRotatedAt +previousRefreshTokenExpiresAt'
+      );
 
       if (!user || user.status !== USER_STATUS.ACTIVE) {
         throw new AppError('User not found or inactive.', 401);
       }
 
-      // Check against stored token hash or recent grace-window rotated hash
+      // Check against stored token hash or recent grace-window rotated hash (30s)
       const incomingHash = this.hashToken(incomingRefreshToken);
-      const isCurrentToken = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
-      const isRecentRotatedToken =
+      const isCurrentMatch = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
+      const isGracePeriodMatch =
         user.previousRefreshTokenHash &&
         user.previousRefreshTokenHash === incomingHash &&
-        user.refreshTokenRotatedAt &&
-        Date.now() - new Date(user.refreshTokenRotatedAt).getTime() < 30000; // 30-sec grace window for parallel in-flight requests
+        ((user.refreshTokenRotatedAt && Date.now() - new Date(user.refreshTokenRotatedAt).getTime() < 30000) ||
+          (user.previousRefreshTokenExpiresAt && new Date(user.previousRefreshTokenExpiresAt) > new Date()));
 
-      if (!isCurrentToken && !isRecentRotatedToken) {
+      if (!isCurrentMatch && !isGracePeriodMatch) {
         // Token reuse or revoked session detected: revoke session completely
         user.refreshTokenHash = undefined;
         user.previousRefreshTokenHash = undefined;
         user.refreshTokenRotatedAt = undefined;
+        user.previousRefreshTokenExpiresAt = undefined;
         await user.save();
 
         await AuditLogger.log({
@@ -271,9 +274,10 @@ export class AuthService {
         throw new AppError('Invalid or expired refresh token. Please log in again.', 401);
       }
 
-      // Rotate: Issue new token pair and update history
+      // Rotate: Issue new token pair and update history with 30s grace window
       const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(user);
       user.previousRefreshTokenHash = user.refreshTokenHash || incomingHash;
+      user.previousRefreshTokenExpiresAt = new Date(Date.now() + 30000);
       user.refreshTokenHash = this.hashToken(newRefreshToken);
       user.refreshTokenRotatedAt = new Date();
       await user.save();

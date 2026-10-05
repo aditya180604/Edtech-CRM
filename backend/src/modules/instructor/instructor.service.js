@@ -17,6 +17,7 @@ import {
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 
 export class InstructorService {
   /**
@@ -212,14 +213,40 @@ export class InstructorService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') + `-${Date.now().toString().slice(-4)}`;
 
+    const price = Number(courseData.coursePrice) || 0;
+    const platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
+    const instructorEarnings = Number((price - platformFee).toFixed(2));
+
     const course = new Course({
       ...courseData,
       slug,
       instructorId: new mongoose.Types.ObjectId(userId),
+      coursePrice: price,
+      platformFee,
+      publishingFeeAmount: platformFee,
+      instructorEarnings,
+      publishingFeePaid: price === 0 ? true : !!courseData.publishingFeePaid,
       status: courseData.status || 'PUBLISHED',
       publishedAt: courseData.status === 'PUBLISHED' ? new Date() : undefined,
       syllabusUrl: courseData.syllabusUrl,
       syllabusFileName: courseData.syllabusFileName,
+      maxEnrollmentLimit:
+        courseData.maxEnrollmentLimit === '' ||
+        courseData.maxEnrollmentLimit === null ||
+        courseData.maxEnrollmentLimit === undefined
+          ? null
+          : Math.max(1, parseInt(courseData.maxEnrollmentLimit, 10)),
+      totalSessions:
+        courseData.totalSessions === '' ||
+        courseData.totalSessions === null ||
+        courseData.totalSessions === undefined
+          ? null
+          : Number(courseData.totalSessions),
+      schedule: courseData.schedule || '',
+      mentorStatus: courseData.mentorStatus || 'Pro Mentor',
+      professionalTags: Array.isArray(courseData.professionalTags) ? courseData.professionalTags : [],
+      experienceMetrics: Array.isArray(courseData.experienceMetrics) ? courseData.experienceMetrics : [],
+      qualifications: Array.isArray(courseData.qualifications) ? courseData.qualifications : [],
     });
 
     await course.save();
@@ -243,6 +270,7 @@ export class InstructorService {
               moduleId: newMod._id,
               courseId: course._id,
               title: topData.title || `Topic ${j + 1}`,
+              description: topData.description || '',
               price: Number(topData.price) || 0,
               isFree: !!topData.isFree,
               duration: Number(topData.duration) || 45,
@@ -346,12 +374,44 @@ export class InstructorService {
     if (updateData.skills) course.skills = updateData.skills;
     if (updateData.requirements) course.requirements = updateData.requirements;
     if (updateData.learningObjectives) course.learningObjectives = updateData.learningObjectives;
-    if (updateData.coursePrice !== undefined) course.coursePrice = Number(updateData.coursePrice);
+    if (updateData.coursePrice !== undefined) {
+      const price = Number(updateData.coursePrice) || 0;
+      course.coursePrice = price;
+      course.platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
+      course.publishingFeeAmount = course.platformFee;
+      course.instructorEarnings = Number((price - course.platformFee).toFixed(2));
+      if (price === 0) {
+        course.publishingFeePaid = true;
+      }
+    }
     if (updateData.currency) course.currency = updateData.currency;
     if (updateData.status) course.status = updateData.status;
     if (updateData.visibility) course.visibility = updateData.visibility;
     if (updateData.syllabusUrl !== undefined) course.syllabusUrl = updateData.syllabusUrl;
     if (updateData.syllabusFileName !== undefined) course.syllabusFileName = updateData.syllabusFileName;
+    if (updateData.maxEnrollmentLimit !== undefined) {
+      course.maxEnrollmentLimit =
+        updateData.maxEnrollmentLimit === '' || updateData.maxEnrollmentLimit === null
+          ? null
+          : Math.max(1, parseInt(updateData.maxEnrollmentLimit, 10));
+    }
+    if (updateData.schedule !== undefined) course.schedule = updateData.schedule;
+    if (updateData.mentorStatus !== undefined) course.mentorStatus = updateData.mentorStatus;
+    if (updateData.professionalTags !== undefined && Array.isArray(updateData.professionalTags)) {
+      course.professionalTags = updateData.professionalTags;
+    }
+    if (updateData.experienceMetrics !== undefined && Array.isArray(updateData.experienceMetrics)) {
+      course.experienceMetrics = updateData.experienceMetrics;
+    }
+    if (updateData.qualifications !== undefined && Array.isArray(updateData.qualifications)) {
+      course.qualifications = updateData.qualifications;
+    }
+    if (updateData.totalSessions !== undefined) {
+      course.totalSessions =
+        updateData.totalSessions === '' || updateData.totalSessions === null
+          ? null
+          : Number(updateData.totalSessions);
+    }
 
     await course.save();
 
@@ -386,6 +446,7 @@ export class InstructorService {
               moduleId: newMod._id,
               courseId: course._id,
               title: topData.title || `Topic ${j + 1}`,
+              description: topData.description || '',
               price: Number(topData.price) || 0,
               isFree: !!topData.isFree,
               duration: Number(topData.duration) || 45,
@@ -452,9 +513,20 @@ export class InstructorService {
    * 4. Update Course Price Dynamically
    */
   static async updateCoursePrice(userId, courseId, { coursePrice, currency = 'INR' }) {
+    const price = Number(coursePrice) || 0;
+    const platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
+    const instructorEarnings = Number((price - platformFee).toFixed(2));
+
     const course = await Course.findOneAndUpdate(
       { _id: courseId, instructorId: userId },
-      { coursePrice, currency },
+      {
+        coursePrice: price,
+        currency,
+        platformFee,
+        publishingFeeAmount: platformFee,
+        instructorEarnings,
+        ...(price === 0 ? { publishingFeePaid: true } : {}),
+      },
       { new: true }
     );
     return course;
@@ -629,7 +701,10 @@ export class InstructorService {
    */
   static async createWebinar(userId, webinarData) {
     const startTime = webinarData.startTime ? new Date(webinarData.startTime) : new Date(Date.now() + 86400000);
-    const endTime = webinarData.endTime ? new Date(webinarData.endTime) : new Date(startTime.getTime() + 7200000);
+    const maxEndTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
+    const endTime = webinarData.endTime && new Date(webinarData.endTime).getTime() <= maxEndTime.getTime()
+      ? new Date(webinarData.endTime)
+      : maxEndTime;
 
     // Duplicate check: prevent duplicate webinars with identical title and start time
     const cleanTitle = (webinarData.title || '').trim();
@@ -653,16 +728,34 @@ export class InstructorService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') + `-${Date.now().toString().slice(-4)}`;
 
+    const price = Number(webinarData.price) || 0;
+    const platformFee = Math.round(price * 0.10); // Standard 10% fee
+    const instructorEarnings = price - platformFee;
+
+    const roomCode =
+      webinarData.roomCode ||
+      `wb-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    
+    const isCustomUrl = !!(webinarData.meetingType === 'EXTERNAL' && webinarData.meetingUrl && webinarData.meetingUrl.trim());
+    const meetingType = isCustomUrl ? 'EXTERNAL' : 'IN_PLATFORM';
+    const meetingUrl = isCustomUrl ? webinarData.meetingUrl.trim() : `/webinars/live/${roomCode}`;
+    const meetingProvider = isCustomUrl ? 'EXTERNAL' : 'IN_PLATFORM';
+
     const webinar = await Webinar.create({
       ...webinarData,
       slug,
+      roomCode,
+      meetingType,
+      meetingProvider,
+      meetingUrl,
       webinarId: webinarData.webinarId || `webinar_${Date.now()}`,
       instructorId: new mongoose.Types.ObjectId(userId),
       startTime,
       endTime,
-      meetingUrl: webinarData.meetingUrl || '',
       capacity: Number(webinarData.capacity) || 100,
-      price: Number(webinarData.price) || 0,
+      price,
+      platformFee,
+      instructorEarnings,
       status: webinarData.status || 'SCHEDULED',
       thumbnail: webinarData.thumbnail || 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?auto=format&fit=crop&w=800&q=80',
     });
@@ -695,13 +788,33 @@ export class InstructorService {
           ? new Date(updateData.endTime)
           : new Date(new Date(updateData.startTime).getTime() + 7200000);
       }
+    } else if (updateData.endTime && !isWithin2Hours) {
+      webinar.endTime = new Date(updateData.endTime);
     }
 
     if (updateData.title !== undefined) webinar.title = updateData.title.trim();
     if (updateData.category !== undefined) webinar.category = updateData.category;
     if (updateData.capacity !== undefined) webinar.capacity = Number(updateData.capacity) || 100;
-    if (updateData.price !== undefined) webinar.price = Number(updateData.price) || 0;
-    if (updateData.meetingUrl !== undefined) webinar.meetingUrl = updateData.meetingUrl.trim();
+    if (updateData.price !== undefined) {
+      const price = Number(updateData.price) || 0;
+      webinar.price = price;
+      webinar.platformFee = Math.round(price * 0.10);
+      webinar.instructorEarnings = price - Math.round(price * 0.10);
+    }
+    if (updateData.meetingUrl !== undefined || updateData.meetingType !== undefined) {
+      if (updateData.meetingType === 'EXTERNAL' && updateData.meetingUrl && updateData.meetingUrl.trim()) {
+        webinar.meetingType = 'EXTERNAL';
+        webinar.meetingUrl = updateData.meetingUrl.trim();
+        webinar.meetingProvider = 'EXTERNAL';
+      } else if (updateData.meetingType === 'IN_PLATFORM' || !updateData.meetingUrl) {
+        webinar.meetingType = 'IN_PLATFORM';
+        if (!webinar.roomCode) {
+          webinar.roomCode = `wb-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+        }
+        webinar.meetingUrl = `/webinars/live/${webinar.roomCode}`;
+        webinar.meetingProvider = 'IN_PLATFORM';
+      }
+    }
     if (updateData.description !== undefined) webinar.description = updateData.description;
     if (updateData.status !== undefined) webinar.status = updateData.status.toUpperCase();
 
@@ -1025,33 +1138,99 @@ export class InstructorService {
       InstructorProfile.findOne({ userId }).lean(),
     ]);
 
+    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Instructor';
+    const profilePhoto = user?.profilePhoto || profile?.profilePhoto || null;
+    const headline = profile?.headline || profile?.title || user?.headline || 'Senior Technology Lead & Certified Cloud Architect';
+    const bio = profile?.bio || user?.bio || 'Passionate instructor with extensive experience in modern software engineering and cloud systems.';
+    const expertise = Array.isArray(profile?.expertise) && profile.expertise.length > 0 ? profile.expertise : ['DevOps', 'Cloud Computing', 'Web Development'];
+    const skills = Array.isArray(profile?.skills) && profile.skills.length > 0 ? profile.skills : ['React', 'Node.js', 'Docker', 'AWS'];
+    const experience = profile?.experience || profile?.yearsOfExperience || '5+ Years';
+    const qualifications = Array.isArray(profile?.qualifications) ? profile.qualifications : ['Bachelor of Technology (CSE)'];
+    const currentOrganization = profile?.currentOrganization || profile?.organization || '';
+
     return {
       user,
-      profile: profile || {
-        bio: 'Passionate instructor with 8+ years of experience in cloud technologies, containerization and automation.',
-        expertise: ['DevOps', 'Cloud Computing', 'Docker', 'Kubernetes'],
-        skills: ['AWS', 'Linux', 'CI/CD', 'Terraform', 'Ansible'],
-        experience: '8+ Years',
-        qualifications: ['B.Tech (CSE)', 'AWS Certified Solutions Architect'],
-        currentOrganization: 'Tech Solutions Pvt Ltd',
-        identityStatus: 'VERIFIED',
-        verificationStatus: 'UNDER_REVIEW',
-        kycStatus: 'NOT_STARTED',
-        payoutStatus: 'NOT_CONNECTED',
+      profile: {
+        ...(profile || {}),
+        fullName,
+        firstName: user?.firstName || '',
+        lastName: user?.lastName || '',
+        email: user?.email || '',
+        phone: user?.phone || profile?.phone || '',
+        profilePhoto,
+        headline,
+        bio,
+        expertise,
+        skills,
+        experience,
+        qualifications,
+        currentOrganization,
+        identityStatus: profile?.identityStatus || 'PENDING',
+        verificationStatus: profile?.verificationStatus || 'PENDING',
+        rejectionReason: profile?.rejectionReason || null,
+        submittedAt: profile?.submittedAt || null,
+        kycStatus: profile?.kycStatus || 'NOT_STARTED',
+        payoutStatus: profile?.payoutStatus || 'NOT_CONNECTED',
       },
     };
   }
 
-  static async updateProfile(userId, { userUpdates, profileUpdates }) {
-    if (userUpdates) {
+  static async updateProfile(userId, body) {
+    const {
+      fullName,
+      firstName,
+      lastName,
+      profilePhoto,
+      phone,
+      headline,
+      bio,
+      expertise,
+      skills,
+      experience,
+      qualifications,
+      currentOrganization,
+      userUpdates: explicitUserUpdates,
+      profileUpdates: explicitProfileUpdates,
+    } = body || {};
+
+    let userUpdates = { ...(explicitUserUpdates || {}) };
+    if (fullName) {
+      const parts = fullName.trim().split(' ');
+      userUpdates.firstName = parts[0];
+      userUpdates.lastName = parts.slice(1).join(' ');
+    }
+    if (firstName) userUpdates.firstName = firstName;
+    if (lastName) userUpdates.lastName = lastName;
+    if (profilePhoto !== undefined) userUpdates.profilePhoto = profilePhoto;
+    if (phone !== undefined) userUpdates.phone = phone;
+    if (bio !== undefined) userUpdates.bio = bio;
+    if (headline !== undefined) userUpdates.headline = headline;
+
+    if (Object.keys(userUpdates).length > 0) {
       await User.findByIdAndUpdate(userId, userUpdates, { new: true });
     }
+
+    const profileUpdates = {
+      ...(explicitProfileUpdates || {}),
+      ...(headline !== undefined ? { headline } : {}),
+      ...(bio !== undefined ? { bio } : {}),
+      ...(expertise !== undefined ? { expertise } : {}),
+      ...(skills !== undefined ? { skills } : {}),
+      ...(experience !== undefined ? { experience } : {}),
+      ...(qualifications !== undefined ? { qualifications } : {}),
+      ...(currentOrganization !== undefined ? { currentOrganization } : {}),
+      ...(profilePhoto !== undefined ? { profilePhoto } : {}),
+      ...(phone !== undefined ? { phone } : {}),
+    };
+
     const profile = await InstructorProfile.findOneAndUpdate(
       { userId },
       { ...profileUpdates, userId },
       { new: true, upsert: true }
     );
-    return profile;
+
+    const updatedUser = await User.findById(userId).lean();
+    return { user: updatedUser, profile };
   }
 
   /**
@@ -1068,6 +1247,7 @@ export class InstructorService {
       workExperience,
       yearsOfExperience,
       profilePhoto,
+      qualification,
     }
   ) {
     let firstName = '';
@@ -1084,6 +1264,7 @@ export class InstructorService {
     if (firstName) userUpdates.firstName = firstName;
     if (lastName) userUpdates.lastName = lastName;
     if (profilePhoto) userUpdates.profilePhoto = profilePhoto;
+    if (qualification !== undefined) userUpdates.qualification = qualification;
 
     const user = await User.findByIdAndUpdate(userId, userUpdates, { new: true });
 
@@ -1103,12 +1284,16 @@ export class InstructorService {
         userId,
         bio: bio || '',
         expertise: expertiseList,
+        skills: expertiseList,
         currentOrganization: currentOrganization || '',
+        qualification: qualification || '',
         workExperience: workExperience || '',
-        yearsOfExperience: yearsOfExperience || '',
+        yearsOfExperience: String(yearsOfExperience || ''),
         profilePhoto: profilePhoto || user.profilePhoto || '',
         isCompleted: true,
-        verificationStatus: 'VERIFIED',
+        verificationStatus: 'PENDING',
+        rejectionReason: null,
+        submittedAt: new Date(),
       },
       { new: true, upsert: true }
     );
@@ -1148,94 +1333,17 @@ export class InstructorService {
   }
 
   /**
-   * 17. Create Cashfree Publishing Fee Order (₹499)
+   * 17. Create Cashfree Publishing Fee Order (10% Platform Fee)
    */
   static async createPublishingFeeOrder(userId, courseId, returnUrl) {
-    const course = await Course.findOne({
-      _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
-    });
-    if (!course) throw new Error('Course not found or unauthorized');
-
-    if (course.publishingFeePaid) {
-      return {
-        alreadyPaid: true,
-        message: 'Publishing fee has already been paid for this course.',
-        course,
-      };
-    }
-
-    const instructor = await User.findById(userId).lean();
-    const orderId = `PUBFEE_${course._id.toString().slice(-6)}_${Date.now()}`;
-    const amount = course.publishingFeeAmount || 499;
-
-    const cfOrder = await CashfreeService.createOrder({
-      orderId,
-      orderAmount: amount,
-      currency: 'INR',
-      customerId: `INST_${userId.toString().slice(-6)}`,
-      customerName: `${instructor?.firstName || ''} ${instructor?.lastName || ''}`.trim() || 'Instructor',
-      customerEmail: instructor?.email || 'instructor@example.com',
-      customerPhone: instructor?.phone || '9999999999',
-      returnUrl: returnUrl || `http://localhost:5173/instructor/courses`,
-      orderNote: `Platform Publishing Fee for: ${course.title}`,
-    });
-
-    course.cashfreeOrderId = cfOrder.orderId;
-    course.cashfreePaymentSessionId = cfOrder.paymentSessionId;
-    await course.save();
-
-    return {
-      orderId: cfOrder.orderId,
-      paymentSessionId: cfOrder.paymentSessionId,
-      amount,
-      currency: 'INR',
-      courseId: course._id.toString(),
-      courseTitle: course.title,
-    };
+    return await PaymentsService.createPublishingFeeOrder(userId, courseId, returnUrl);
   }
 
   /**
    * 18. Verify Cashfree Publishing Fee Payment
    */
   static async verifyPublishingFee(userId, courseId, orderId) {
-    const course = await Course.findOne({
-      _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
-    });
-    if (!course) throw new Error('Course not found or unauthorized');
-
-    const targetOrderId = orderId || course.cashfreeOrderId;
-    let isPaid = false;
-
-    if (targetOrderId) {
-      try {
-        const orderData = await CashfreeService.getOrder(targetOrderId);
-        if (orderData.order_status === 'PAID') {
-          isPaid = true;
-        } else {
-          // Check payment attempts
-          const payments = await CashfreeService.getOrderPayments(targetOrderId).catch(() => []);
-          if (Array.isArray(payments) && payments.some((p) => p.payment_status === 'SUCCESS')) {
-            isPaid = true;
-          }
-        }
-      } catch (err) {
-        console.warn('[Cashfree Verify Warning]:', err.message);
-      }
-    }
-
-    // Mark fee paid
-    course.publishingFeePaid = true;
-    course.publishingFeePaidAt = new Date();
-    course.cashfreePaymentId = targetOrderId;
-    await course.save();
-
-    return {
-      success: true,
-      message: 'Publishing fee verified successfully.',
-      course,
-    };
+    return await PaymentsService.verifyPublishingFeePayment(userId, courseId, orderId);
   }
 
   /**

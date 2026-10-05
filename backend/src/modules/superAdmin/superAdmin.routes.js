@@ -28,6 +28,10 @@ router.get('/courses/:id/review', SuperAdminController.getCourseReview);
 router.post('/courses/:id/approve', SuperAdminController.approveCourse);
 router.post('/courses/:id/reject', SuperAdminController.rejectCourse);
 router.get('/instructors', SuperAdminController.getInstructorsList);
+router.get('/instructor-verifications', SuperAdminController.getInstructorVerifications);
+router.get('/instructor-verifications/:id', SuperAdminController.getInstructorVerificationById);
+router.post('/instructor-verifications/:id/approve', SuperAdminController.approveInstructorVerification);
+router.post('/instructor-verifications/:id/reject', SuperAdminController.rejectInstructorVerification);
 
 // 4. Orders Management
 router.get('/orders', SuperAdminController.getOrders);
@@ -57,5 +61,8 @@ router.patch('/taxes/:id/toggle', SuperAdminController.toggleTax);
 // 10. Infrastructure & Fraud
 router.get('/infrastructure', SuperAdminController.getInfrastructure);
 router.get('/fraud', SuperAdminController.getFraud);
+
+// 11. Platform Fees Management (Image & Real Cashfree Fees Oversight)
+router.get('/platform-fees', SuperAdminController.getPlatformFees);
 
 export const superAdminRoutes = router;

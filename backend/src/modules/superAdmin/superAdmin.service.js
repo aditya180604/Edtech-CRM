@@ -18,6 +18,8 @@ import {
   FraudRecord,
   InfrastructureStatus,
   InstructorProfile,
+  Notification,
+  PlatformFee,
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
 
@@ -42,6 +44,8 @@ export class SuperAdminService {
       allCompletedOrders,
       allCourses,
       recentLogs,
+      pendingVerificationsCount,
+      verifiedPlatformFees,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ role: ROLES.STUDENT }),
@@ -57,13 +61,17 @@ export class SuperAdminService {
       Order.find({ status: { $in: ['COMPLETED', 'PAID'] } }).select('totalAmount createdAt items').lean(),
       Course.find({ status: 'PUBLISHED' }).select('category coursePrice').lean(),
       AuditLog.find().sort({ timestamp: -1 }).limit(8).populate('actorId', 'firstName lastName email role').lean(),
+      InstructorProfile.countDocuments({ verificationStatus: { $in: ['PENDING', 'UNDER_REVIEW'] } }),
+      PlatformFee.find({ payment_status: 'SUCCESS' }).lean(),
     ]);
 
     // Calculate GMV (Gross Merchandise Value) strictly from real orders
     const rawGMV = allCompletedOrders.reduce((sum, ord) => sum + (ord.totalAmount || 0), 0);
     const gmv = rawGMV;
-    const platformRevenue = Math.round(gmv * 0.172); // 17.2% Take Rate
-    const takeRate = gmv > 0 ? ((platformRevenue / gmv) * 100).toFixed(1) : '17.2';
+    const studentOrderRevenue = Math.round(gmv * 0.172); // 17.2% Take Rate from student purchases
+    const platformFeesRevenue = verifiedPlatformFees.reduce((sum, fee) => sum + (fee.amount || 0), 0);
+    const platformRevenue = studentOrderRevenue + Math.round(platformFeesRevenue);
+    const takeRate = gmv > 0 ? ((studentOrderRevenue / gmv) * 100).toFixed(1) : '17.2';
 
     // Compute Category breakdown dynamically from actual courses
     const categoryCountMap = {};
@@ -119,6 +127,7 @@ export class SuperAdminService {
         ordersGrowth: '+11.2%',
         refunds: refundsCount,
         payouts: payoutsCount,
+        pendingVerifications: pendingVerificationsCount,
       },
       charts: {
         gmvRevenueTrend: {
@@ -554,6 +563,320 @@ export class SuperAdminService {
   }
 
   /**
+   * 3c-1. Instructor Verifications Queue (Onboarding Profile Review & Approval Workflow)
+   */
+  static async getInstructorVerifications({ status, search, page = 1, limit = 50 } = {}) {
+    // 1. Fetch all InstructorProfile documents
+    const allProfiles = await InstructorProfile.find()
+      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt')
+      .populate('reviewedBy', 'firstName lastName email')
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+
+    // Map existing user IDs so approved or existing instructors are never misclassified as pending orphans
+    const existingUserMap = new Map();
+    allProfiles.forEach((p) => {
+      const uId = p.userId?._id?.toString() || p.userId?.toString();
+      if (uId) {
+        existingUserMap.set(uId, p.verificationStatus || 'PENDING');
+      }
+    });
+
+    // 2. Find any newly registered instructors who haven't completed a profile document yet
+    const orphanInstructors = await User.find({
+      role: ROLES.INSTRUCTOR,
+      _id: { $nin: Array.from(existingUserMap.keys()) },
+      status: { $ne: 'TERMINATED' },
+    }).lean();
+
+    const orphanProfiles = orphanInstructors.map((u) => ({
+      _id: u._id,
+      userId: u,
+      bio: u.bio || '',
+      headline: u.headline || '',
+      expertise: u.skills || [],
+      skills: u.skills || [],
+      experience: '',
+      workExperience: '',
+      yearsOfExperience: '',
+      currentOrganization: '',
+      profilePhoto: u.profilePhoto || '',
+      verificationStatus: u.status === 'ACTIVE' ? 'VERIFIED' : 'PENDING',
+      isCompleted: !!u.isProfileCompleted,
+      createdAt: u.createdAt,
+      updatedAt: u.updatedAt,
+      submittedAt: u.createdAt,
+    }));
+
+    // 3. Combine into unified application list
+    const combined = [...allProfiles, ...orphanProfiles];
+
+    // Compute accurate counts across all applications
+    const pendingCount = combined.filter(
+      (p) => !p.verificationStatus || ['PENDING', 'UNDER_REVIEW'].includes(p.verificationStatus)
+    ).length;
+    const approvedCount = combined.filter((p) => ['VERIFIED', 'APPROVED'].includes(p.verificationStatus)).length;
+    const rejectedCount = combined.filter((p) => p.verificationStatus === 'REJECTED').length;
+
+    // 4. Filter by status tab
+    let filtered = combined;
+    if (status && status !== 'ALL' && status !== 'All') {
+      const upper = status.toUpperCase();
+      if (upper === 'PENDING') {
+        filtered = combined.filter((p) => !p.verificationStatus || ['PENDING', 'UNDER_REVIEW'].includes(p.verificationStatus));
+      } else if (upper === 'APPROVED' || upper === 'VERIFIED') {
+        filtered = combined.filter((p) => ['VERIFIED', 'APPROVED'].includes(p.verificationStatus));
+      } else if (upper === 'REJECTED') {
+        filtered = combined.filter((p) => p.verificationStatus === 'REJECTED');
+      }
+    }
+
+    // 5. Apply search filter
+    if (search && search.trim()) {
+      const s = search.trim().toLowerCase();
+      filtered = filtered.filter((p) => {
+        const u = p.userId || {};
+        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
+        const email = (u.email || '').toLowerCase();
+        const org = (p.currentOrganization || '').toLowerCase();
+        const bio = (p.bio || '').toLowerCase();
+        const exp = Array.isArray(p.expertise) ? p.expertise.join(' ').toLowerCase() : '';
+        return fullName.includes(s) || email.includes(s) || org.includes(s) || bio.includes(s) || exp.includes(s);
+      });
+    }
+
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 50;
+    const total = filtered.length;
+    const paginated = filtered.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+    return {
+      instructors: paginated.map((p) => {
+        const u = p.userId || {};
+        const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Instructor';
+        return {
+          id: p._id.toString(),
+          _id: p._id.toString(),
+          profileId: p._id.toString(),
+          userId: u._id?.toString() || (p.userId ? p.userId.toString() : p._id.toString()),
+          name,
+          firstName: u.firstName || '',
+          lastName: u.lastName || '',
+          email: u.email || '',
+          phone: u.phone || p.phone || '',
+          avatar: u.profilePhoto || p.profilePhoto || null,
+          headline: p.headline || 'Instructor',
+          bio: p.bio || '',
+          expertise: Array.isArray(p.expertise) ? p.expertise : [],
+          skills: Array.isArray(p.skills) ? p.skills : [],
+          experience: p.experience || p.yearsOfExperience || '',
+          workExperience: p.workExperience || '',
+          yearsOfExperience: p.yearsOfExperience || '',
+          currentOrganization: p.currentOrganization || '',
+          isCompleted: p.isCompleted !== false,
+          verificationStatus: p.verificationStatus || 'PENDING',
+          rejectionReason: p.rejectionReason || null,
+          submittedAt: p.submittedAt || p.createdAt || new Date(),
+          reviewedAt: p.reviewedAt || null,
+          reviewedBy: p.reviewedBy
+            ? `${p.reviewedBy.firstName || ''} ${p.reviewedBy.lastName || ''}`.trim() || 'Super Admin'
+            : null,
+          createdAt: p.createdAt,
+        };
+      }),
+      counts: {
+        all: combined.length,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+      },
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  }
+
+  /**
+   * 3c-2. Detailed Instructor Profile for Modal Review
+   */
+  static async getInstructorVerificationDetails(id) {
+    const profile = await InstructorProfile.findOne({
+      $or: [
+        { _id: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+        { userId: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+      ].filter(Boolean),
+    })
+      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt')
+      .populate('reviewedBy', 'firstName lastName email')
+      .lean();
+
+    if (!profile) {
+      const user = await User.findById(id).lean();
+      if (!user) throw new Error('Instructor application not found.');
+      return {
+        id: user._id.toString(),
+        _id: user._id.toString(),
+        userId: user._id.toString(),
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Instructor',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        avatar: user.profilePhoto || null,
+        bio: user.bio || '',
+        headline: user.headline || '',
+        expertise: user.skills || [],
+        skills: user.skills || [],
+        experience: '',
+        workExperience: '',
+        yearsOfExperience: '',
+        currentOrganization: '',
+        verificationStatus: 'PENDING',
+        isCompleted: !!user.isProfileCompleted,
+        submittedAt: user.createdAt,
+      };
+    }
+
+    const u = profile.userId || {};
+    return {
+      id: profile._id.toString(),
+      _id: profile._id.toString(),
+      profileId: profile._id.toString(),
+      userId: u._id?.toString() || profile.userId?.toString(),
+      name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Instructor',
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      email: u.email || '',
+      phone: u.phone || profile.phone || '',
+      avatar: u.profilePhoto || profile.profilePhoto || null,
+      headline: profile.headline || 'Instructor',
+      bio: profile.bio || '',
+      expertise: Array.isArray(profile.expertise) ? profile.expertise : [],
+      skills: Array.isArray(profile.skills) ? profile.skills : [],
+      experience: profile.experience || profile.yearsOfExperience || '',
+      workExperience: profile.workExperience || '',
+      yearsOfExperience: profile.yearsOfExperience || '',
+      currentOrganization: profile.currentOrganization || '',
+      isCompleted: profile.isCompleted !== false,
+      verificationStatus: profile.verificationStatus || 'PENDING',
+      rejectionReason: profile.rejectionReason || null,
+      submittedAt: profile.submittedAt || profile.createdAt,
+      reviewedAt: profile.reviewedAt || null,
+      reviewedBy: profile.reviewedBy
+        ? `${profile.reviewedBy.firstName || ''} ${profile.reviewedBy.lastName || ''}`.trim() || 'Super Admin'
+        : null,
+    };
+  }
+
+  /**
+   * 3c-3. Approve Instructor Verification (Unlocks Instructor Dashboard)
+   */
+  static async approveInstructorVerification(id, actorId) {
+    let profile = await InstructorProfile.findOne({
+      $or: [
+        { _id: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+        { userId: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+      ].filter(Boolean),
+    });
+
+    if (!profile) {
+      const user = await User.findById(id);
+      if (!user) throw new Error('Instructor not found.');
+      profile = await InstructorProfile.create({
+        userId: user._id,
+        bio: user.bio || '',
+        expertise: user.skills || [],
+        isCompleted: true,
+        verificationStatus: 'VERIFIED',
+        reviewedAt: new Date(),
+        reviewedBy: actorId,
+      });
+    } else {
+      profile.verificationStatus = 'VERIFIED';
+      profile.reviewedAt = new Date();
+      profile.reviewedBy = actorId;
+      profile.rejectionReason = undefined;
+      await profile.save();
+    }
+
+    if (profile.userId) {
+      await User.findByIdAndUpdate(profile.userId, { status: 'ACTIVE', isProfileCompleted: true });
+      try {
+        await Notification.create({
+          userId: profile.userId,
+          title: 'Profile Approved! Welcome to Instructor Dashboard',
+          message: 'Congratulations! Your instructor profile has been reviewed and approved by the Super Admin team. Your teaching dashboard is now fully unlocked.',
+          type: 'SYSTEM',
+          category: 'SYSTEM',
+          status: 'UNREAD',
+          actionUrl: '/dashboard/instructor',
+        });
+      } catch (e) {
+        console.warn('Notification create warning:', e.message);
+      }
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'APPROVE_INSTRUCTOR_VERIFICATION',
+      resourceType: 'INSTRUCTOR_PROFILE',
+      resourceId: profile._id,
+      newValue: { verificationStatus: 'VERIFIED' },
+    });
+
+    return profile;
+  }
+
+  /**
+   * 3c-4. Reject Instructor Verification
+   */
+  static async rejectInstructorVerification(id, { reason, actorId }) {
+    let profile = await InstructorProfile.findOne({
+      $or: [
+        { _id: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+        { userId: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+      ].filter(Boolean),
+    });
+
+    if (!profile) throw new Error('Instructor profile not found.');
+
+    profile.verificationStatus = 'REJECTED';
+    profile.rejectionReason = reason || 'Your application could not be verified with the provided details.';
+    profile.reviewedAt = new Date();
+    profile.reviewedBy = actorId;
+    await profile.save();
+
+    if (profile.userId) {
+      try {
+        await Notification.create({
+          userId: profile.userId,
+          title: 'Instructor Application Update',
+          message: `Your instructor application was not approved. Feedback: ${reason || 'Details required revision.'}. Please update your profile and re-submit.`,
+          type: 'SYSTEM',
+          category: 'SYSTEM',
+          status: 'UNREAD',
+          actionUrl: '/instructor/onboarding',
+        });
+      } catch (e) {
+        console.warn('Notification create warning:', e.message);
+      }
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'REJECT_INSTRUCTOR_VERIFICATION',
+      resourceType: 'INSTRUCTOR_PROFILE',
+      resourceId: profile._id,
+      newValue: { verificationStatus: 'REJECTED', reason },
+    });
+
+    return profile;
+  }
+
+  /**
    * 3d. Create & Publish Course on Behalf of an Instructor (Admin Privileged Action)
    * - Zero fee (waived)
    * - Pre-approved (approvalStatus: 'APPROVED')
@@ -566,11 +889,26 @@ export class SuperAdminService {
       title,
       shortDescription,
       description,
+      detailedOverview = '',
+      targetAudience = [],
+      courseGoals = [],
+      teachingMethodology = '',
+      foundationalConcepts = [],
+      recommendedPriorKnowledge = [],
+      coreTools = [],
+      hardwareRequirements = [],
+      softwareRequirements = [],
+      requiredAccounts = [],
+      courseIncludes = {},
+      promotionalVideo = '',
       category = 'Development',
       subcategory = '',
       level = 'Beginner',
       language = 'English',
       coursePrice = 0,
+      discountPrice = 0,
+      accessDuration = 'Lifetime Access',
+      certificateSettings,
       currency = 'INR',
       thumbnail = '',
       banner = '',
@@ -613,11 +951,26 @@ export class SuperAdminService {
       slug,
       shortDescription: shortDescription || '',
       description: description || '',
+      detailedOverview: detailedOverview || description || '',
+      targetAudience: Array.isArray(targetAudience) ? targetAudience : [],
+      courseGoals: Array.isArray(courseGoals) ? courseGoals : [],
+      teachingMethodology: Array.isArray(teachingMethodology) ? teachingMethodology : (teachingMethodology ? [teachingMethodology] : []),
+      foundationalConcepts: Array.isArray(foundationalConcepts) ? foundationalConcepts : [],
+      recommendedPriorKnowledge: Array.isArray(recommendedPriorKnowledge) ? recommendedPriorKnowledge : [],
+      coreTools: Array.isArray(coreTools) ? coreTools : [],
+      hardwareRequirements: Array.isArray(hardwareRequirements) ? hardwareRequirements : [],
+      softwareRequirements: Array.isArray(softwareRequirements) ? softwareRequirements : [],
+      requiredAccounts: Array.isArray(requiredAccounts) ? requiredAccounts : [],
+      courseIncludes: courseIncludes || {},
+      promotionalVideo: promotionalVideo || '',
       category,
       subcategory,
       level,
       language,
       coursePrice: Number(coursePrice) || 0,
+      discountPrice: Number(discountPrice) || 0,
+      accessDuration: accessDuration || 'Lifetime Access',
+      certificateEnabled: certificateSettings?.enableCertificate ?? true,
       currency,
       thumbnail,
       banner,
@@ -628,6 +981,9 @@ export class SuperAdminService {
       learningObjectives: Array.isArray(learningObjectives) ? learningObjectives : [],
       status: courseStatus,
       approvalStatus,
+      approvedAt: publishDirectly ? new Date() : undefined,
+      approvedBy: publishDirectly ? adminId : undefined,
+      publishedAt: publishDirectly ? new Date() : undefined,
       publishingFeePaid: true,
       publishingFeeAmount: 0,
       publishingFeePaidAt: new Date(),
@@ -653,6 +1009,7 @@ export class SuperAdminService {
               courseId: course._id,
               moduleId: newModule._id,
               title: top.title?.trim() || `Topic ${tIdx + 1}`,
+              description: top.description || '',
               price: top.price ?? (course.coursePrice ? Math.round(course.coursePrice / (modules.length * mod.topics.length || 1)) : 0),
               isFree: !!top.isFree,
               duration: top.duration || 30,

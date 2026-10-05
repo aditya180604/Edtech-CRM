@@ -29,18 +29,18 @@ export const config = {
       : ['http://localhost:5173', 'http://localhost:3000'],
   },
   cashfree: {
-    env: process.env.CASHFREE_ENV || 'SANDBOX',
+    env: (process.env.CASHFREE_ENV || 'SANDBOX').toUpperCase(),
     apiVersion: process.env.CASHFREE_API_VERSION || '2023-08-01',
     appId:
-      process.env.CASHFREE_ENV === 'PRODUCTION'
-        ? process.env.CASHFREE_APP_ID_PRODUCTION
-        : process.env.CASHFREE_APP_ID_SANDBOX || 'TEST10754511fde0a856149a27cfd56211545701',
+      (process.env.CASHFREE_ENV || '').toUpperCase() === 'PRODUCTION'
+        ? (process.env.CASHFREE_APP_ID_PRODUCTION || process.env.CASHFREE_APP_ID)
+        : (process.env.CASHFREE_APP_ID_SANDBOX || process.env.CASHFREE_APP_ID || 'TEST10754511fde0a856149a27cfd56211545701'),
     secretKey:
-      process.env.CASHFREE_ENV === 'PRODUCTION'
-        ? process.env.CASHFREE_SECRET_KEY_PRODUCTION
-        : process.env.CASHFREE_SECRET_KEY_SANDBOX || 'cfsk_ma_test_35e2647e899a341cd2bd8266f123c975_04c396a7',
+      (process.env.CASHFREE_ENV || '').toUpperCase() === 'PRODUCTION'
+        ? (process.env.CASHFREE_SECRET_KEY_PRODUCTION || process.env.CASHFREE_SECRET_KEY)
+        : (process.env.CASHFREE_SECRET_KEY_SANDBOX || process.env.CASHFREE_SECRET_KEY || 'cfsk_ma_test_35e2647e899a341cd2bd8266f123c975_04c396a7'),
     baseUrl:
-      process.env.CASHFREE_ENV === 'PRODUCTION'
+      (process.env.CASHFREE_ENV || '').toUpperCase() === 'PRODUCTION'
         ? 'https://api.cashfree.com/pg'
         : 'https://sandbox.cashfree.com/pg',
   },

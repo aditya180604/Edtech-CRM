@@ -24,6 +24,7 @@ router.patch('/courses/:id/visibility', InstructorController.updateVisibility);
 router.post('/courses/:id/submit-for-review', InstructorController.submitForReview);
 router.post('/courses/:id/publishing-fee/create-order', InstructorController.createPublishingFeeOrder);
 router.post('/courses/:id/publishing-fee/verify', InstructorController.verifyPublishingFee);
+router.get('/courses/:id/publishing-fee/status', InstructorController.getPublishingFeeStatus);
 router.post('/courses/:id/publish', InstructorController.publishCourse);
 
 // 3. Curriculum Hierarchy (Modules -> Topics -> Lessons)

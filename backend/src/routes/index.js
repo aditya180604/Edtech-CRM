@@ -11,7 +11,9 @@ import { learningPathRoutes } from '../modules/learningPaths/learningPath.routes
 import { couponRoutes } from '../modules/coupons/coupon.routes.js';
 import { cartRoutes } from '../modules/cart/cart.routes.js';
 import { checkoutRoutes } from '../modules/checkout/checkout.routes.js';
-import { paymentRoutes } from '../modules/payments/payment.routes.js';
+import { paymentRoutes as studentPaymentRoutes } from '../modules/payments/payment.routes.js';
+import { paymentRoutes as instructorPaymentRoutes } from '../modules/payments/payments.routes.js';
+import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -37,6 +39,9 @@ router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
 router.use('/webinars', webinarsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/payments', instructorPaymentRoutes);
+router.use('/payments', studentPaymentRoutes);
 router.use('/dashboard/student', studentDashboardRoutes);
 router.use('/', learningPathRoutes);
 router.use('/catalog', catalogRoutes);
@@ -44,6 +49,5 @@ router.use('/', catalogRoutes);
 router.use('/', couponRoutes);
 router.use('/', cartRoutes);
 router.use('/', checkoutRoutes);
-router.use('/payments', paymentRoutes);
 
 export const apiRouter = router;
