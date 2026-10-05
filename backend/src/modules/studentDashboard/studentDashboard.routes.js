@@ -14,4 +14,18 @@ router.get(
   StudentDashboardController.getDashboardOverview
 );
 
+router.post(
+  '/wishlist',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  StudentDashboardController.toggleWishlist
+);
+
+router.get(
+  '/wishlist/ids',
+  authenticate,
+  authorize(ROLES.STUDENT),
+  StudentDashboardController.getWishlistIds
+);
+
 export const studentDashboardRoutes = router;

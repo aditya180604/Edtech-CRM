@@ -97,6 +97,7 @@ export interface WishlistItem {
 export interface RecentOrderItem {
   orderId: string;
   orderNumber: string;
+  itemTitle?: string;
   totalAmount: number;
   payableAmount: number;
   currency: string;

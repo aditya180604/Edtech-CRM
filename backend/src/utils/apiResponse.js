@@ -13,6 +13,16 @@ export class ApiResponse {
   static created(res, data, message = 'Created successfully') {
     return res.status(201).json(new ApiResponse(201, data, message));
   }
+
+  static error(res, message = 'Internal Server Error', statusCode = 500, errors = []) {
+    return res.status(statusCode).json({
+      statusCode,
+      success: false,
+      message,
+      errors: Array.isArray(errors) ? errors : [errors],
+      data: null,
+    });
+  }
 }
 
 export class AppError extends Error {

@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Bookmark, ArrowRight, User, BookOpen } from 'lucide-react';
+import { Star, Bookmark, ArrowRight, User, BookOpen, CheckCircle2 } from 'lucide-react';
 import { coursesApi } from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
 import { SyllabusModal } from './SyllabusModal';
 import type { Course } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { useAuthModal } from '../context/AuthModalContext';
+import { toggleWishlist, getWishlistIds } from '../api/studentDashboard';
 
 export const FeaturedCourses: React.FC = () => {
+  const { isAuthenticated } = useAuth();
+  const { openLogin } = useAuthModal();
   const [courses, setCourses] = useState<Course[]>(featuredCoursesData);
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [selectedSyllabusCourse, setSelectedSyllabusCourse] = useState<Course | null>(null);
@@ -25,12 +30,42 @@ export const FeaturedCourses: React.FC = () => {
     loadFeatured();
   }, []);
 
-  const toggleBookmark = (e: React.MouseEvent, id: string) => {
+  // Sync wishlist for logged-in user
+  useEffect(() => {
+    if (isAuthenticated) {
+      getWishlistIds()
+        .then((ids) => {
+          if (Array.isArray(ids)) {
+            setBookmarkedIds(ids);
+          }
+        })
+        .catch((err) => console.warn('Could not fetch wishlist IDs:', err));
+    } else {
+      setBookmarkedIds([]);
+    }
+  }, [isAuthenticated]);
+
+  const toggleBookmark = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isAuthenticated) {
+      openLogin();
+      return;
+    }
+
     setBookmarkedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+
+    try {
+      await toggleWishlist(id, 'COURSE');
+    } catch (err) {
+      console.error('Failed to toggle wishlist item:', err);
+      setBookmarkedIds((prev) =>
+        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      );
+    }
   };
 
   return (
@@ -130,16 +165,23 @@ export const FeaturedCourses: React.FC = () => {
 
               {/* Price & Action Row (Image 4 Upgrade with Syllabus Button) */}
               <div className="px-4 pb-4 pt-2.5 border-t border-slate-50 flex items-center justify-between gap-2">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-sm sm:text-base font-black text-slate-900">
-                    ₹{course.price.toLocaleString('en-IN')}
+                {course.isEnrolled || course.isOwned ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black shadow-2xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Enrolled
                   </span>
-                  {course.originalPrice && (
-                    <span className="text-[11px] text-slate-400 line-through">
-                      ₹{course.originalPrice.toLocaleString('en-IN')}
+                ) : (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-sm sm:text-base font-black text-slate-900">
+                      ₹{course.price.toLocaleString('en-IN')}
                     </span>
-                  )}
-                </div>
+                    {course.originalPrice && (
+                      <span className="text-[11px] text-slate-400 line-through">
+                        ₹{course.originalPrice.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center gap-1.5">
                   <button
@@ -155,7 +197,7 @@ export const FeaturedCourses: React.FC = () => {
                     <span>Syllabus</span>
                   </button>
                   <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 flex items-center gap-0.5">
-                    View <ArrowRight className="w-3 h-3" />
+                    {course.isEnrolled || course.isOwned ? 'Continue' : 'View'} <ArrowRight className="w-3 h-3" />
                   </span>
                 </div>
               </div>

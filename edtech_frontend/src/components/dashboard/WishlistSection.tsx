@@ -31,7 +31,7 @@ export const WishlistSection: React.FC<WishlistSectionProps> = ({ wishlist }) =>
           return (
             <div
               key={item.wishlistId}
-              onClick={() => navigate(`/courses/${item.slug}`)}
+              onClick={() => navigate(`/course/${item.slug}`)}
               className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 cursor-pointer group"
             >
               <div className="flex items-center gap-3 min-w-0">

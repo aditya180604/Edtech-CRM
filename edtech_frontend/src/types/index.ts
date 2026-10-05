@@ -58,6 +58,7 @@ export interface Course {
   slug: string;
   instructorName: string;
   instructorTitle?: string;
+  instructorBio?: string;
   instructorAvatar?: string;
   rating: number;
   reviewCount: string;
@@ -75,6 +76,8 @@ export interface Course {
   shortDescription?: string;
   syllabusUrl?: string;
   syllabusFileName?: string;
+  isEnrolled?: boolean;
+  isOwned?: boolean;
 }
 
 export interface CartItem {

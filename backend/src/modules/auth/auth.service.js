@@ -206,17 +206,26 @@ export class AuthService {
 
     try {
       const decoded = jwt.verify(incomingRefreshToken, config.jwt.refreshSecret);
-      const user = await User.findById(decoded.userId).select('+refreshTokenHash');
+      const user = await User.findById(decoded.userId).select('+refreshTokenHash +previousRefreshTokenHash +refreshTokenRotatedAt');
 
       if (!user || user.status !== USER_STATUS.ACTIVE) {
         throw new AppError('User not found or inactive.', 401);
       }
 
-      // Check against stored single-use token hash
+      // Check against stored token hash or recent grace-window rotated hash
       const incomingHash = this.hashToken(incomingRefreshToken);
-      if (!user.refreshTokenHash || user.refreshTokenHash !== incomingHash) {
+      const isCurrentToken = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
+      const isRecentRotatedToken =
+        user.previousRefreshTokenHash &&
+        user.previousRefreshTokenHash === incomingHash &&
+        user.refreshTokenRotatedAt &&
+        Date.now() - new Date(user.refreshTokenRotatedAt).getTime() < 30000; // 30-sec grace window for parallel in-flight requests
+
+      if (!isCurrentToken && !isRecentRotatedToken) {
         // Token reuse or revoked session detected: revoke session completely
         user.refreshTokenHash = undefined;
+        user.previousRefreshTokenHash = undefined;
+        user.refreshTokenRotatedAt = undefined;
         await user.save();
 
         await AuditLogger.log({
@@ -229,9 +238,11 @@ export class AuthService {
         throw new AppError('Invalid or expired refresh token. Please log in again.', 401);
       }
 
-      // Rotate: Issue new token pair and update hash
+      // Rotate: Issue new token pair and update history
       const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(user);
+      user.previousRefreshTokenHash = user.refreshTokenHash || incomingHash;
       user.refreshTokenHash = this.hashToken(newRefreshToken);
+      user.refreshTokenRotatedAt = new Date();
       await user.save();
 
       return { accessToken, refreshToken: newRefreshToken };

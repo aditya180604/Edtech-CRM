@@ -7,6 +7,10 @@ import { coursesRoutes } from '../modules/courses/courses.routes.js';
 import { studentDashboardRoutes } from '../modules/studentDashboard/studentDashboard.routes.js';
 import { catalogRoutes } from '../modules/catalog/catalog.routes.js';
 import { learningPathRoutes } from '../modules/learningPaths/learningPath.routes.js';
+import { couponRoutes } from '../modules/coupons/coupon.routes.js';
+import { cartRoutes } from '../modules/cart/cart.routes.js';
+import { checkoutRoutes } from '../modules/checkout/checkout.routes.js';
+import { paymentRoutes } from '../modules/payments/payment.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -35,5 +39,11 @@ router.use('/dashboard/student', studentDashboardRoutes);
 router.use('/', learningPathRoutes);
 router.use('/catalog', catalogRoutes);
 router.use('/', catalogRoutes);
+router.use('/', couponRoutes);
+router.use('/', cartRoutes);
+router.use('/', checkoutRoutes);
+router.use('/payments', paymentRoutes);
 
 export const apiRouter = router;
+
+

@@ -19,6 +19,8 @@ export async function authenticate(req, res, next) {
     const decoded = jwt.verify(token, config.jwt.secret);
     req.user = {
       userId: decoded.userId,
+      _id: decoded.userId,
+      id: decoded.userId,
       email: decoded.email,
       role: decoded.role,
     };

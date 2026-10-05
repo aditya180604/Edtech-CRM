@@ -13,6 +13,9 @@ router.get('/learning-paths', optionalAuthenticate, LearningPathController.getLe
 // Public/student dynamic roadmap (Path -> Domains -> Topics)
 router.get('/learning-paths/:slugOrId', optionalAuthenticate, LearningPathController.getLearningPathBySlug);
 
+// Authenticated student enrollment in a Learning Path
+router.post('/learning-paths/:slugOrId/enroll', authenticate, LearningPathController.enrollLearningPath);
+
 // ============================================================
 // TOPIC & TUTOR OFFERINGS MARKETPLACE ROUTES
 // ============================================================

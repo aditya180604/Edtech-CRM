@@ -1,42 +1,67 @@
 import mongoose from 'mongoose';
-import { Course, Module, Topic, Lesson, Resource, User, Review } from '../../models/index.js';
+import { Course, Module, Topic, Lesson, Resource, User, Review, Entitlement, InstructorProfile } from '../../models/index.js';
+import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
 
 export class CoursesService {
   /**
    * 1. Featured Courses for Home Page (Image 4)
    */
-  static async getFeaturedCourses(limit = 8) {
+  static async getFeaturedCourses(limit = 8, userId = null) {
     const courses = await Course.find({ status: 'PUBLISHED' })
       .populate('instructorId', 'firstName lastName profilePhoto')
       .sort({ createdAt: -1 })
-      .limit(limit)
+      .limit(parseInt(limit, 10) || 8)
       .lean();
+
+    const courseIds = courses.map((c) => c._id);
+    const enrolledCourseIdSet = new Set();
+
+    if (userId && mongoose.isValidObjectId(userId)) {
+      const entitlements = await Entitlement.find({
+        userId,
+        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: [
+          { productId: { $in: courseIds } },
+          { courseId: { $in: courseIds } },
+        ],
+      }).lean();
+
+      entitlements.forEach((e) => {
+        if (e.productId) enrolledCourseIdSet.add(e.productId.toString());
+        if (e.courseId) enrolledCourseIdSet.add(e.courseId.toString());
+      });
+    }
 
     const badges = ['BEST SELLER', 'POPULAR', 'HOT & NEW', 'TOP RATED'];
 
-    return courses.map((c, idx) => ({
-      id: c._id.toString(),
-      _id: c._id.toString(),
-      title: c.title,
-      slug: c.slug || c._id.toString(),
-      instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
-      instructorAvatar: c.instructorId?.profilePhoto || null,
-      rating: 4.8,
-      reviewCount: '12K',
-      price: c.coursePrice || 1999,
-      originalPrice: Math.round((c.coursePrice || 1999) * 2.5),
-      thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
-      category: (c.category || 'DEVELOPMENT').toUpperCase(),
-      level: c.level || 'Beginner',
-      badge: badges[idx % badges.length],
-      shortDescription: c.shortDescription || c.description,
-    }));
+    return courses.map((c, idx) => {
+      const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
+      return {
+        id: c._id.toString(),
+        _id: c._id.toString(),
+        title: c.title,
+        slug: c.slug || c._id.toString(),
+        instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+        instructorAvatar: c.instructorId?.profilePhoto || null,
+        rating: 4.8,
+        reviewCount: '12K',
+        price: c.coursePrice || 1999,
+        originalPrice: Math.round((c.coursePrice || 1999) * 2.5),
+        thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+        category: (c.category || 'DEVELOPMENT').toUpperCase(),
+        level: c.level || 'Beginner',
+        badge: badges[idx % badges.length],
+        shortDescription: c.shortDescription || c.description,
+        isEnrolled,
+        isOwned: isEnrolled,
+      };
+    });
   }
 
   /**
    * 2. Catalog & Dynamic Filtering (Image 5)
    */
-  static async getCatalog({ category, level, search, sort = 'newest', page = 1, limit = 20 }) {
+  static async getCatalog({ category, level, search, sort = 'newest', page = 1, limit = 20 } = {}, userId = null) {
     const query = { status: 'PUBLISHED' };
 
     if (category && category !== 'All' && category !== 'ALL') {
@@ -70,6 +95,25 @@ export class CoursesService {
       Course.find({ status: 'PUBLISHED' }).select('category level').lean(),
     ]);
 
+    const courseIds = courses.map((c) => c._id);
+    const enrolledCourseIdSet = new Set();
+
+    if (userId && mongoose.isValidObjectId(userId)) {
+      const entitlements = await Entitlement.find({
+        userId,
+        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: [
+          { productId: { $in: courseIds } },
+          { courseId: { $in: courseIds } },
+        ],
+      }).lean();
+
+      entitlements.forEach((e) => {
+        if (e.productId) enrolledCourseIdSet.add(e.productId.toString());
+        if (e.courseId) enrolledCourseIdSet.add(e.courseId.toString());
+      });
+    }
+
     // Dynamically calculate category counts for sidebar filter (Image 5)
     const categoryCountMap = {};
     const levelCountMap = {};
@@ -94,22 +138,27 @@ export class CoursesService {
       { name: 'Advanced', count: levelCountMap['Advanced'] || 0 },
     ];
 
-    const formatted = courses.map((c, idx) => ({
-      id: c._id.toString(),
-      _id: c._id.toString(),
-      title: c.title,
-      slug: c.slug || c._id.toString(),
-      instructorName: `${c.instructorId?.firstName || 'Instructor'} ${c.instructorId?.lastName || ''}`.trim(),
-      instructorAvatar: c.instructorId?.profilePhoto || null,
-      rating: 4.8,
-      reviewCount: '10K',
-      price: c.coursePrice || 1999,
-      originalPrice: Math.round((c.coursePrice || 1999) * 2.2),
-      thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
-      category: (c.category || 'Development').toUpperCase(),
-      level: c.level || 'Beginner',
-      shortDescription: c.shortDescription || c.description,
-    }));
+    const formatted = courses.map((c, idx) => {
+      const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
+      return {
+        id: c._id.toString(),
+        _id: c._id.toString(),
+        title: c.title,
+        slug: c.slug || c._id.toString(),
+        instructorName: `${c.instructorId?.firstName || 'Instructor'} ${c.instructorId?.lastName || ''}`.trim(),
+        instructorAvatar: c.instructorId?.profilePhoto || null,
+        rating: 4.8,
+        reviewCount: '10K',
+        price: c.coursePrice || 1999,
+        originalPrice: Math.round((c.coursePrice || 1999) * 2.2),
+        thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+        category: (c.category || 'Development').toUpperCase(),
+        level: c.level || 'Beginner',
+        shortDescription: c.shortDescription || c.description,
+        isEnrolled,
+        isOwned: isEnrolled,
+      };
+    });
 
     return {
       courses: formatted,
@@ -129,7 +178,7 @@ export class CoursesService {
   /**
    * 3. Course Details & Complete Syllabus Hierarchy (Image 5 Syllabus Section)
    */
-  static async getCourseDetails(slugOrId) {
+  static async getCourseDetails(slugOrId, userId = null) {
     let query = { slug: slugOrId.toLowerCase() };
     if (mongoose.Types.ObjectId.isValid(slugOrId)) {
       query = { $or: [{ slug: slugOrId.toLowerCase() }, { _id: slugOrId }] };
@@ -141,12 +190,43 @@ export class CoursesService {
 
     if (!course) return null;
 
-    // Fetch Syllabus (Modules -> Topics -> Lessons & Resources)
-    const modules = await Module.find({ courseId: course._id }).sort({ order: 1 }).lean();
+    // Fetch Syllabus and InstructorProfile concurrently
+    const [modules, instructorProfile] = await Promise.all([
+      Module.find({ courseId: course._id }).sort({ order: 1 }).lean(),
+      course.instructorId?._id
+        ? InstructorProfile.findOne({ userId: course.instructorId._id }).lean()
+        : null,
+    ]);
     const moduleIds = modules.map((m) => m._id);
     const topics = await Topic.find({ moduleId: { $in: moduleIds } }).sort({ order: 1 }).lean();
     const topicIds = topics.map((t) => t._id);
     const lessons = await Lesson.find({ topicId: { $in: topicIds } }).sort({ order: 1 }).lean();
+
+    // Check user active entitlements if authenticated
+    let isEnrolled = false;
+    let enrolledTopicsCount = 0;
+    const entitledTopicIdSet = new Set();
+
+    if (userId && mongoose.isValidObjectId(userId)) {
+      const activeEntitlements = await Entitlement.find({
+        userId,
+        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: [
+          { productId: course._id },
+          { courseId: course._id },
+        ],
+      }).lean();
+
+      for (const ent of activeEntitlements) {
+        if (ent.productType === PRODUCT_TYPES.COURSE || ent.productId?.toString() === course._id.toString()) {
+          isEnrolled = true;
+        } else if (ent.topicId || ent.productId) {
+          entitledTopicIdSet.add((ent.topicId || ent.productId).toString());
+        }
+      }
+
+      enrolledTopicsCount = isEnrolled ? topics.length : entitledTopicIdSet.size;
+    }
 
     const syllabus = modules.map((mod) => {
       const modTopics = topics.filter((t) => t.moduleId.toString() === mod._id.toString());
@@ -162,6 +242,7 @@ export class CoursesService {
         lessonsCount: modLessons.length || (modTopics.length * 2),
         duration: `${Math.floor(durationSum / 60)}h ${durationSum % 60}m`,
         topics: modTopics.map((t) => {
+          const isTopicOwned = isEnrolled || entitledTopicIdSet.has(t._id.toString());
           const topicLessons = lessons
             .filter((l) => l.topicId.toString() === t._id.toString())
             .map((les) => ({
@@ -170,6 +251,7 @@ export class CoursesService {
               duration: les.duration || 15,
               playbackReference: les.playbackReference || '',
               videoUrl: les.playbackReference || '',
+              isLocked: !isTopicOwned && !t.isFree,
               resources: [
                 { name: 'Lecture Slides.pdf', type: 'PDF', size: '2.4 MB' },
                 { name: 'Starter Code.zip', type: 'ZIP', size: '4.8 MB' },
@@ -181,6 +263,7 @@ export class CoursesService {
             title: t.title,
             price: t.price ?? 0,
             isFree: t.isFree,
+            isOwned: isTopicOwned,
             duration: t.duration || 30,
             videoUrl: topicLessons[0]?.playbackReference || '',
             lessons: topicLessons,
@@ -199,10 +282,18 @@ export class CoursesService {
         originalPrice: finalPrice > 0 ? Math.round(finalPrice * 2) : 0,
         instructorName: [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
         instructorAvatar: course.instructorId?.profilePhoto || null,
+        instructorTitle: instructorProfile?.currentOrganization || (instructorProfile?.expertise && instructorProfile.expertise.length > 0 ? instructorProfile.expertise.join(' • ') : '') || `${course.category || 'Technology'} Specialist & Verified Instructor`,
+        instructorBio: instructorProfile?.bio || instructorProfile?.experience,
         rating: 4.8,
         reviewCount: '12,450 ratings',
         studentCount: '45,820 students',
+        isEnrolled,
+        enrolledTopicsCount,
+        totalTopicsCount: topics.length,
       },
+      isEnrolled,
+      enrolledTopicsCount,
+      totalTopicsCount: topics.length,
       syllabus,
     };
   }

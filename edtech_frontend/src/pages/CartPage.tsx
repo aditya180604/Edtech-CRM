@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag } from 'lucide-react';
+import { Trash2, ArrowRight, ShieldCheck, ShoppingBag, Tag, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ export const CartPage: React.FC = () => {
     discount,
     total,
     appliedCoupon,
+    isValidatingCoupon,
     applyCoupon,
     removeCoupon,
   } = useCart();
@@ -24,29 +25,24 @@ export const CartPage: React.FC = () => {
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success: boolean; message: string } | null>(null);
-  const [checkingOut, setCheckingOut] = useState(false);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponInput.trim()) return;
-    const res = applyCoupon(couponInput.trim());
+    setCouponFeedback(null);
+    const res = await applyCoupon(couponInput.trim());
     setCouponFeedback(res);
     if (res.success) {
       setCouponInput('');
     }
   };
 
-  const handleCheckout = () => {
+  const handleProceedToCheckout = () => {
     if (!isAuthenticated) {
       openLogin();
       return;
     }
-    setCheckingOut(true);
-    setTimeout(() => {
-      alert(`🎉 Checkout successful! Enrolled into ${items.length} item(s) for ₹${total.toLocaleString('en-IN')}. Access is now unlocked in your Student Dashboard.`);
-      setCheckingOut(false);
-      navigate('/dashboard/student');
-    }, 1200);
+    navigate('/checkout');
   };
 
   return (
@@ -63,7 +59,7 @@ export const CartPage: React.FC = () => {
               1. Cart ({items.length})
             </span>
             <span>→</span>
-            <span>2. Details</span>
+            <span>2. Details & Discounts</span>
             <span>→</span>
             <span>3. Payment</span>
           </div>
@@ -100,30 +96,30 @@ export const CartPage: React.FC = () => {
             <div className="lg:col-span-8 space-y-4">
               {items.map((item) => (
                 <div
-                  key={item.id}
+                  key={item.productId}
                   className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-slate-200"
                 >
                   <div className="flex items-start sm:items-center gap-4 min-w-0">
                     <div
                       className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 ${
-                        item.type === 'COURSE'
+                        item.productType === 'COURSE'
                           ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-100'
                           : 'bg-cyan-500/10 text-cyan-700 border border-cyan-100'
                       }`}
                     >
-                      {item.type}
+                      {item.productType}
                     </div>
 
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {item.category && (
-                          <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider">
-                            {item.category}
-                          </span>
-                        )}
                         {item.instructorName && (
                           <span className="text-[11px] text-slate-400 font-medium">
-                            • By {item.instructorName}
+                            By {item.instructorName}
+                          </span>
+                        )}
+                        {item.isEligibleForCoupon && (
+                          <span className="px-2 py-0.2 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-emerald-200">
+                            <Sparkles className="w-2.5 h-2.5" /> Coupon Discount Applied
                           </span>
                         )}
                       </div>
@@ -133,27 +129,33 @@ export const CartPage: React.FC = () => {
                       </h3>
 
                       <p className="text-xs text-slate-500 font-medium">
-                        {item.type === 'COURSE'
+                        {item.productType === 'COURSE'
                           ? 'Full Course Lifetime Access • Certificate Included'
                           : 'Atomic Skill • Topic Access'}
                       </p>
-
-                      {item.type === 'TOPIC' && (
-                        <span className="text-[11px] text-emerald-600 font-bold inline-block">
-                          ✓ Eligible for ₹{item.price} full-course upgrade credit
-                        </span>
-                      )}
                     </div>
                   </div>
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-50 shrink-0">
-                    <span className="text-base sm:text-lg font-black text-slate-900 block">
-                      {item.price === 0 ? 'FREE' : `₹${item.price.toLocaleString('en-IN')}`}
-                    </span>
+                    {item.discount > 0 ? (
+                      <div className="text-right">
+                        <span className="text-xs text-slate-400 line-through block">
+                          ₹{item.unitPrice.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-base sm:text-lg font-black text-emerald-600 block">
+                          ₹{item.finalPrice.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-base sm:text-lg font-black text-slate-900 block">
+                        {item.unitPrice === 0 ? 'FREE' : `₹${item.unitPrice.toLocaleString('en-IN')}`}
+                      </span>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-bold cursor-pointer transition-colors p-1"
+                      onClick={() => removeFromCart(item.productId)}
+                      className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-bold cursor-pointer transition-colors p-1 mt-1"
                       title="Remove from Cart"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -179,9 +181,9 @@ export const CartPage: React.FC = () => {
 
                   <div className="flex justify-between text-slate-600 items-center">
                     <span className="flex items-center gap-1">
-                      <span>Discount</span>
+                      <span>Coupon Discount</span>
                       {appliedCoupon && (
-                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-black">
+                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-black font-mono">
                           {appliedCoupon.code}
                         </span>
                       )}
@@ -192,15 +194,22 @@ export const CartPage: React.FC = () => {
                   </div>
 
                   {appliedCoupon && (
-                    <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-between text-[11px] text-emerald-800">
-                      <span className="font-semibold">{appliedCoupon.description}</span>
-                      <button
-                        type="button"
-                        onClick={removeCoupon}
-                        className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
-                      >
-                        Remove
-                      </button>
+                    <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold">{appliedCoupon.description}</span>
+                        <button
+                          type="button"
+                          onClick={removeCoupon}
+                          className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {appliedCoupon.courseTitle && (
+                        <p className="text-[10px] text-emerald-700">
+                          Target: <span className="font-bold">{appliedCoupon.courseTitle}</span>
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -219,17 +228,24 @@ export const CartPage: React.FC = () => {
                       <Tag className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="text"
-                        placeholder="COUPON CODE (e.g. EDU10)"
+                        placeholder="8-CHAR CODE (e.g. Ab7@X2!Q)"
                         value={couponInput}
+                        maxLength={8}
+                        disabled={isValidatingCoupon}
                         onChange={(e) => setCouponInput(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 uppercase font-bold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                        className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:border-indigo-500 focus:bg-white"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer transition-colors"
+                      disabled={isValidatingCoupon || !couponInput.trim()}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer transition-colors flex items-center gap-1.5"
                     >
-                      Apply
+                      {isValidatingCoupon ? (
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                      ) : (
+                        <span>Apply</span>
+                      )}
                     </button>
                   </div>
 
@@ -244,24 +260,14 @@ export const CartPage: React.FC = () => {
                   )}
                 </form>
 
-                {/* Checkout Action Button */}
+                {/* Proceed to Checkout Action Button */}
                 <button
                   type="button"
-                  onClick={handleCheckout}
-                  disabled={checkingOut}
-                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:bg-indigo-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={handleProceedToCheckout}
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {checkingOut ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      <span>Processing Enrollment...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <span>{isAuthenticated ? 'Proceed to Checkout' : 'Login to Checkout'}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  <span>{isAuthenticated ? 'Proceed to Checkout' : 'Login to Checkout'}</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
 
                 <div className="pt-2 text-center">

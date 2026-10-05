@@ -14,6 +14,7 @@ export interface LearningPathSummary {
   topicsCount: number;
   thumbnail?: string | null;
   status: string;
+  isEnrolled?: boolean;
 }
 
 export interface RoadmapTopic {
@@ -69,6 +70,7 @@ export interface LearningPathDetail {
   totalDomains: number;
   totalTopics: number;
   overallProgress: number;
+  isEnrolled?: boolean;
   domains: RoadmapDomain[];
 }
 
@@ -200,6 +202,11 @@ export const learningPathsApi = {
 
   async getLearningPathBySlug(slugOrId: string): Promise<LearningPathDetail> {
     const { data } = await apiClient.get(`/learning-paths/${slugOrId}`);
+    return data.data;
+  },
+
+  async enrollLearningPath(slugOrId: string) {
+    const { data } = await apiClient.post(`/learning-paths/${slugOrId}/enroll`);
     return data.data;
   },
 

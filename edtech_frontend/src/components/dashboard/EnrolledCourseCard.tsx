@@ -76,7 +76,7 @@ export const EnrolledCourseCard: React.FC<EnrolledCourseCardProps> = ({ course }
         )}
 
         <button
-          onClick={() => navigate(`/courses/${course.slug}`)}
+          onClick={() => navigate(`/course/${course.slug}`)}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-colors shrink-0 cursor-pointer"
         >
           <span>Continue</span>

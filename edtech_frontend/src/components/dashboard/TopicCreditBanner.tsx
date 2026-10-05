@@ -36,7 +36,7 @@ export const TopicCreditBanner: React.FC<TopicCreditBannerProps> = ({ upgrades }
       </div>
 
       <button
-        onClick={() => navigate(`/courses/${primaryUpgrade.courseSlug}`)}
+        onClick={() => navigate(`/course/${primaryUpgrade.courseSlug}`)}
         className="px-6 py-3 bg-white text-slate-950 hover:bg-indigo-50 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shrink-0 flex items-center gap-2 cursor-pointer"
       >
         <span>Upgrade for {currencySymbol}{primaryUpgrade.upgradePrice}</span>

@@ -28,7 +28,7 @@ export class LearningPathService {
    * 1. GET /api/v1/learning-paths
    * List all published learning paths with dynamic domain and topic counts from MongoDB
    */
-  static async getLearningPaths({ search, level, limit = 20, page = 1 } = {}) {
+  static async getLearningPaths({ search, level, limit = 20, page = 1, userId = null } = {}) {
     const filter = {
       status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
     };
@@ -58,7 +58,7 @@ export class LearningPathService {
     const pathIds = paths.map((p) => p._id);
 
     // Aggregate real domain counts and topic counts from DB
-    const [domainsAgg, domainTopicsAgg] = await Promise.all([
+    const [domainsAgg, domainTopicsAgg, userPathEntitlements] = await Promise.all([
       LearningPathDomain.aggregate([
         { $match: { learningPathId: { $in: pathIds }, status: 'PUBLISHED' } },
         { $group: { _id: '$learningPathId', count: { $sum: 1 } } },
@@ -67,7 +67,19 @@ export class LearningPathService {
         { $match: { learningPathId: { $in: pathIds }, status: 'ACTIVE' } },
         { $group: { _id: '$learningPathId', count: { $sum: 1 } } },
       ]),
+      userId && mongoose.isValidObjectId(userId)
+        ? Entitlement.find({
+            userId,
+            productType: PRODUCT_TYPES.LEARNING_PATH,
+            productId: { $in: pathIds },
+            status: ENTITLEMENT_STATUS.ACTIVE,
+          }).lean()
+        : [],
     ]);
+
+    const enrolledPathIds = new Set(
+      (userPathEntitlements || []).map((e) => e.productId?.toString() || e.learningPathId?.toString())
+    );
 
     const formatted = paths.map((p) => {
       const pId = p._id.toString();
@@ -88,6 +100,7 @@ export class LearningPathService {
         topicsCount: topicCount,
         thumbnail: p.thumbnail || null,
         status: p.status,
+        isEnrolled: enrolledPathIds.has(pId),
         createdAt: p.createdAt,
       };
     });
@@ -158,18 +171,28 @@ export class LearningPathService {
       .select('topicId price currency duration durationMinutes instructorId')
       .lean();
 
-    // If student is authenticated, fetch their active offering entitlements and progress
+    // If student is authenticated, fetch their active offering entitlements, path entitlement, and progress
     let userEntitlements = [];
     let userProgressRecords = [];
+    let isPathEnrolled = false;
     if (userId && mongoose.isValidObjectId(userId)) {
-      [userEntitlements, userProgressRecords] = await Promise.all([
+      const [offeringsEnts, pathEnt, progressDocs] = await Promise.all([
         Entitlement.find({
           userId,
           productType: PRODUCT_TYPES.CONTENT_OFFERING,
           status: ENTITLEMENT_STATUS.ACTIVE,
         }).lean(),
+        Entitlement.findOne({
+          userId,
+          productType: PRODUCT_TYPES.LEARNING_PATH,
+          productId: pathId,
+          status: ENTITLEMENT_STATUS.ACTIVE,
+        }).lean(),
         LearningProgress.find({ userId }).lean(),
       ]);
+      userEntitlements = offeringsEnts;
+      isPathEnrolled = Boolean(pathEnt);
+      userProgressRecords = progressDocs;
     }
 
     const ownedOfferingIds = new Set(
@@ -296,7 +319,64 @@ export class LearningPathService {
       totalDomains: domains.length,
       totalTopics: totalPathTopics,
       overallProgress: overallProgress,
+      isEnrolled: isPathEnrolled,
       domains: structuredDomains,
+    };
+  }
+
+  /**
+   * Enroll authenticated student in a Learning Path
+   */
+  static async enrollLearningPath({ slugOrId, userId }) {
+    if (!userId || !mongoose.isValidObjectId(userId)) {
+      throw new Error('UNAUTHORIZED: Valid authenticated user required for enrollment');
+    }
+
+    let path = null;
+    if (mongoose.isValidObjectId(slugOrId)) {
+      path = await LearningPath.findById(slugOrId);
+    }
+    if (!path) {
+      path = await LearningPath.findOne({ slug: slugOrId.toLowerCase() });
+    }
+
+    if (!path) {
+      throw new Error('NOT_FOUND: Learning path not found');
+    }
+
+    // Check if user already owns active entitlement for this learning path
+    const existingEntitlement = await Entitlement.findOne({
+      userId,
+      productType: PRODUCT_TYPES.LEARNING_PATH,
+      productId: path._id,
+      status: ENTITLEMENT_STATUS.ACTIVE,
+    });
+
+    if (existingEntitlement) {
+      return {
+        alreadyEnrolled: true,
+        pathId: path._id.toString(),
+        message: 'You are already enrolled in this learning path.',
+      };
+    }
+
+    // Create active entitlement
+    const entitlement = await Entitlement.create({
+      userId,
+      productType: PRODUCT_TYPES.LEARNING_PATH,
+      productId: path._id,
+      learningPathId: path._id,
+      source: 'ENROLLMENT',
+      status: ENTITLEMENT_STATUS.ACTIVE,
+      grantedAt: new Date(),
+    });
+
+    return {
+      success: true,
+      alreadyEnrolled: false,
+      pathId: path._id.toString(),
+      entitlementId: entitlement._id.toString(),
+      message: `Successfully enrolled in ${path.title}!`,
     };
   }
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
+import { useCart } from '../context/CartContext';
 import {
   PlayCircle,
   Lock,
@@ -21,6 +22,8 @@ import {
 
 export const OfferingDetailPage: React.FC = () => {
   const { offeringId } = useParams<{ offeringId: string }>();
+  const navigate = useNavigate();
+  const { addToCart } = useCart();
   const [offering, setOffering] = useState<OfferingDetailResponse | null>(null);
   const [activeLesson, setActiveLesson] = useState<OfferingLesson | null>(null);
   const [, setLessonContent] = useState<LessonContentResponse | null>(null);
@@ -49,6 +52,8 @@ export const OfferingDetailPage: React.FC = () => {
         if (firstAccessible.hasAccess) {
           loadLessonContent(data.id, firstAccessible.id);
         }
+      } else {
+        setActiveLesson(null);
       }
     } catch (err: any) {
       console.error('Failed to load offering:', err);
@@ -82,10 +87,15 @@ export const OfferingDetailPage: React.FC = () => {
     try {
       setIsPurchasing(true);
       setError(null);
-      const res = await learningPathsApi.purchaseOffering(offering.id);
-      setSuccessMessage(res.message || 'Enrollment successful! You now have full access.');
-      // Refresh offering state to unlock curriculum
-      await fetchOffering(offering.id);
+      const res = await addToCart(offering.id, 'CONTENT_OFFERING');
+      if (res?.success) {
+        navigate('/checkout');
+      } else {
+        // Direct purchase fallback
+        const directRes = await learningPathsApi.purchaseOffering(offering.id);
+        setSuccessMessage(directRes.message || 'Enrollment successful! You now have full access.');
+        await fetchOffering(offering.id);
+      }
     } catch (err: any) {
       console.error('Purchase failed:', err);
       setError(err.response?.data?.message || err.message || 'Failed to complete offering purchase.');
@@ -259,7 +269,24 @@ export const OfferingDetailPage: React.FC = () => {
               <div className="lg:col-span-2 space-y-6">
                 {/* Active Player Box */}
                 <div className="relative aspect-video w-full rounded-3xl overflow-hidden bg-slate-950 border border-slate-800 flex flex-col items-center justify-center p-6 shadow-2xl">
-                  {activeLesson?.hasAccess ? (
+                  {!offering.curriculum || offering.curriculum.length === 0 ? (
+                    <div className="text-center space-y-3 max-w-sm p-6">
+                      <div className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-indigo-400">
+                        <Video className="w-7 h-7" />
+                      </div>
+                      <h3 className="text-base font-bold text-white">Curriculum Coming Soon</h3>
+                      <p className="text-xs text-slate-400">
+                        {offering.instructor.name} is preparing the lesson videos and downloadable materials for this offering.
+                      </p>
+                      {offering.isEntitled && (
+                        <div className="pt-1">
+                          <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Enrolled & Entitled
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : activeLesson?.hasAccess ? (
                     <div className="text-center space-y-4 max-w-md">
                       <div className="w-16 h-16 rounded-full bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mx-auto text-indigo-400">
                         <Video className="w-8 h-8" />
@@ -337,44 +364,52 @@ export const OfferingDetailPage: React.FC = () => {
 
                   {/* Lessons List */}
                   <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
-                    {offering.curriculum.map((lesson) => {
-                      const isSelected = activeLesson?.id === lesson.id;
+                    {!offering.curriculum || offering.curriculum.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-slate-400 space-y-2">
+                        <Video className="w-8 h-8 text-slate-600 mx-auto" />
+                        <p className="font-semibold text-slate-300">No lessons published yet</p>
+                        <p className="text-[11px] text-slate-500">The tutor will upload video lessons soon.</p>
+                      </div>
+                    ) : (
+                      offering.curriculum.map((lesson) => {
+                        const isSelected = activeLesson?.id === lesson.id;
 
-                      return (
-                        <button
-                          key={lesson.id}
-                          onClick={() => handleSelectLesson(lesson)}
-                          className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                            isSelected
-                              ? 'bg-indigo-600/15 border-indigo-500/60 shadow-md'
-                              : 'bg-slate-950/60 hover:bg-slate-950 border-slate-800/80'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="shrink-0">
-                              {lesson.isCompleted ? (
-                                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                              ) : lesson.hasAccess ? (
-                                <PlayCircle className="w-5 h-5 text-indigo-400" />
-                              ) : (
-                                <Lock className="w-4 h-4 text-slate-500" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-white truncate">{lesson.title}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
-                                <span>{lesson.durationDisplay}</span>
-                                {lesson.isFreePreview && !offering.isEntitled && (
-                                  <span className="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
-                                    Free Preview
-                                  </span>
+                        return (
+                          <button
+                            key={lesson.id}
+                            onClick={() => handleSelectLesson(lesson)}
+                            className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-600/15 border-indigo-500/60 shadow-md'
+                                : 'bg-slate-950/60 hover:bg-slate-950 border-slate-800/80'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="shrink-0">
+                                {lesson.isCompleted ? (
+                                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                                ) : lesson.hasAccess ? (
+                                  <PlayCircle className="w-5 h-5 text-indigo-400" />
+                                ) : (
+                                  <Lock className="w-4 h-4 text-slate-500" />
                                 )}
                               </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-white truncate">{lesson.title}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
+                                  <span>{lesson.durationDisplay}</span>
+                                  {lesson.isFreePreview && !offering.isEntitled && (
+                                    <span className="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                                      Free Preview
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>

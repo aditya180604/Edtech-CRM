@@ -48,6 +48,8 @@ const userSchema = new mongoose.Schema(
     },
     emailVerified: { type: Boolean, default: false },
     refreshTokenHash: { type: String, select: false },
+    previousRefreshTokenHash: { type: String, select: false },
+    refreshTokenRotatedAt: { type: Date, select: false },
     verificationToken: { type: String, select: false },
     passwordResetToken: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },

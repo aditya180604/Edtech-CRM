@@ -1,154 +1,279 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { CartItem } from '../types';
-
-interface AppliedCoupon {
-  code: string;
-  percent?: number;
-  amount?: number;
-  description: string;
-}
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { cartApi, type CartLineItem } from '../api/cart';
+import { checkoutApi, type AppliedCouponQuote, type CheckoutQuoteResponse } from '../api/checkout';
+import { useAuth } from './AuthContext';
 
 interface CartContextType {
-  items: CartItem[];
-  addToCart: (item: CartItem) => void;
-  removeFromCart: (id: string) => void;
-  clearCart: () => void;
-  isInCart: (id: string) => boolean;
+  items: CartLineItem[];
   itemCount: number;
   subtotal: number;
   discount: number;
   total: number;
-  appliedCoupon: AppliedCoupon | null;
-  applyCoupon: (code: string) => { success: boolean; message: string };
-  removeCoupon: () => void;
+  currency: string;
+  appliedCoupon: AppliedCouponQuote | null;
+  quote: CheckoutQuoteResponse | null;
+  loading: boolean;
+  isValidatingCoupon: boolean;
+  addToCart: (productId: string, productType?: 'COURSE' | 'CONTENT_OFFERING') => Promise<{ success: boolean; message?: string }>;
+  removeFromCart: (productId: string) => Promise<void>;
+  clearCart: () => Promise<void>;
+  isInCart: (productId: string) => boolean;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
+  removeCoupon: () => Promise<void>;
+  refreshQuote: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'edtech_shopping_cart';
-const COUPON_STORAGE_KEY = 'edtech_applied_coupon';
-
-const VALID_COUPONS: Record<string, { percent?: number; amount?: number; description: string }> = {
-  EDU10: { percent: 10, description: '10% Educational Discount' },
-  WELCOME50: { percent: 50, description: '50% Welcome Discount' },
-  SAVE20: { percent: 20, description: '20% Special Savings' },
-  DEV100: { amount: 100, description: '₹100 Developer Voucher' },
-};
+const GUEST_STORAGE_KEY = 'edtech_guest_cart_v2';
+const GUEST_COUPON_KEY = 'edtech_guest_coupon_code';
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(() => {
+  const { isAuthenticated } = useAuth();
+
+  const [items, setItems] = useState<CartLineItem[]>([]);
+  const [quote, setQuote] = useState<CheckoutQuoteResponse | null>(null);
+  const [couponCode, setCouponCode] = useState<string>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
+      return localStorage.getItem(GUEST_COUPON_KEY) || '';
     } catch {
-      return [];
+      return '';
     }
   });
 
-  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(() => {
-    try {
-      const stored = localStorage.getItem(COUPON_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [loading, setLoading] = useState(false);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch (err) {
-      console.warn('Failed to save cart to localStorage:', err);
-    }
-  }, [items]);
-
-  useEffect(() => {
-    try {
-      if (appliedCoupon) {
-        localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(appliedCoupon));
-      } else {
-        localStorage.removeItem(COUPON_STORAGE_KEY);
+  // Fetch Cart & Live Quote
+  const syncCart = useCallback(
+    async (currentCoupon = couponCode) => {
+      if (!isAuthenticated) {
+        // Guest cart from localStorage
+        try {
+          const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+          const guestItems = raw ? JSON.parse(raw) : [];
+          if (guestItems.length === 0) {
+            setItems([]);
+            setQuote(null);
+            return;
+          }
+          // Request quote for guest items
+          const res = await checkoutApi.getQuote({ couponCode: currentCoupon || undefined }).catch(() => null);
+          if (res?.success && res.data) {
+            setItems(res.data.items);
+            setQuote(res.data);
+          }
+        } catch {
+          setItems([]);
+        }
+        return;
       }
+
+      // Authenticated User: Load from Backend
+      try {
+        setLoading(true);
+        // First, check if there was a guest cart to merge
+        const rawGuest = localStorage.getItem(GUEST_STORAGE_KEY);
+        if (rawGuest) {
+          try {
+            const parsedGuest = JSON.parse(rawGuest);
+            if (Array.isArray(parsedGuest) && parsedGuest.length > 0) {
+              await cartApi.mergeGuestCart(
+                parsedGuest.map((p: any) => ({
+                  productType: p.productType || 'COURSE',
+                  productId: p.productId || p.id || p._id,
+                }))
+              );
+              localStorage.removeItem(GUEST_STORAGE_KEY);
+            }
+          } catch {
+            localStorage.removeItem(GUEST_STORAGE_KEY);
+          }
+        }
+
+        // Get live quote from backend
+        const quoteRes = await checkoutApi.getQuote({ couponCode: currentCoupon || undefined });
+        if (quoteRes.success && quoteRes.data) {
+          setItems(quoteRes.data.items);
+          setQuote(quoteRes.data);
+        } else {
+          // Fallback to basic cart
+          const cartRes = await cartApi.getCart();
+          if (cartRes.success && cartRes.data) {
+            setItems(cartRes.data.items);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to sync backend cart:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isAuthenticated, couponCode]
+  );
+
+  useEffect(() => {
+    syncCart(couponCode);
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Add Item
+  const addToCart = async (
+    productId: string,
+    productType: 'COURSE' | 'CONTENT_OFFERING' = 'COURSE'
+  ): Promise<{ success: boolean; message?: string }> => {
+    if (!isAuthenticated) {
+      // Guest cart
+      try {
+        const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+        const currentGuest = raw ? JSON.parse(raw) : [];
+        const exists = currentGuest.some((g: any) => (g.productId || g.id) === productId);
+        if (exists) {
+          return { success: false, message: 'This course is already in your cart.' };
+        }
+        currentGuest.push({ productId, productType });
+        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(currentGuest));
+        await syncCart();
+        return { success: true, message: 'Added to cart successfully!' };
+      } catch (err: any) {
+        return { success: false, message: err?.message || 'Failed to add to cart.' };
+      }
+    }
+
+    // Authenticated
+    try {
+      const res = await cartApi.addItem({ productType, productId });
+      if (res.success) {
+        await syncCart();
+        return { success: true, message: 'Added to cart successfully!' };
+      }
+      return { success: false, message: res.message || 'Failed to add item.' };
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to add item.';
+      return { success: false, message: msg };
+    }
+  };
+
+  // Remove Item
+  const removeFromCart = async (productId: string) => {
+    if (!isAuthenticated) {
+      try {
+        const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+        const currentGuest = raw ? JSON.parse(raw) : [];
+        const filtered = currentGuest.filter((g: any) => (g.productId || g.id) !== productId);
+        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(filtered));
+        await syncCart();
+      } catch {}
+      return;
+    }
+
+    try {
+      await cartApi.removeItem(productId);
+      await syncCart();
     } catch (err) {
-      console.warn('Failed to save coupon to localStorage:', err);
+      console.error('Failed to remove item:', err);
     }
-  }, [appliedCoupon]);
-
-  const addToCart = (item: CartItem) => {
-    setItems((prev) => {
-      // Prevent duplicate additions
-      const exists = prev.some((i) => i.id === item.id);
-      if (exists) return prev;
-      return [...prev, item];
-    });
   };
 
-  const removeFromCart = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  };
+  // Clear Cart
+  const clearCart = async () => {
+    localStorage.removeItem(GUEST_STORAGE_KEY);
+    localStorage.removeItem(GUEST_COUPON_KEY);
+    setCouponCode('');
 
-  const clearCart = () => {
+    if (isAuthenticated) {
+      try {
+        await cartApi.clearCart();
+      } catch (err) {
+        console.error('Failed to clear cart:', err);
+      }
+    }
     setItems([]);
-    setAppliedCoupon(null);
+    setQuote(null);
   };
 
-  const isInCart = (id: string) => {
-    return items.some((i) => i.id === id);
+  const isInCart = (productId: string) => {
+    return items.some((i) => i.productId === productId || i.courseId === productId);
   };
 
-  const subtotal = items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-
-  let discount = 0;
-  if (appliedCoupon && subtotal > 0) {
-    if (appliedCoupon.percent) {
-      discount = Math.round((subtotal * appliedCoupon.percent) / 100);
-    } else if (appliedCoupon.amount) {
-      discount = Math.min(appliedCoupon.amount, subtotal);
-    }
-  }
-
-  const total = Math.max(0, subtotal - discount);
-
-  const applyCoupon = (code: string): { success: boolean; message: string } => {
-    const cleanCode = code.trim().toUpperCase();
+  // Apply Coupon
+  const applyCoupon = async (code: string): Promise<{ success: boolean; message: string }> => {
+    const cleanCode = code.trim();
     if (!cleanCode) {
-      return { success: false, message: 'Please enter a coupon code.' };
+      return { success: false, message: 'Please enter an 8-character coupon code.' };
     }
 
-    const match = VALID_COUPONS[cleanCode];
-    if (match) {
-      const couponObj: AppliedCoupon = {
-        code: cleanCode,
-        percent: match.percent,
-        amount: match.amount,
-        description: match.description,
-      };
-      setAppliedCoupon(couponObj);
-      return { success: true, message: `Coupon applied: ${match.description}!` };
+    setIsValidatingCoupon(true);
+    try {
+      const res = await checkoutApi.getQuote({ couponCode: cleanCode });
+      if (res.success && res.data?.coupon?.applied) {
+        setCouponCode(cleanCode);
+        try {
+          localStorage.setItem(GUEST_COUPON_KEY, cleanCode);
+        } catch {}
+        setItems(res.data.items);
+        setQuote(res.data);
+
+        const discountAmt = res.data.discount;
+        const targetCourse = res.data.coupon.courseTitle ? ` for "${res.data.coupon.courseTitle}"` : '';
+        return {
+          success: true,
+          message: `Coupon "${res.data.coupon.code}" applied${targetCourse}! You saved ₹${discountAmt.toLocaleString('en-IN')}.`,
+        };
+      } else {
+        return { success: false, message: 'Invalid coupon code.' };
+      }
+    } catch (err: any) {
+      const errorMsg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to validate coupon code.';
+      return { success: false, message: errorMsg };
+    } finally {
+      setIsValidatingCoupon(false);
     }
-
-    return { success: false, message: 'Invalid coupon code. Try EDU10, WELCOME50, or SAVE20' };
   };
 
-  const removeCoupon = () => {
-    setAppliedCoupon(null);
+  // Remove Coupon
+  const removeCoupon = async () => {
+    setCouponCode('');
+    try {
+      localStorage.removeItem(GUEST_COUPON_KEY);
+    } catch {}
+    await syncCart('');
   };
+
+  const refreshQuote = async () => {
+    await syncCart(couponCode);
+  };
+
+  // Computed values from authoritative server quote
+  const subtotal = quote?.subtotal ?? items.reduce((sum, i) => sum + (Number(i.unitPrice) || 0), 0);
+  const discount = quote?.discount ?? 0;
+  const total = quote?.finalAmount ?? Math.max(0, subtotal - discount);
+  const currency = quote?.currency || 'INR';
+  const appliedCoupon = quote?.coupon?.applied ? quote.coupon : null;
 
   return (
     <CartContext.Provider
       value={{
         items,
+        itemCount: quote?.itemCount ?? items.length,
+        subtotal,
+        discount,
+        total,
+        currency,
+        appliedCoupon,
+        quote,
+        loading,
+        isValidatingCoupon,
         addToCart,
         removeFromCart,
         clearCart,
         isInCart,
-        itemCount: items.length,
-        subtotal,
-        discount,
-        total,
-        appliedCoupon,
         applyCoupon,
         removeCoupon,
+        refreshQuote,
       }}
     >
       {children}

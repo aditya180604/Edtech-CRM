@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { Star, Filter, Search, Bookmark, ArrowRight, User, BookOpen } from 'lucide-react';
+import { Star, Filter, Search, Bookmark, ArrowRight, User, BookOpen, CheckCircle2 } from 'lucide-react';
 import { coursesApi, type CatalogFilterItem } from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
 import { SyllabusModal } from '../components/SyllabusModal';
 import { Link } from 'react-router-dom';
 import type { Course } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { useAuthModal } from '../context/AuthModalContext';
+import { toggleWishlist, getWishlistIds } from '../api/studentDashboard';
 
 export const CoursesPage: React.FC = () => {
+  const { isAuthenticated } = useAuth();
+  const { openLogin } = useAuthModal();
   const [courses, setCourses] = useState<Course[]>(featuredCoursesData);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -33,6 +38,21 @@ export const CoursesPage: React.FC = () => {
     { name: 'Intermediate', count: 2 },
     { name: 'Advanced', count: 1 },
   ]);
+
+  // Load user's persisted wishlist on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      getWishlistIds()
+        .then((ids) => {
+          if (Array.isArray(ids)) {
+            setBookmarkedIds(ids);
+          }
+        })
+        .catch((err) => console.warn('Could not fetch wishlist IDs:', err));
+    } else {
+      setBookmarkedIds([]);
+    }
+  }, [isAuthenticated]);
 
   const loadCourses = useCallback(async () => {
     try {
@@ -74,12 +94,30 @@ export const CoursesPage: React.FC = () => {
     loadCourses();
   }, [loadCourses]);
 
-  const toggleBookmark = (e: React.MouseEvent, id: string) => {
+  const toggleBookmark = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // If student is not logged in, prompt login modal
+    if (!isAuthenticated) {
+      openLogin();
+      return;
+    }
+
+    // Optimistic UI toggle
     setBookmarkedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+
+    try {
+      await toggleWishlist(id, 'COURSE');
+    } catch (err) {
+      console.error('Failed to toggle wishlist item:', err);
+      // Revert on error
+      setBookmarkedIds((prev) =>
+        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      );
+    }
   };
 
   return (
@@ -270,9 +308,16 @@ export const CoursesPage: React.FC = () => {
 
                     {/* Price & Actions Row */}
                     <div className="px-4 pb-4 pt-2.5 border-t border-slate-50 flex items-center justify-between gap-2">
-                      <span className="text-sm sm:text-base font-black text-slate-900">
-                        ₹{course.price?.toLocaleString('en-IN')}
-                      </span>
+                      {course.isEnrolled || course.isOwned ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black shadow-2xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          Enrolled
+                        </span>
+                      ) : (
+                        <span className="text-sm sm:text-base font-black text-slate-900">
+                          ₹{course.price?.toLocaleString('en-IN')}
+                        </span>
+                      )}
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={(e) => {
@@ -287,7 +332,7 @@ export const CoursesPage: React.FC = () => {
                           <span>Syllabus</span>
                         </button>
                         <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 flex items-center gap-0.5">
-                          View <ArrowRight className="w-3 h-3" />
+                          {course.isEnrolled || course.isOwned ? 'Continue' : 'View'} <ArrowRight className="w-3 h-3" />
                         </span>
                       </div>
                     </div>

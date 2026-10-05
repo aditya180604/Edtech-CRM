@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { CoursesController } from './courses.controller.js';
+import { optionalAuthenticate } from '../../middleware/auth.js';
 
 const router = Router();
 
-// Public Course Discovery Routes
-router.get('/featured', CoursesController.getFeatured);
-router.get('/', CoursesController.getCatalog);
-router.get('/:slug', CoursesController.getDetails);
+// Public / Semi-Authenticated Course Discovery Routes
+router.get('/featured', optionalAuthenticate, CoursesController.getFeatured);
+router.get('/', optionalAuthenticate, CoursesController.getCatalog);
+router.get('/:slug', optionalAuthenticate, CoursesController.getDetails);
 
 export const coursesRoutes = router;

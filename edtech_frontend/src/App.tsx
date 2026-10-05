@@ -14,6 +14,8 @@ import { LearningPathsPage } from './pages/LearningPathsPage';
 import { InstructorsPage } from './pages/InstructorsPage';
 import { WebinarsPage } from './pages/WebinarsPage';
 import { CartPage } from './pages/CartPage';
+import { CheckoutPage } from './pages/CheckoutPage';
+import { CheckoutResultPage } from './pages/CheckoutResultPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 import { LearningPathDetailPage } from './pages/LearningPathDetailPage';
 import { TopicDetailPage } from './pages/TopicDetailPage';
@@ -50,7 +52,11 @@ export const App: React.FC = () => {
             <Route path="/instructors" element={<InstructorsPage />} />
             <Route path="/webinars" element={<WebinarsPage />} />
             <Route path="/cart" element={<CartPage />} />
+            <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/checkout/result" element={<CheckoutResultPage />} />
             <Route path="/course/:slug" element={<CourseDetailPage />} />
+            <Route path="/courses/:slug" element={<CourseDetailPage />} />
+
 
             {/* Student Dashboards & Profile */}
             <Route path="/profile" element={<StudentProfilePage />} />

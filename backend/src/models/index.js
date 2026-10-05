@@ -89,6 +89,7 @@ export {
   SupportTicket,
   SupportMessage,
   Coupon,
+  CouponRedemption,
   Promotion,
   InstructorEarning,
   Payout,
@@ -96,3 +97,4 @@ export {
   Recommendation,
   Analytics,
 } from './governance.models.js';
+

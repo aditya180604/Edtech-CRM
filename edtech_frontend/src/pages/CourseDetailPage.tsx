@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { coursesApi, type CourseDetailsResponse } from '../api/courses';
+import { couponApi, type AvailableOffersResponse } from '../api/coupons';
+import { useCart } from '../context/CartContext';
 import { featuredCoursesData } from '../data/mockData';
 import {
   Star,
@@ -18,12 +20,22 @@ import {
   Sparkles,
   ShieldCheck,
   Award,
+  Tag,
+  ShoppingBag,
+  Play,
+  GraduationCap,
 } from 'lucide-react';
 
 export const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { addToCart, isInCart } = useCart();
+
   const [courseData, setCourseData] = useState<CourseDetailsResponse | null>(null);
+  const [offers, setOffers] = useState<AvailableOffersResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartSuccessMsg, setCartSuccessMsg] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -40,6 +52,15 @@ export const CourseDetailPage: React.FC = () => {
             initialExp[m._id] = idx < 2;
           });
           setExpandedModules(initialExp);
+
+          // Fetch safe promotional offers for this course
+          if (res.data.course?._id) {
+            couponApi.getAvailableOffers(res.data.course._id)
+              .then((oRes) => {
+                if (oRes?.success) setOffers(oRes.data);
+              })
+              .catch(() => null);
+          }
         }
       } catch (err) {
         console.warn('Fallback course details:', err);
@@ -54,6 +75,29 @@ export const CourseDetailPage: React.FC = () => {
     featuredCoursesData.find((c) => c.slug === slug) || featuredCoursesData[0];
 
   const course = courseData?.course || fallbackCourse;
+
+  const handleAddToCart = async () => {
+    if (!course?._id) return;
+    setAddingToCart(true);
+    setCartSuccessMsg(null);
+    const res = await addToCart(course._id, 'COURSE');
+    if (res.success) {
+      setCartSuccessMsg('✓ Added to cart');
+      setTimeout(() => setCartSuccessMsg(null), 3000);
+    } else {
+      setCartSuccessMsg(res.message || 'Already in cart');
+      setTimeout(() => setCartSuccessMsg(null), 3000);
+    }
+    setAddingToCart(false);
+  };
+
+  const handleEnrollNow = async () => {
+    if (!course?._id) return;
+    setAddingToCart(true);
+    await addToCart(course._id, 'COURSE');
+    setAddingToCart(false);
+    navigate('/checkout');
+  };
   const syllabus = courseData?.syllabus || [
     {
       _id: 'm1',
@@ -134,6 +178,7 @@ export const CourseDetailPage: React.FC = () => {
 
   const totalLessons = syllabus.reduce((acc, m) => acc + (m.lessonsCount || 0), 0) || 14;
   const totalTopics = syllabus.reduce((acc, m) => acc + (m.topicsCount || 0), 0) || 7;
+  const isEnrolled = !!(courseData?.isEnrolled || (course as any)?.isEnrolled);
 
   if (loading && !courseData) {
     return (
@@ -156,9 +201,17 @@ export const CourseDetailPage: React.FC = () => {
         {/* Course Banner Header */}
         <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 mb-8 relative overflow-hidden shadow-xl border border-slate-800">
           <div className="max-w-3xl relative z-10 space-y-4">
-            <span className="px-3 py-1 bg-indigo-500/30 border border-indigo-400/40 text-indigo-300 text-xs font-bold rounded-lg uppercase tracking-wider inline-block">
-              {course.category}
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="px-3 py-1 bg-indigo-500/30 border border-indigo-400/40 text-indigo-300 text-xs font-bold rounded-lg uppercase tracking-wider inline-block">
+                {course.category}
+              </span>
+              {isEnrolled && (
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold rounded-lg flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Full Course Access Active • Enrolled</span>
+                </span>
+              )}
+            </div>
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
               {course.title}
             </h1>
@@ -210,7 +263,7 @@ export const CourseDetailPage: React.FC = () => {
             {/* =========================================================================
                 SYLLABUS & CURRICULUM SECTION
                ========================================================================= */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-5">
+            <div id="curriculum-section" className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -298,7 +351,12 @@ export const CourseDetailPage: React.FC = () => {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  {top.isFree ? (
+                                  {top.isOwned || isEnrolled ? (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 flex items-center gap-1 border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      UNLOCKED • OWNED
+                                    </span>
+                                  ) : top.isFree ? (
                                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
                                       FREE PREVIEW
                                     </span>
@@ -391,14 +449,24 @@ export const CourseDetailPage: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
               <h2 className="text-lg font-bold text-slate-900">About the Instructor</h2>
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
-                  {course.instructorName[0]}
-                </div>
+                {course.instructorAvatar ? (
+                  <img
+                    src={course.instructorAvatar}
+                    alt={course.instructorName}
+                    className="w-14 h-14 rounded-2xl object-cover border border-slate-100 shrink-0 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                    {course.instructorName ? course.instructorName[0].toUpperCase() : 'I'}
+                  </div>
+                )}
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">{course.instructorName}</h3>
-                  <p className="text-xs text-indigo-600 font-semibold mb-2">Senior Technology Lead & Certified Cloud Architect</p>
+                  <p className="text-xs text-indigo-600 font-semibold mb-2">
+                    {course.instructorTitle || `${course.category || 'Technology'} Specialist & Verified Instructor`}
+                  </p>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Over 8+ years of engineering experience architecting enterprise applications, microservices, and automated CI/CD pipelines.
+                    {course.instructorBio || `Experienced educator and domain professional dedicated to providing practical, industry-focused knowledge in ${course.title}.`}
                   </p>
                 </div>
               </div>
@@ -408,36 +476,94 @@ export const CourseDetailPage: React.FC = () => {
           {/* Right Column: Pricing & Enrollment Action */}
           <div className="lg:col-span-4">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl sticky top-24 space-y-6">
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Course Investment</p>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-slate-900">
-                    {displayPrice === 0 ? 'FREE' : `₹${displayPrice.toLocaleString('en-IN')}`}
-                  </span>
-                  {displayPrice > 0 && (
-                    <span className="text-sm text-slate-400 line-through">
-                      ₹{Math.round(displayPrice * 2.2).toLocaleString('en-IN')}
+              {isEnrolled ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
+                    <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-full text-[10px] font-black uppercase tracking-wider inline-block">
+                      Active Enrollment
                     </span>
-                  )}
+                    <h3 className="text-base font-black text-slate-900">You Own This Course</h3>
+                    <p className="text-xs text-emerald-800 font-medium leading-relaxed">
+                      You have active lifetime entitlement to all {totalTopics} topics, video lectures, and certificates.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('curriculum-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Start / Continue Learning</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('/dashboard/student')}
+                      className="w-full py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <GraduationCap className="w-4 h-4" />
+                      <span>Go to Student Dashboard</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Course Investment</p>
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-3xl font-black text-slate-900">
+                        {displayPrice === 0 ? 'FREE' : `₹${displayPrice.toLocaleString('en-IN')}`}
+                      </span>
+                      {displayPrice > 0 && (
+                        <span className="text-sm text-slate-400 line-through">
+                          ₹{Math.round(displayPrice * 2.2).toLocaleString('en-IN')}
+                        </span>
+                      )}
+                    </div>
 
-              <div className="space-y-3">
-                <Link
-                  to="/cart"
-                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Enroll in Full Course</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+                    {offers?.hasCoupon && (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold border border-emerald-200">
+                        <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{offers.offerBadge || 'Special promotional discounts available at checkout'}</span>
+                      </div>
+                    )}
+                  </div>
 
-                <Link
-                  to="/topics"
-                  className="w-full py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center cursor-pointer"
-                >
-                  Buy Standalone Topics (from ₹499)
-                </Link>
-              </div>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleEnrollNow}
+                      disabled={addingToCart}
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:bg-indigo-400 text-white font-black text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>Enroll in Full Course</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      disabled={addingToCart}
+                      className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <ShoppingBag className="w-4 h-4 text-slate-600" />
+                      <span>{cartSuccessMsg || (course?._id && isInCart(course._id) ? '✓ In Cart (Add More)' : 'Add to Cart')}</span>
+                    </button>
+
+                    <Link
+                      to="/topics"
+                      className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center cursor-pointer text-center"
+                    >
+                      Buy Standalone Topics (from ₹499)
+                    </Link>
+                  </div>
+                </>
+              )}
 
               <div className="pt-4 border-t border-slate-100 space-y-2.5 text-xs text-slate-600">
                 <p className="flex items-center gap-2">

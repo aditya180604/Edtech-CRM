@@ -106,20 +106,26 @@ export const SupportMessage =
 const couponSchema = new mongoose.Schema(
   {
     couponId: { type: String, unique: true, sparse: true, index: true },
-    code: { type: String, required: true, unique: true, uppercase: true, trim: true, index: true },
+    code: { type: String, required: true, trim: true }, // Exact 8 characters, case-sensitive
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    ownerType: { type: String, enum: ['SUPER_ADMIN', 'INSTRUCTOR'], default: 'SUPER_ADMIN' },
     discountType: { type: String, enum: ['PERCENTAGE', 'FIXED'], default: 'PERCENTAGE' },
     discountValue: { type: Number, required: true },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: 'INR' },
     minimumAmount: { type: Number, default: 0 },
     maximumDiscount: { type: Number },
     usageLimit: { type: Number, default: 100 },
     usedCount: { type: Number, default: 0 },
     perUserLimit: { type: Number, default: 1 },
-    startDate: { type: Date },
-    expiryDate: { type: Date },
+    startDate: { type: Date, required: true },
+    expiryDate: { type: Date, required: true },
     eligibleProducts: [{ type: mongoose.Schema.Types.ObjectId }],
     eligibleUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    status: { type: String, default: 'ACTIVE' },
+    status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'], default: 'ACTIVE' },
+    description: { type: String },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     promotionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Promotion' },
   },
   {
@@ -128,7 +134,41 @@ const couponSchema = new mongoose.Schema(
   }
 );
 
+couponSchema.index({ code: 1 }, { unique: true });
+couponSchema.index({ status: 1 });
+couponSchema.index({ startDate: 1, expiryDate: 1 });
+couponSchema.index({ courseId: 1, status: 1 });
+couponSchema.index({ instructorId: 1, courseId: 1 });
+
 export const Coupon = mongoose.models.Coupon || mongoose.model('Coupon', couponSchema);
+
+// ==========================================
+// 48B. CouponRedemption Model (Collection: coupon_redemptions)
+// ==========================================
+const couponRedemptionSchema = new mongoose.Schema(
+  {
+    couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+    code: { type: String, required: true },
+    discountAmount: { type: Number, required: true, default: 0 },
+    currency: { type: String, default: 'INR' },
+    status: { type: String, enum: ['PENDING', 'SUCCESS', 'REVERSED', 'REDEEMED'], default: 'SUCCESS' },
+    redeemedAt: { type: Date, default: Date.now },
+  },
+  {
+    collection: 'coupon_redemptions',
+    timestamps: true,
+  }
+);
+
+couponRedemptionSchema.index({ couponId: 1, userId: 1 });
+couponRedemptionSchema.index({ couponId: 1, courseId: 1 });
+couponRedemptionSchema.index({ orderId: 1 });
+
+export const CouponRedemption =
+  mongoose.models.CouponRedemption || mongoose.model('CouponRedemption', couponRedemptionSchema);
 
 // ==========================================
 // 49. Promotion Model (Collection: promotions)

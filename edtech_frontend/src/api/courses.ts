@@ -21,12 +21,18 @@ export interface CourseCatalogResponse {
 }
 
 export interface CourseDetailsResponse {
+  isEnrolled?: boolean;
+  enrolledTopicsCount?: number;
+  totalTopicsCount?: number;
   course: Course & {
     description?: string;
     skills?: string[];
     requirements?: string[];
     learningObjectives?: string[];
     studentCount?: string;
+    isEnrolled?: boolean;
+    enrolledTopicsCount?: number;
+    totalTopicsCount?: number;
   };
   syllabus: Array<{
     _id: string;
@@ -40,6 +46,7 @@ export interface CourseDetailsResponse {
       title: string;
       price: number;
       isFree: boolean;
+      isOwned?: boolean;
       duration: number;
       videoUrl?: string;
       lessons: Array<{
@@ -48,6 +55,7 @@ export interface CourseDetailsResponse {
         duration: number;
         playbackReference?: string;
         videoUrl?: string;
+        isLocked?: boolean;
         resources?: Array<{ name: string; type: string; size: string }>;
       }>;
     }>;

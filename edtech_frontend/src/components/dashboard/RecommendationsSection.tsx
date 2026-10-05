@@ -35,7 +35,7 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({ 
             return (
               <div
                 key={rec.courseId}
-                onClick={() => navigate(`/courses/${rec.slug}`)}
+                onClick={() => navigate(`/course/${rec.slug}`)}
                 className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4 cursor-pointer group"
               >
                 <div>

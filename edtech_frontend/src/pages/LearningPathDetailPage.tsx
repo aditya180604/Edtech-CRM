@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import {
@@ -14,13 +14,21 @@ import {
   Award,
   PlayCircle,
   AlertCircle,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { learningPathsApi, type LearningPathDetail } from '../api/learningPaths';
+import { useAuth } from '../context/AuthContext';
 
 export const LearningPathDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
   const [pathDetail, setPathDetail] = useState<LearningPathDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  const [enrollMessage, setEnrollMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
 
@@ -50,6 +58,29 @@ export const LearningPathDetailPage: React.FC = () => {
       setError('Unable to load learning path roadmap from the database.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEnroll = async () => {
+    if (!isAuthenticated) {
+      navigate(`/login?redirect=/learning-paths/${slug}`);
+      return;
+    }
+
+    if (!pathDetail) return;
+
+    try {
+      setIsEnrolling(true);
+      setEnrollMessage(null);
+      const res = await learningPathsApi.enrollLearningPath(pathDetail.id || slug || '');
+      setPathDetail((prev) => (prev ? { ...prev, isEnrolled: true } : prev));
+      setEnrollMessage(res.message || 'Enrolled successfully!');
+      setTimeout(() => setEnrollMessage(null), 4000);
+    } catch (err: any) {
+      console.error('Enrollment failed:', err);
+      alert(err.response?.data?.message || err.message || 'Failed to enroll in learning path.');
+    } finally {
+      setIsEnrolling(false);
     }
   };
 
@@ -104,20 +135,57 @@ export const LearningPathDetailPage: React.FC = () => {
             {/* Path Hero Card */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-950/90 via-slate-900/90 to-purple-950/90 border border-indigo-500/20 p-8 sm:p-10 shadow-2xl backdrop-blur-xl">
               <div className="relative z-10 space-y-4">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold tracking-wide uppercase">
-                    {pathDetail.career || 'Career Roadmap'}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-md bg-slate-800/80 text-slate-300 text-xs font-semibold">
-                    {pathDetail.level.replace('_', ' ')}
-                  </span>
-                  {pathDetail.estimatedDuration && (
-                    <span className="flex items-center gap-1 text-slate-400 text-xs">
-                      <Clock className="w-3.5 h-3.5" />
-                      {pathDetail.estimatedDuration}
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold tracking-wide uppercase">
+                      {pathDetail.career || 'Career Roadmap'}
                     </span>
-                  )}
+                    <span className="px-2.5 py-0.5 rounded-md bg-slate-800/80 text-slate-300 text-xs font-semibold">
+                      {pathDetail.level.replace('_', ' ')}
+                    </span>
+                    {pathDetail.estimatedDuration && (
+                      <span className="flex items-center gap-1 text-slate-400 text-xs">
+                        <Clock className="w-3.5 h-3.5" />
+                        {pathDetail.estimatedDuration}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dynamic Action Button: Enroll / Enrolled */}
+                  <div className="flex items-center gap-3">
+                    {pathDetail.isEnrolled ? (
+                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl shadow-lg shadow-emerald-950/40">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Enrolled in Career Track</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleEnroll}
+                        disabled={isEnrolling}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-extrabold rounded-xl transition-all duration-200 shadow-xl shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                      >
+                        {isEnrolling ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Enrolling...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            <span>Enroll in Career Path</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {enrollMessage && (
+                  <div className="p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-medium flex items-center gap-2 animate-fadeIn">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{enrollMessage}</span>
+                  </div>
+                )}
 
                 <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
                   {pathDetail.title}

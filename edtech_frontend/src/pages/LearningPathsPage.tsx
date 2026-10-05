@@ -168,9 +168,16 @@ export const LearningPathsPage: React.FC = () => {
                 <div>
                   {/* Top Badge & Level */}
                   <div className="flex items-center justify-between gap-2 mb-4">
-                    <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold tracking-wide uppercase">
-                      {path.career || 'Career Track'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold tracking-wide uppercase">
+                        {path.career || 'Career Track'}
+                      </span>
+                      {path.isEnrolled && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-extrabold tracking-wide uppercase">
+                          Enrolled
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[11px] font-semibold text-slate-400 bg-slate-800/60 px-2.5 py-0.5 rounded-md">
                       {path.level.replace('_', ' ')}
                     </span>

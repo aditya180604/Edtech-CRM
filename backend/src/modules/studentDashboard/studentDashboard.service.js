@@ -5,6 +5,7 @@ import {
   Module,
   Topic,
   Lesson,
+  LearningPath,
   Entitlement,
   TopicCredit,
   LearningProgress,
@@ -57,6 +58,7 @@ export class StudentDashboardService {
     const fullCourseEntitledIds = new Set();
     const entitledCourseIdsSet = new Set();
     const entitledTopicIdsSet = new Set();
+    const entitledPathIds = [];
 
     for (const ent of entitlements) {
       if (ent.productType === PRODUCT_TYPES.COURSE || ent.productType === 'COURSE') {
@@ -72,6 +74,11 @@ export class StudentDashboardService {
         }
         if (ent.courseId) {
           entitledCourseIdsSet.add(ent.courseId.toString());
+        }
+      } else if (ent.productType === PRODUCT_TYPES.LEARNING_PATH || ent.productType === 'LEARNING_PATH') {
+        const pId = ent.learningPathId || ent.productId;
+        if (pId) {
+          entitledPathIds.push(new mongoose.Types.ObjectId(pId));
         }
       }
     }
@@ -98,6 +105,7 @@ export class StudentDashboardService {
       streakData,
       rankedLiveSessionsData,
       recommendationsData,
+      enrolledPathsDocs,
     ] = await Promise.all([
       this._computeProfile(user),
       this._fetchLearningAndCourses(userObjectId, allEntitledCourseIds, allEntitledTopicIds, fullCourseEntitledIds),
@@ -110,7 +118,22 @@ export class StudentDashboardService {
       this._calculateStreak(userObjectId, user.timezone),
       this._fetchRankedLiveSessions(userObjectId, allEntitledCourseIds, allEntitledTopicIds, user),
       this._fetchRecommendations(userObjectId, Array.from(entitledCourseIdsSet), user),
+      entitledPathIds.length > 0
+        ? LearningPath.find({ _id: { $in: entitledPathIds } }).lean()
+        : [],
     ]);
+
+    const formattedEnrolledPaths = (enrolledPathsDocs || []).map((p) => ({
+      id: p._id.toString(),
+      learningPathId: p.learningPathId || p._id.toString(),
+      title: p.title,
+      slug: p.slug || p._id.toString(),
+      description: p.description || '',
+      career: p.career || null,
+      level: p.level || 'ALL_LEVELS',
+      estimatedDuration: p.estimatedDuration || null,
+      thumbnail: p.thumbnail || null,
+    }));
 
     return {
       profile: profileData,
@@ -120,9 +143,11 @@ export class StudentDashboardService {
         completedCoursesCount: learningCoursesData.completedCoursesCount,
         certificatesCount: certificatesData.length,
         totalLearningHours: learningHoursData,
+        enrolledLearningPathsCount: formattedEnrolledPaths.length,
       },
       streak: streakData,
       activeCourses: learningCoursesData.activeCourses,
+      enrolledLearningPaths: formattedEnrolledPaths,
       upgradeOpportunities: topicCreditsData,
       upcomingLiveSessions: rankedLiveSessionsData,
       recentCertificates: certificatesData,
@@ -567,20 +592,56 @@ export class StudentDashboardService {
   }
 
   /**
+   * Toggle item in user's wishlist
+   */
+  static async toggleWishlist(userId, { productId, productType = 'COURSE' }) {
+    const existing = await Wishlist.findOne({ userId, productId });
+    if (existing) {
+      await Wishlist.deleteOne({ _id: existing._id });
+      return { added: false, message: 'Removed from wishlist' };
+    }
+    const item = await Wishlist.create({
+      userId,
+      productId,
+      productType,
+    });
+    return { added: true, wishlistId: item._id.toString(), message: 'Added to wishlist' };
+  }
+
+  /**
+   * Get all wishlisted productIds for the user
+   */
+  static async getWishlistIds(userId) {
+    const items = await Wishlist.find({ userId }).select('productId').lean();
+    return items.map((i) => i.productId.toString());
+  }
+
+  /**
    * 7. Recent Orders (strictly mapped to Order schema)
    */
   static async _fetchRecentOrders(userId) {
     const orders = await Order.find({ userId }).sort({ createdAt: -1 }).limit(5).lean();
-    return orders.map((o) => ({
-      orderId: o.orderId || o._id.toString(),
-      orderNumber: o.orderId || o._id.toString(),
-      totalAmount: o.finalAmount != null ? o.finalAmount : (o.subtotal || 0),
-      payableAmount: o.finalAmount != null ? o.finalAmount : 0,
-      currency: o.currency || 'USD',
-      status: o.orderStatus || o.paymentStatus || 'COMPLETED',
-      createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
-      itemsCount: Array.isArray(o.items) ? o.items.length : 1,
-    }));
+    return orders.map((o) => {
+      let itemTitle = 'Course Purchase';
+      if (Array.isArray(o.items) && o.items.length > 0) {
+        const first = o.items[0];
+        itemTitle = first.title || first.productName || (first.productType === 'TOPIC' ? `${first.title || 'Topic'} (Topic)` : `${first.title || 'Course'}`);
+        if (o.items.length > 1) {
+          itemTitle += ` (+${o.items.length - 1} more)`;
+        }
+      }
+      return {
+        orderId: o.orderId || o._id.toString(),
+        orderNumber: o.orderId || o._id.toString(),
+        itemTitle,
+        totalAmount: o.finalAmount != null ? o.finalAmount : (o.subtotal || 0),
+        payableAmount: o.finalAmount != null ? o.finalAmount : 0,
+        currency: o.currency || 'INR',
+        status: o.orderStatus || o.paymentStatus || 'PAID',
+        createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
+        itemsCount: Array.isArray(o.items) ? o.items.length : 1,
+      };
+    });
   }
 
   /**

@@ -16,14 +16,19 @@ import {
   Copy,
   Check,
   Radio,
+  Tag,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { superAdminApi, type SuperAdminStatus, type RealtimeUsersResponse } from '../../api/superAdmin';
+import { SuperAdminCouponsTab } from '../../components/superAdmin/SuperAdminCouponsTab';
 import type { User } from '../../types';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  // Navigation section
+  const [mainSection, setMainSection] = useState<'USERS' | 'COUPONS'>('USERS');
 
   // State
   const [statusData, setStatusData] = useState<SuperAdminStatus | null>(null);
@@ -205,7 +210,41 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Real-time Metric Telemetry Cards */}
+        {/* Super Admin Main Section Navigation */}
+        <div className="flex items-center gap-2 mb-6 border-b border-slate-200 pb-3">
+          <button
+            onClick={() => setMainSection('USERS')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              mainSection === 'USERS'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>User Registry & System Telemetry</span>
+          </button>
+
+          <button
+            onClick={() => setMainSection('COUPONS')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              mainSection === 'COUPONS'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'bg-white text-slate-600 hover:text-indigo-600 border border-slate-200'
+            }`}
+          >
+            <Tag className="w-4 h-4" />
+            <span>Coupons Management</span>
+            <span className="px-1.5 py-0.2 text-[10px] font-black rounded-full bg-indigo-100 text-indigo-800">
+              Super Admin Only
+            </span>
+          </button>
+        </div>
+
+        {mainSection === 'COUPONS' ? (
+          <SuperAdminCouponsTab />
+        ) : (
+          <>
+            {/* Real-time Metric Telemetry Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {/* 1. Total Registered Accounts */}
           <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between">
@@ -491,6 +530,8 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      </>
+    )}
 
         {/* User Detail Inspect Modal */}
         {selectedUser && (
