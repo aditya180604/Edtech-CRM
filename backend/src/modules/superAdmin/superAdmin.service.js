@@ -20,6 +20,7 @@ import {
   InstructorProfile,
   Notification,
   PlatformFee,
+  InstructorEarning,
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
 
@@ -46,6 +47,7 @@ export class SuperAdminService {
       recentLogs,
       pendingVerificationsCount,
       verifiedPlatformFees,
+      allEarnings,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ role: ROLES.STUDENT }),
@@ -55,23 +57,44 @@ export class SuperAdminService {
       Course.countDocuments({ status: { $ne: 'ARCHIVED' } }),
       Topic.countDocuments({ status: { $ne: 'ARCHIVED' } }),
       Order.countDocuments(),
-      Order.countDocuments({ status: { $in: ['COMPLETED', 'PAID'] } }),
+      Order.countDocuments({
+        $or: [
+          { orderStatus: { $in: ['COMPLETED', 'PAID'] } },
+          { paymentStatus: 'SUCCESS' },
+          { status: { $in: ['COMPLETED', 'PAID', 'SUCCESS'] } },
+        ],
+      }),
       Refund.countDocuments(),
       Payout.countDocuments(),
-      Order.find({ status: { $in: ['COMPLETED', 'PAID'] } }).select('totalAmount createdAt items').lean(),
+      Order.find({
+        $or: [
+          { orderStatus: { $in: ['COMPLETED', 'PAID'] } },
+          { paymentStatus: 'SUCCESS' },
+          { status: { $in: ['COMPLETED', 'PAID', 'SUCCESS'] } },
+        ],
+      }).select('finalAmount subtotal totalAmount createdAt items').lean(),
       Course.find({ status: 'PUBLISHED' }).select('category coursePrice').lean(),
       AuditLog.find().sort({ timestamp: -1 }).limit(8).populate('actorId', 'firstName lastName email role').lean(),
       InstructorProfile.countDocuments({ verificationStatus: { $in: ['PENDING', 'UNDER_REVIEW'] } }),
       PlatformFee.find({ payment_status: 'SUCCESS' }).lean(),
+      InstructorEarning.find().lean(),
     ]);
 
-    // Calculate GMV (Gross Merchandise Value) strictly from real orders
-    const rawGMV = allCompletedOrders.reduce((sum, ord) => sum + (ord.totalAmount || 0), 0);
+    // Calculate GMV (Gross Merchandise Value) across all completed orders
+    const rawGMV = allCompletedOrders.reduce((sum, ord) => {
+      const amt = ord.finalAmount ?? ord.subtotal ?? ord.totalAmount ?? 0;
+      if (amt > 0) return sum + amt;
+      const itemsSum = ord.items?.reduce((s, i) => s + (i.finalPrice || i.price || 0), 0) || 0;
+      return sum + itemsSum;
+    }, 0);
     const gmv = rawGMV;
-    const studentOrderRevenue = Math.round(gmv * 0.172); // 17.2% Take Rate from student purchases
+
+    // Platform Commission (20%) from student course purchases + 10% Publishing Fees
+    const recordedCommissions = allEarnings.reduce((sum, e) => sum + (e.platformCommission || 0), 0);
+    const studentOrderRevenue = recordedCommissions > 0 ? recordedCommissions : Math.round(gmv * 0.20);
     const platformFeesRevenue = verifiedPlatformFees.reduce((sum, fee) => sum + (fee.amount || 0), 0);
     const platformRevenue = studentOrderRevenue + Math.round(platformFeesRevenue);
-    const takeRate = gmv > 0 ? ((studentOrderRevenue / gmv) * 100).toFixed(1) : '17.2';
+    const takeRate = gmv > 0 ? ((studentOrderRevenue / gmv) * 100).toFixed(1) : '20.0';
 
     // Compute Category breakdown dynamically from actual courses
     const categoryCountMap = {};
@@ -1068,7 +1091,13 @@ export class SuperAdminService {
    */
   static async getOrdersList({ status, search, page = 1, limit = 50 }) {
     const query = {};
-    if (status && status !== 'ALL' && status !== 'All') query.status = status.toUpperCase();
+    if (status && status !== 'ALL' && status !== 'All') {
+      query.$or = [
+        { orderStatus: status.toUpperCase() },
+        { paymentStatus: status.toUpperCase() },
+        { status: status.toUpperCase() },
+      ];
+    }
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const [orders, total] = await Promise.all([
@@ -1082,16 +1111,22 @@ export class SuperAdminService {
     ]);
 
     return {
-      orders: orders.map((ord) => ({
-        id: ord._id.toString(),
-        orderId: ord.orderId || `#ORD${ord._id.toString().slice(-6).toUpperCase()}`,
-        user: [ord.userId?.firstName, ord.userId?.lastName].filter(Boolean).join(' ') || ord.userId?.email || 'Student',
-        userEmail: ord.userId?.email || '',
-        courseTopic: ord.items?.map((i) => i.title).join(', ') || 'Course Purchase',
-        amount: ord.totalAmount ?? (ord.items?.reduce((s, i) => s + (i.price || 0), 0) ?? 0),
-        status: ord.status || 'COMPLETED',
-        date: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
-      })),
+      orders: orders.map((ord) => {
+        let ordAmount = ord.finalAmount ?? ord.subtotal ?? ord.totalAmount ?? 0;
+        if (!ordAmount && Array.isArray(ord.items)) {
+          ordAmount = ord.items.reduce((s, i) => s + (i.finalPrice || i.price || 0), 0);
+        }
+        return {
+          id: ord._id.toString(),
+          orderId: ord.orderId || `#ORD${ord._id.toString().slice(-6).toUpperCase()}`,
+          user: [ord.userId?.firstName, ord.userId?.lastName].filter(Boolean).join(' ') || ord.userId?.email || 'Student',
+          userEmail: ord.userId?.email || '',
+          courseTopic: ord.items?.map((i) => i.title || i.itemTitle || 'Course Purchase').join(', ') || 'Course Purchase',
+          amount: ordAmount,
+          status: ord.orderStatus || ord.paymentStatus || ord.status || 'COMPLETED',
+          date: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
+        };
+      }),
       total,
     };
   }
@@ -1102,7 +1137,7 @@ export class SuperAdminService {
   static async getRefundsList() {
     const refunds = await Refund.find()
       .populate('userId', 'firstName lastName email')
-      .populate('orderId', 'orderId totalAmount')
+      .populate('orderId', 'orderId totalAmount finalAmount')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1136,26 +1171,29 @@ export class SuperAdminService {
    * 6. PAYOUTS MANAGEMENT (Image 6)
    */
   static async getPayoutsOverview() {
-    const payouts = await Payout.find()
-      .populate('instructorId', 'firstName lastName email profilePhoto')
-      .sort({ createdAt: -1 })
-      .lean();
+    const [payouts, availableEarnings] = await Promise.all([
+      Payout.find()
+        .populate('instructorId', 'firstName lastName email profilePhoto')
+        .sort({ createdAt: -1 })
+        .lean(),
+      InstructorEarning.find({ status: 'AVAILABLE' })
+        .populate('instructorId', 'firstName lastName email profilePhoto')
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
 
-    const totalPayoutsAmount = payouts.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const pendingAmount = payouts.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + (p.amount || 0), 0);
+    const pendingEarningsAmount = availableEarnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
+    const existingPendingPayouts = payouts.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalPending = pendingEarningsAmount + existingPendingPayouts;
+
     const completedAmount = payouts.filter((p) => p.status === 'COMPLETED').reduce((sum, p) => sum + (p.amount || 0), 0);
     const failedAmount = payouts.filter((p) => p.status === 'FAILED').reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalPayoutsAmount = completedAmount + totalPending;
 
     const fmt = (val) => (val >= 100000 ? `₹${(val / 100000).toFixed(1)} L` : `₹${val.toLocaleString('en-IN')}`);
 
-    return {
-      metrics: {
-        totalPayouts: fmt(totalPayoutsAmount),
-        pendingPayouts: fmt(pendingAmount),
-        completedPayouts: fmt(completedAmount),
-        failedPayouts: fmt(failedAmount),
-      },
-      payouts: payouts.map((p) => ({
+    const combinedPayouts = [
+      ...payouts.map((p) => ({
         id: p._id.toString(),
         payoutId: p.payoutId || `#PAY${p._id.toString().slice(-6).toUpperCase()}`,
         instructor: [p.instructorId?.firstName, p.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
@@ -1165,6 +1203,26 @@ export class SuperAdminService {
         status: p.status || 'PENDING',
         date: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
       })),
+      ...availableEarnings.map((e) => ({
+        id: e._id.toString(),
+        payoutId: `#EARN${e._id.toString().slice(-6).toUpperCase()}`,
+        instructor: [e.instructorId?.firstName, e.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+        instructorAvatar: e.instructorId?.profilePhoto || null,
+        amount: e.netEarning || e.grossAmount || 0,
+        paymentMethod: 'Bank Transfer (Pending Disbursal)',
+        status: 'PENDING',
+        date: e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
+      })),
+    ];
+
+    return {
+      metrics: {
+        totalPayouts: fmt(totalPayoutsAmount),
+        pendingPayouts: fmt(totalPending),
+        completedPayouts: fmt(completedAmount),
+        failedPayouts: fmt(failedAmount),
+      },
+      payouts: combinedPayouts,
     };
   }
 

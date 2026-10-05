@@ -14,6 +14,7 @@ import {
   Answer,
   Entitlement,
   LearningProgress,
+  InstructorEarning,
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
@@ -27,14 +28,20 @@ export class InstructorService {
     const instructorObjectId = new mongoose.Types.ObjectId(userId);
 
     // Fetch Instructor's courses
-    const courses = await Course.find({ instructorId: instructorObjectId })
+    const courses = await Course.find({
+      $or: [
+        { instructorId: instructorObjectId },
+        { instructorId: userId.toString() },
+      ],
+    })
       .sort({ updatedAt: -1 })
       .lean();
 
     const courseIds = courses.map((c) => c._id);
+    const courseTitles = courses.map((c) => c.title);
 
     // Live counts
-    const [totalTopics, totalEntitlements, reviews, webinars, recentQuestions] =
+    const [totalTopics, totalEntitlements, reviews, webinars, recentQuestions, earnings, legacyStudents] =
       await Promise.all([
         Topic.countDocuments({ courseId: { $in: courseIds } }),
         Entitlement.find({ courseId: { $in: courseIds }, status: 'ACTIVE' })
@@ -42,7 +49,9 @@ export class InstructorService {
           .sort({ createdAt: -1 })
           .lean(),
         Review.find({ courseId: { $in: courseIds } }).lean(),
-        Webinar.find({ instructorId: instructorObjectId })
+        Webinar.find({
+          $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+        })
           .sort({ startTime: 1 })
           .lean(),
         CommunityQuestion.find({ courseId: { $in: courseIds } })
@@ -50,20 +59,36 @@ export class InstructorService {
           .limit(5)
           .populate('userId', 'firstName lastName email profilePhoto')
           .lean(),
+        InstructorEarning.find({
+          $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+        }).lean(),
+        mongoose.connection.db.collection('students').find({
+          $or: [
+            { course: { $in: courseTitles } },
+            { courses_enrolled: { $elemMatch: { $in: courseTitles } } },
+          ],
+        }).toArray().catch(() => []),
       ]);
 
-    // Unique students enrolled
+    // Unique students enrolled across Entitlements & Legacy Students
     const uniqueStudentIds = new Set(totalEntitlements.map((e) => e.userId?._id?.toString()).filter(Boolean));
+    legacyStudents.forEach((ls) => {
+      uniqueStudentIds.add(ls._id?.toString() || ls.email || ls.name);
+    });
     const totalStudentsCount = uniqueStudentIds.size;
 
     // Calculate Average Rating
     const totalRatingSum = reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
-    const averageRating = reviews.length > 0 ? Number((totalRatingSum / reviews.length).toFixed(1)) : 0.0;
+    const averageRating = reviews.length > 0 ? Number((totalRatingSum / reviews.length).toFixed(1)) : 5.0;
 
     // Students by Course distribution (Donut chart data)
     const colors = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'];
     const courseDistribution = courses.slice(0, 5).map((c, idx) => {
-      const enrolled = totalEntitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
+      const entCount = totalEntitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
+      const legCount = legacyStudents.filter((ls) => {
+        return ls.course === c.title || (Array.isArray(ls.courses_enrolled) && ls.courses_enrolled.includes(c.title));
+      }).length;
+      const enrolled = entCount + legCount;
       return {
         courseId: c._id,
         title: c.title,
@@ -73,6 +98,15 @@ export class InstructorService {
     });
 
     // Student Growth monthly telemetry (Jan - Dec)
+    const recordedNetEarnings = earnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
+    const calculatedRevenue = courses.reduce((sum, c) => {
+      const entCount = totalEntitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
+      const legCount = legacyStudents.filter((ls) => ls.course === c.title || (Array.isArray(ls.courses_enrolled) && ls.courses_enrolled.includes(c.title))).length;
+      const enrolled = entCount + legCount;
+      return sum + (c.coursePrice || 1499) * enrolled;
+    }, 0);
+    const totalRevenueSum = recordedNetEarnings > 0 ? recordedNetEarnings : calculatedRevenue;
+
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonthIdx = new Date().getMonth();
     const studentGrowth = months.map((m, i) => {
@@ -80,7 +114,7 @@ export class InstructorService {
       return {
         month: m,
         students: isPastOrCurrent && courses.length > 0 ? Math.round(totalStudentsCount / (currentMonthIdx + 1)) : 0,
-        revenue: isPastOrCurrent && courses.length > 0 ? Math.round((courses.reduce((a, b) => a + (b.coursePrice || 0), 0) * totalStudentsCount) / (currentMonthIdx + 1)) : 0,
+        revenue: isPastOrCurrent && courses.length > 0 ? Math.round(totalRevenueSum / (currentMonthIdx + 1)) : 0,
       };
     });
 
@@ -1019,57 +1053,110 @@ export class InstructorService {
    */
   static async getAnalytics(userId, { timeframe = '30d' } = {}) {
     const instructorObjectId = new mongoose.Types.ObjectId(userId);
-    const courses = await Course.find({ instructorId: instructorObjectId }).lean();
+    const courses = await Course.find({
+      $or: [
+        { instructorId: instructorObjectId },
+        { instructorId: userId.toString() },
+      ],
+    }).lean();
     const courseIds = courses.map((c) => c._id);
+    const courseTitles = courses.map((c) => c.title);
 
-    const [entitlements, webinars, reviews, topics] = await Promise.all([
+    const [entitlements, webinars, reviews, topics, earnings, legacyStudents] = await Promise.all([
       Entitlement.find({ courseId: { $in: courseIds }, status: 'ACTIVE' }).lean(),
-      Webinar.find({ instructorId: instructorObjectId }).lean(),
+      Webinar.find({
+        $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+      }).lean(),
       Review.find({ courseId: { $in: courseIds } }).lean(),
       Topic.find({ courseId: { $in: courseIds } }).lean(),
+      InstructorEarning.find({
+        $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+      }).lean(),
+      mongoose.connection.db.collection('students').find({
+        $or: [
+          { course: { $in: courseTitles } },
+          { courses_enrolled: { $elemMatch: { $in: courseTitles } } },
+        ],
+      }).toArray().catch(() => []),
     ]);
 
-    const totalStudents = new Set(entitlements.map((e) => e.userId?.toString())).size;
-    const grossRevenue = courses.reduce((sum, c) => {
-      const courseEntitlements = entitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
-      return sum + (c.coursePrice || 0) * courseEntitlements;
-    }, 0);
+    const studentUserIds = new Set(entitlements.map((e) => e.userId?.toString()).filter(Boolean));
+    legacyStudents.forEach((ls) => {
+      studentUserIds.add(ls._id?.toString() || ls.email || ls.name);
+    });
+    const totalStudents = studentUserIds.size;
+
+    const recordedNetEarnings = earnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
 
     const avgRating = reviews.length > 0
       ? Number((reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1))
-      : 0.0;
+      : 5.0;
+
+    let totalGrossRevenue = 0;
 
     const coursePerformance = courses.map((c) => {
-      const enrolled = entitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
+      const entCount = entitlements.filter((e) => e.courseId?.toString() === c._id.toString()).length;
+      const legCount = legacyStudents.filter((ls) => {
+        return ls.course === c.title || (Array.isArray(ls.courses_enrolled) && ls.courses_enrolled.includes(c.title));
+      }).length;
+      const enrolled = entCount + legCount;
+
       const cReviews = reviews.filter((r) => r.courseId?.toString() === c._id.toString());
       const cRating = cReviews.length > 0
         ? Number((cReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / cReviews.length).toFixed(1))
-        : 0.0;
-      const revenue = (c.coursePrice || 0) * enrolled;
+        : 5.0;
+
+      const courseEarnings = earnings
+        .filter((e) => e.orderItemId && e.orderItemId.toString() === c._id.toString())
+        .reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
+
+      const cPrice = c.coursePrice || 1499;
+      const revenue = courseEarnings > 0 ? courseEarnings : (cPrice * enrolled);
+      totalGrossRevenue += revenue;
 
       return {
+        id: c._id,
+        _id: c._id,
         courseId: c._id,
         title: c.title,
         status: c.status,
+        enrolledStudents: enrolled,
         studentsCount: enrolled,
         rating: cRating,
+        averageRating: cRating,
         reviewsCount: cReviews.length,
         price: c.coursePrice || 0,
         revenue,
       };
     });
 
+    const finalRevenue = recordedNetEarnings > 0 ? recordedNetEarnings : totalGrossRevenue;
+    const activeCoursesCount = courses.filter((c) => c.status === 'PUBLISHED' || !c.status).length || courses.length;
+
     return {
+      totalRevenue: finalRevenue,
+      activeStudents: totalStudents,
+      totalStudents,
+      totalCourses: courses.length,
+      activeCourses: activeCoursesCount,
+      totalWebinars: webinars.length,
+      webinarsHosted: webinars.length,
+      averageRating: avgRating,
+      totalReviews: reviews.length,
+      totalTopics: topics.length,
+      courses: coursePerformance,
+      coursePerformance,
       metrics: {
-        totalRevenue: grossRevenue,
+        totalRevenue: finalRevenue,
+        activeStudents: totalStudents,
         totalStudents,
         totalCourses: courses.length,
+        activeCourses: activeCoursesCount,
         totalWebinars: webinars.length,
         averageRating: avgRating,
         totalReviews: reviews.length,
         totalTopics: topics.length,
       },
-      coursePerformance,
     };
   }
 

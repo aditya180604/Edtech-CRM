@@ -32,7 +32,11 @@ const isAllowedOrigin = (origin) => {
 };
 
 // Security and utility middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  })
+);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -50,8 +54,15 @@ app.use(
       'X-Requested-With',
       'Accept',
       'Origin',
+      'idempotency-key',
+      'Idempotency-Key',
+      'x-idempotency-key',
       'x-webhook-signature',
       'x-webhook-timestamp',
+      'x-client-id',
+      'x-api-version',
+      'Cache-Control',
+      'Pragma',
     ],
   })
 );

@@ -309,4 +309,116 @@ export class AuthService {
       }
     }
   }
+
+  /**
+   * Firebase Authentication Sync (Email/Password & Google Sign In)
+   * Verifies Firebase ID Token, links existing MongoDB user or registers new Student
+   */
+  static async firebaseSync({ idToken }) {
+    if (!idToken) {
+      throw new AppError('Firebase ID Token is required.', 400);
+    }
+
+    const { getFirebaseAuth } = await import('../../config/firebase.js');
+    const auth = getFirebaseAuth();
+
+    let decoded;
+    try {
+      decoded = await auth.verifyIdToken(idToken);
+    } catch (err) {
+      throw new AppError(`Invalid or expired Firebase ID Token: ${err.message}`, 401);
+    }
+
+    const { uid, email, name, picture, email_verified } = decoded;
+
+    if (!email) {
+      throw new AppError('Firebase account must have a verified email address.', 400);
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Look for existing user by firebaseUid OR by email
+    let user = await User.findOne({
+      $or: [{ firebaseUid: uid }, { email: normalizedEmail }],
+    });
+
+    let isNewUser = false;
+
+    if (user) {
+      // Existing user: Link firebaseUid if not set, update profile picture if missing
+      if (!user.firebaseUid) {
+        user.firebaseUid = uid;
+      }
+      if (email_verified && !user.emailVerified) {
+        user.emailVerified = true;
+      }
+      if (!user.profilePhoto && picture) {
+        user.profilePhoto = picture;
+      }
+      user.lastLoginAt = new Date();
+      await user.save();
+    } else {
+      // New user: Create user strictly with role = STUDENT (Plan Section 6 & 10)
+      isNewUser = true;
+
+      let firstName = 'User';
+      let lastName = '';
+
+      if (name) {
+        const parts = name.trim().split(' ');
+        firstName = parts[0] || 'User';
+        lastName = parts.slice(1).join(' ') || '';
+      }
+
+      user = await User.create({
+        firebaseUid: uid,
+        email: normalizedEmail,
+        firstName,
+        lastName,
+        profilePhoto: picture || null,
+        role: ROLES.STUDENT, // Strictly STUDENT
+        status: USER_STATUS.ACTIVE,
+        emailVerified: !!email_verified,
+        lastLoginAt: new Date(),
+      });
+    }
+
+    // Generate app tokens for backwards compatibility and sessions
+    const { accessToken, refreshToken } = this.generateTokens(user);
+    user.refreshTokenHash = this.hashToken(refreshToken);
+    user.refreshTokenRotatedAt = new Date();
+    await user.save();
+
+    await AuditLogger.log({
+      actorId: user._id,
+      action: isNewUser ? 'FIREBASE_REGISTER' : 'FIREBASE_LOGIN',
+      resourceType: 'AUTH',
+      resourceId: user._id.toString(),
+      newValue: { email: user.email, role: user.role, firebaseUid: uid },
+    });
+
+    return {
+      user: {
+        _id: user._id,
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        profilePhoto: user.profilePhoto,
+        emailVerified: user.emailVerified,
+        isProfileCompleted: user.isProfileCompleted,
+        skills: user.skills || [],
+        interests: user.interests || [],
+        firebaseUid: user.firebaseUid,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      accessToken,
+      refreshToken,
+      isNewUser,
+    };
+  }
 }

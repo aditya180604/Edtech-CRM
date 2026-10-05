@@ -6,7 +6,7 @@ import { GraduationCap, X, Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lu
 
 export const AuthModal: React.FC = () => {
   const { authMode, closeAuth, switchMode } = useAuthModal();
-  const { login, register, getRedirectPathForRole } = useAuth();
+  const { login, register, loginWithGoogle, getRedirectPathForRole } = useAuth();
   const navigate = useNavigate();
 
   // Role selector (Student & Instructor ONLY - Admin removed!)
@@ -23,6 +23,20 @@ export const AuthModal: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!authMode) return null;
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setLoading(true);
+    const result = await loginWithGoogle();
+    setLoading(false);
+    if (result.success && result.role) {
+      closeAuth();
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+      navigate(redirectPath);
+    } else if (!result.success) {
+      setErrorMessage(result.message || 'Google sign in failed.');
+    }
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,7 +337,9 @@ export const AuthModal: React.FC = () => {
         {/* Only Google Social Button */}
         <button
           type="button"
-          className="w-full flex items-center justify-center gap-2 py-2 px-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 rounded-xl text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
         >
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
             <path

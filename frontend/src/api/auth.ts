@@ -37,5 +37,11 @@ export const authApi = {
     const response = await apiClient.patch('/users/me', payload);
     return response.data;
   },
+
+  // 7. Firebase Identity Sync & Login (Email/Password & Google Sign In)
+  async firebaseLogin(idToken: string): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>('/auth/firebase-login', { idToken });
+    return response.data;
+  },
 };
 

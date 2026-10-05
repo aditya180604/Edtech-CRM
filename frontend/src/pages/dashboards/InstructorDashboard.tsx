@@ -5023,20 +5023,26 @@ export const InstructorDashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
               <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
                 <p className="text-2xl font-black">
-                  ₹{(analyticsData?.totalRevenue || 0).toLocaleString('en-IN')}
+                  ₹{((analyticsData?.metrics?.totalRevenue ?? analyticsData?.totalRevenue) || 0).toLocaleString('en-IN')}
                 </p>
                 <p className="font-semibold text-slate-600">Total Revenue</p>
               </div>
               <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-700">
-                <p className="text-2xl font-black">{analyticsData?.activeStudents ?? 0}</p>
+                <p className="text-2xl font-black">
+                  {analyticsData?.metrics?.activeStudents ?? analyticsData?.metrics?.totalStudents ?? analyticsData?.activeStudents ?? analyticsData?.totalStudents ?? 0}
+                </p>
                 <p className="font-semibold text-slate-600">Active Students</p>
               </div>
               <div className="p-4 rounded-2xl bg-purple-50 text-purple-700">
-                <p className="text-2xl font-black">{analyticsData?.totalCourses ?? 0}</p>
+                <p className="text-2xl font-black">
+                  {analyticsData?.metrics?.activeCourses ?? analyticsData?.metrics?.totalCourses ?? analyticsData?.activeCourses ?? analyticsData?.totalCourses ?? 0}
+                </p>
                 <p className="font-semibold text-slate-600">Active Courses</p>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
-                <p className="text-2xl font-black">{analyticsData?.totalWebinars ?? 0}</p>
+                <p className="text-2xl font-black">
+                  {analyticsData?.metrics?.totalWebinars ?? analyticsData?.totalWebinars ?? analyticsData?.webinarsHosted ?? 0}
+                </p>
                 <p className="font-semibold text-slate-600">Webinars Hosted</p>
               </div>
             </div>
@@ -5055,25 +5061,26 @@ export const InstructorDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {!analyticsData?.courses || analyticsData.courses.length === 0 ? (
+                    {(!analyticsData?.courses && !analyticsData?.coursePerformance) ||
+                    ((analyticsData?.courses || analyticsData?.coursePerformance || []).length === 0) ? (
                       <tr>
                         <td colSpan={4} className="py-6 text-center text-slate-400 font-medium">
                           No course analytics available yet.
                         </td>
                       </tr>
                     ) : (
-                      analyticsData.courses.map((c: any) => (
+                      (analyticsData?.courses || analyticsData?.coursePerformance || []).map((c: any) => (
                         <tr key={c.id || c._id} className="hover:bg-slate-50">
                           <td className="py-3.5 px-4 font-bold text-slate-900">{c.title}</td>
                           <td className="py-3.5 px-4 font-semibold text-slate-700">
-                            {c.enrolledStudents || 0}
+                            {c.studentsCount ?? c.enrolledStudents ?? 0}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-emerald-700">
                             ₹{(c.revenue || 0).toLocaleString('en-IN')}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
-                              ★ {Number(c.averageRating || 0).toFixed(1)}
+                              ★ {Number(c.rating ?? c.averageRating ?? 5.0).toFixed(1)}
                             </span>
                           </td>
                         </tr>

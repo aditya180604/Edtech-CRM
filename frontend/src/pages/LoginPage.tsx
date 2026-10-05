@@ -5,12 +5,25 @@ import { GraduationCap, Eye, EyeOff, Lock, Mail, ArrowLeft, AlertCircle } from '
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login, getRedirectPathForRole } = useAuth();
+  const { login, loginWithGoogle, getRedirectPathForRole } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setLoading(true);
+    const result = await loginWithGoogle();
+    setLoading(false);
+    if (result.success && result.role) {
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+      navigate(redirectPath);
+    } else if (!result.success) {
+      setErrorMessage(result.message || 'Google sign in failed.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,7 +150,9 @@ export const LoginPage: React.FC = () => {
         {/* Only Google Social Button */}
         <button
           type="button"
-          className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 transition-colors shadow-2xs"
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path

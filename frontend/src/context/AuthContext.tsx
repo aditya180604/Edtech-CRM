@@ -1,4 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  signOut,
+} from 'firebase/auth';
+import { auth, googleProvider } from '../config/firebase';
 import { authApi } from '../api/auth';
 import type { User, UserRole, LoginPayload, RegisterPayload } from '../types';
 
@@ -10,6 +19,10 @@ interface AuthContextType {
   error: string | null;
   login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
   register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
+  loginWithFirebaseEmail: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
+  registerWithFirebaseEmail: (email: string, password: string, name?: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => void;
   refreshUser: () => Promise<void>;
@@ -91,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restoreSession();
   }, []);
 
+  // 1. Existing Traditional Email/Password Login
   const login = async (payload: LoginPayload) => {
     setError(null);
     try {
@@ -112,6 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // 2. Existing Traditional Registration
   const register = async (payload: RegisterPayload) => {
     setError(null);
     try {
@@ -133,7 +148,104 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // 3. Google Sign-In via Firebase
+  const loginWithGoogle = async () => {
+    setError(null);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      const res = await authApi.firebaseLogin(idToken);
+      if (res.success && res.data) {
+        const { user: authUser, accessToken: token } = res.data;
+        setUser(authUser);
+        setAccessToken(token);
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('user', JSON.stringify(authUser));
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+      }
+      return { success: false, message: res.message || 'Google authentication failed' };
+    } catch (err: any) {
+      const msg =
+        err.code === 'auth/popup-closed-by-user'
+          ? 'Sign in popup was closed.'
+          : err.response?.data?.message || err.message || 'Google sign in failed.';
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
+  // 4. Firebase Email/Password Sign-In
+  const loginWithFirebaseEmail = async (email: string, password: string) => {
+    setError(null);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await userCredential.user.getIdToken();
+      const res = await authApi.firebaseLogin(idToken);
+      if (res.success && res.data) {
+        const { user: authUser, accessToken: token } = res.data;
+        setUser(authUser);
+        setAccessToken(token);
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('user', JSON.stringify(authUser));
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+      }
+      return { success: false, message: res.message || 'Firebase login failed' };
+    } catch (err: any) {
+      const msg =
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential'
+          ? 'Invalid email or password.'
+          : err.response?.data?.message || err.message || 'Firebase sign in failed.';
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
+  // 5. Firebase Email/Password Registration
+  const registerWithFirebaseEmail = async (email: string, password: string, name?: string) => {
+    setError(null);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      if (name) {
+        await updateProfile(userCredential.user, { displayName: name });
+      }
+      const idToken = await userCredential.user.getIdToken();
+      const res = await authApi.firebaseLogin(idToken);
+      if (res.success && res.data) {
+        const { user: authUser, accessToken: token } = res.data;
+        setUser(authUser);
+        setAccessToken(token);
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('user', JSON.stringify(authUser));
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+      }
+      return { success: false, message: res.message || 'Registration failed' };
+    } catch (err: any) {
+      const msg =
+        err.code === 'auth/email-already-in-use'
+          ? 'An account with this email already exists.'
+          : err.response?.data?.message || err.message || 'Registration failed.';
+      setError(msg);
+      return { success: false, message: msg };
+    }
+  };
+
+  // 6. Firebase Password Reset
+  const sendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return { success: true, message: 'Password reset email sent successfully.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to send reset email.' };
+    }
+  };
+
+  // 7. Logout User
   const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {}
     try {
       await authApi.logout();
     } catch {
@@ -157,6 +269,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error,
         login,
         register,
+        loginWithGoogle,
+        loginWithFirebaseEmail,
+        registerWithFirebaseEmail,
+        sendPasswordReset,
         logout,
         updateUser,
         refreshUser,

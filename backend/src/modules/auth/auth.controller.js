@@ -93,4 +93,26 @@ export class AuthController {
     const user = await AuthService.getMe(userId);
     return ApiResponse.success(res, { user }, 'User profile retrieved.');
   });
+
+  static firebaseLogin = asyncHandler(async (req, res) => {
+    const { idToken } = req.body;
+    const result = await AuthService.firebaseSync({ idToken });
+
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return ApiResponse.success(
+      res,
+      {
+        user: result.user,
+        accessToken: result.accessToken,
+        isNewUser: result.isNewUser,
+      },
+      result.isNewUser ? 'User registered and linked via Firebase.' : 'Login successful via Firebase.'
+    );
+  });
 }

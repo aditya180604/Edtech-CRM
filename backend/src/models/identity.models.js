@@ -17,6 +17,12 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       index: true,
     },
+    firebaseUid: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     phone: { type: String, trim: true },
     passwordHash: {
       type: String,
