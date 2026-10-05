@@ -41,7 +41,7 @@ import {
   Clock,
   Heart,
   Bookmark,
-  GraduationCap,
+  GraduationCap, 
   Star,
 } from 'lucide-react';
 import { superAdminApi } from '../../api/superAdmin';
