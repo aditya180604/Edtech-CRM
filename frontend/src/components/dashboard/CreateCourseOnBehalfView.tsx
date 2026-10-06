@@ -40,7 +40,7 @@ import {
   UserCheck,
   Clock,
   Heart,
-  Bookmark,
+  Bookmark, 
   GraduationCap,
   Star,
 } from 'lucide-react';
