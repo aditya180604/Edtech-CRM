@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { coursesApi, type CourseDetailsResponse } from '../api/courses';
+import {
+  coursesApi,
+  type CourseDetailsResponse,
+  type QuestionItem,
+  type CourseReviewItem,
+} from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +36,11 @@ import {
   Check,
   Play,
   Users,
+  Star,
+  MessageSquare,
+  Send,
+  HelpCircle,
+  Download,
 } from 'lucide-react';
 
 export const CourseDetailPage: React.FC = () => {
@@ -44,6 +54,22 @@ export const CourseDetailPage: React.FC = () => {
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [allExpanded, setAllExpanded] = useState(true);
   const [showSyllabusModal, setShowSyllabusModal] = useState(false);
+
+  // Active Classroom Tabs: 'overview' | 'qa' | 'reviews'
+  const [classroomTab, setClassroomTab] = useState<'overview' | 'qa' | 'reviews'>('overview');
+
+  // Rating & Review State
+  const [userRating, setUserRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+  const [existingReview, setExistingReview] = useState<CourseReviewItem | null>(null);
+
+  // Q&A State
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [newQuestionText, setNewQuestionText] = useState<string>('');
+  const [submittingQuestion, setSubmittingQuestion] = useState<boolean>(false);
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
+  const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({});
 
   // Video Player & Restricted Access Paywall Modals
   const [activeVideoModal, setActiveVideoModal] = useState<{ title: string; url: string } | null>(null);
@@ -63,6 +89,12 @@ export const CourseDetailPage: React.FC = () => {
         const res = await coursesApi.getDetails(slug);
         if (res.success && res.data) {
           setCourseData(res.data);
+          if (Array.isArray(res.data.completedLessonIds) && res.data.completedLessonIds.length > 0) {
+            setCompletedLessonIds(res.data.completedLessonIds);
+            try {
+              localStorage.setItem(`edtech_course_progress_${slug}`, JSON.stringify(res.data.completedLessonIds));
+            } catch {}
+          }
           // Expand all modules by default matching layout
           const initialExp: Record<string, boolean> = {};
           (res.data.syllabus || []).forEach((m) => {
@@ -166,18 +198,260 @@ export const CourseDetailPage: React.FC = () => {
   const parsedLearningOutcomes = normalizeList(course.learningObjectives);
   const parsedSkills = normalizeList(course.skills);
 
-  // Access Permission Verification (Admin, Instructor, Enrolled Student, or Free Course)
+  // Check session storage cached enrollments for quick local verification
+  const isLocallyEnrolled = useMemo(() => {
+    try {
+      const stored = sessionStorage.getItem('edtech_student_enrolled_courses');
+      if (stored) {
+        const list = JSON.parse(stored);
+        if (Array.isArray(list)) {
+          return list.some(
+            (item: any) =>
+              (item.slug && item.slug === slug) ||
+              (item.id && (item.id === course._id || item.id === course.id))
+          );
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [slug, course._id, course.id]);
+
+  // Access Permission Verification (Enrolled Student, Admin, Instructor, or Free Course)
   const isEnrolled = Boolean(
+    courseData?.isEnrolled ||
+    course?.isEnrolled ||
+    course?.isOwned ||
+    isLocallyEnrolled ||
     (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') ||
-      (course.instructorId &&
-        ((user as any)?._id === course.instructorId?._id ||
-          (user as any)?._id === course.instructorId ||
-          (user as any)?.id === course.instructorId)) ||
-      ((user as any)?.enrolledCourses?.some(
-        (c: any) => (c._id || c.id || c) === (course._id || course.id)
-      )) ||
-      (course.price === 0 || course.coursePrice === 0)
+    (course.instructorId &&
+      ((user as any)?._id === course.instructorId?._id ||
+        (user as any)?._id === course.instructorId ||
+        (user as any)?.id === course.instructorId)) ||
+    ((user as any)?.enrolledCourses?.some(
+      (c: any) => (c._id || c.id || c) === (course._id || course.id) || (c.slug || c) === slug
+    )) ||
+    (course.price === 0 || course.coursePrice === 0)
   );
+
+  // Flattened all lessons list for the Active Classroom Player
+  const allLessons = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      duration: number;
+      videoUrl: string;
+      moduleTitle: string;
+      topicTitle: string;
+      topicId?: string;
+      resources?: Array<{ name: string; type: string; size?: string; url?: string }>;
+    }> = [];
+
+    (syllabus || []).forEach((m: any) => {
+      (m.topics || []).forEach((t: any) => {
+        if (t.lessons && t.lessons.length > 0) {
+          t.lessons.forEach((l: any) => {
+            list.push({
+              id: l._id || l.id || `${m._id}_${t._id}_${l.title}`,
+              title: l.title,
+              duration: l.duration || t.duration || 15,
+              videoUrl: l.playbackReference || l.videoUrl || t.videoUrl || '',
+              moduleTitle: m.title,
+              topicTitle: t.title,
+              topicId: t._id || t.id,
+              resources: Array.isArray(l.resources) && l.resources.length > 0 ? l.resources : [],
+            });
+          });
+        } else {
+          list.push({
+            id: t._id || t.id || `${m._id}_${t.title}`,
+            title: t.title,
+            duration: t.duration || 30,
+            videoUrl: t.videoUrl || '',
+            moduleTitle: m.title,
+            topicTitle: t.title,
+            topicId: t._id || t.id,
+            resources: Array.isArray(t.resources) && t.resources.length > 0 ? t.resources : [],
+          });
+        }
+      });
+    });
+    return list;
+  }, [syllabus]);
+
+  const [activeLesson, setActiveLesson] = useState<any>(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`edtech_course_progress_${slug}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (allLessons.length > 0 && !activeLesson) {
+      setActiveLesson(allLessons[0]);
+    }
+  }, [allLessons, activeLesson]);
+
+  // Load reviews and QA when enrolled
+  useEffect(() => {
+    if (isEnrolled && slug) {
+      coursesApi
+        .getMyReview(slug)
+        .then((res) => {
+          if (res.success && res.data) {
+            setExistingReview(res.data);
+            setUserRating(res.data.rating || 5);
+            setReviewComment(res.data.review || '');
+          }
+        })
+        .catch(() => {});
+
+      coursesApi
+        .getQuestions(slug)
+        .then((res) => {
+          if (res.success && Array.isArray(res.data)) {
+            setQuestions(res.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isEnrolled, slug]);
+
+  const progressPercent =
+    allLessons.length > 0
+      ? Math.round((completedLessonIds.length / allLessons.length) * 100)
+      : 0;
+
+  const handleToggleLessonComplete = async (lessonId: string) => {
+    if (!slug) return;
+    const isCurrentlyCompleted = completedLessonIds.includes(lessonId);
+    const nextCompleted = !isCurrentlyCompleted;
+
+    // Optimistic UI update
+    setCompletedLessonIds((prev) => {
+      const next = isCurrentlyCompleted
+        ? prev.filter((id) => id !== lessonId)
+        : [...prev, lessonId];
+      try {
+        localStorage.setItem(`edtech_course_progress_${slug}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      const res = await coursesApi.updateProgress(slug, {
+        lessonId,
+        topicId: activeLesson?.topicId,
+        completed: nextCompleted,
+      });
+      if (res.success && res.data) {
+        if (Array.isArray(res.data.completedLessonIds)) {
+          setCompletedLessonIds(res.data.completedLessonIds);
+          try {
+            localStorage.setItem(
+              `edtech_course_progress_${slug}`,
+              JSON.stringify(res.data.completedLessonIds)
+            );
+          } catch {}
+        }
+        if (nextCompleted) {
+          success('Lesson marked as completed! Progress synced.');
+        } else {
+          success('Lesson marked as incomplete.');
+        }
+      }
+    } catch (err: any) {
+      console.warn('Progress sync error:', err);
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slug) return;
+    try {
+      setSubmittingReview(true);
+      const res = await coursesApi.submitReview(slug, {
+        rating: userRating,
+        comment: reviewComment,
+      });
+      if (res.success && res.data) {
+        setExistingReview(res.data);
+        success('Thank you! Your course review & rating have been saved.');
+      }
+    } catch (err: any) {
+      console.error('Error submitting review:', err);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleAskQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuestionText.trim() || !slug) return;
+    try {
+      setSubmittingQuestion(true);
+      const res = await coursesApi.askQuestion(slug, {
+        question: newQuestionText.trim(),
+        lessonId: activeLesson?.id,
+        topicId: activeLesson?.topicId,
+      });
+      if (res.success) {
+        setNewQuestionText('');
+        success('Question posted! The instructor has received a notification.');
+        const qRes = await coursesApi.getQuestions(slug);
+        if (qRes.success && Array.isArray(qRes.data)) {
+          setQuestions(qRes.data);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error asking question:', err);
+    } finally {
+      setSubmittingQuestion(false);
+    }
+  };
+
+  const handleAnswerQuestion = async (questionId: string) => {
+    const text = replyInputs[questionId]?.trim();
+    if (!text || !slug) return;
+    try {
+      setSubmittingReply((prev) => ({ ...prev, [questionId]: true }));
+      const res = await coursesApi.answerQuestion(slug, questionId, {
+        answer: text,
+      });
+      if (res.success) {
+        setReplyInputs((prev) => ({ ...prev, [questionId]: '' }));
+        success('Answer submitted! The student has received a notification.');
+        const qRes = await coursesApi.getQuestions(slug);
+        if (qRes.success && Array.isArray(qRes.data)) {
+          setQuestions(qRes.data);
+        }
+      }
+    } catch (err: any) {
+      console.error('Error answering question:', err);
+    } finally {
+      setSubmittingReply((prev) => ({ ...prev, [questionId]: false }));
+    }
+  };
+
+  const handleNextLesson = () => {
+    if (!activeLesson) return;
+    const currentIndex = allLessons.findIndex((l) => l.id === activeLesson.id);
+    if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
+      setActiveLesson(allLessons[currentIndex + 1]);
+    }
+  };
+
+  const handlePrevLesson = () => {
+    if (!activeLesson) return;
+    const currentIndex = allLessons.findIndex((l) => l.id === activeLesson.id);
+    if (currentIndex > 0) {
+      setActiveLesson(allLessons[currentIndex - 1]);
+    }
+  };
 
   const handleWatchVideo = (
     lessonOrTopic: { title: string; duration?: number; videoUrl?: string; playbackReference?: string },
@@ -229,6 +503,592 @@ export const CourseDetailPage: React.FC = () => {
       </div>
     );
   }
+
+  // ACTIVE CLASSROOM LAYOUT FOR PAID / ENROLLED STUDENTS
+  if (isEnrolled) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between font-sans">
+        <Navbar />
+
+        {/* Classroom Header Bar */}
+        <div className="bg-white/95 border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-3.5 backdrop-blur-md sticky top-0 z-20 shadow-xs">
+          <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Link
+                to="/dashboard/student"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold border border-slate-200 transition shrink-0 cursor-pointer shadow-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
+              </Link>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Enrolled & Active
+                  </span>
+                  <span className="text-slate-300 text-xs hidden sm:inline">•</span>
+                  <span className="text-xs text-indigo-600 font-semibold truncate hidden sm:inline">
+                    {course.category}
+                  </span>
+                </div>
+                <h1 className="text-sm sm:text-base font-extrabold text-slate-900 truncate mt-0.5">
+                  {course.title}
+                </h1>
+              </div>
+            </div>
+
+            {/* Course Progress Tracker */}
+            <div className="flex items-center gap-3.5 shrink-0 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="text-right">
+                <div className="flex items-center gap-2 justify-end text-xs font-bold">
+                  <span className="text-slate-500">Classroom Progress</span>
+                  <span className="text-emerald-600 font-black">{progressPercent}%</span>
+                </div>
+                <span className="text-[10px] text-slate-500">
+                  {completedLessonIds.length} of {allLessons.length} lessons completed
+                </span>
+              </div>
+              <div className="w-24 sm:w-32 bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Classroom Work Area */}
+        <div className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left 8 Cols: Video Player & Lesson Content */}
+            <div className="lg:col-span-8 space-y-5">
+              {/* Active Video Player Screen */}
+              <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 shadow-md flex flex-col justify-center items-center">
+                {activeLesson?.videoUrl ? (
+                  activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be') ? (
+                    <iframe
+                      src={
+                        activeLesson.videoUrl.includes('embed')
+                          ? activeLesson.videoUrl
+                          : `https://www.youtube.com/embed/${activeLesson.videoUrl.split('v=')[1] || activeLesson.videoUrl.split('/').pop()}`
+                      }
+                      title={activeLesson.title}
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      controls
+                      autoPlay={false}
+                      className="w-full h-full object-contain"
+                      src={activeLesson.videoUrl}
+                      key={activeLesson.id}
+                    />
+                  )
+                ) : (
+                  <div className="text-center p-8 space-y-3">
+                    <div className="w-16 h-16 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center mx-auto text-indigo-600 shadow-xs">
+                      <Video className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-base font-extrabold text-white">{activeLesson?.title || 'Interactive Lesson'}</h3>
+                    <p className="text-xs text-slate-300 max-w-md mx-auto">
+                      Stream authorized for enrolled student. Watch the lecture, follow along with the code, and mark as complete when done.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Player Control Bar */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                      {activeLesson?.moduleTitle}
+                    </span>
+                    <span className="text-slate-300 text-xs">•</span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {activeLesson?.topicTitle}
+                    </span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">
+                    {activeLesson?.title || 'Select a lesson to begin'}
+                  </h2>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 pt-0.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Duration: {activeLesson?.duration || 20} mins</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handlePrevLesson}
+                    disabled={!activeLesson || allLessons.findIndex((l) => l.id === activeLesson.id) === 0}
+                    className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 transition cursor-pointer"
+                    title="Previous Lesson"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+
+                  {activeLesson && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLessonComplete(activeLesson.id)}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+                        completedLessonIds.includes(activeLesson.id)
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {completedLessonIds.includes(activeLesson.id)
+                          ? 'Completed'
+                          : 'Mark as Complete'}
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleNextLesson}
+                    disabled={!activeLesson || allLessons.findIndex((l) => l.id === activeLesson.id) === allLessons.length - 1}
+                    className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 transition cursor-pointer"
+                    title="Next Lesson"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Classroom Interactive Tabs */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-xs">
+                {/* Tab Selectors */}
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setClassroomTab('overview')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                      classroomTab === 'overview'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>Overview & Materials</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClassroomTab('qa')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                      classroomTab === 'qa'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Q&A Doubts ({questions.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClassroomTab('reviews')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                      classroomTab === 'reviews'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    <span>Rate Course</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: OVERVIEW & DYNAMIC DOWNLOADABLE MATERIALS */}
+                {classroomTab === 'overview' && (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        About This Lesson
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {course.description ||
+                          'Comprehensive classroom curriculum designed to master core concepts, hands-on workflows, and real-world industrial tools.'}
+                      </p>
+                    </div>
+
+                    {/* Dynamic Downloadable Materials (ONLY rendered if instructor uploaded files) */}
+                    {activeLesson?.resources && activeLesson.resources.length > 0 ? (
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
+                          Downloadable Materials
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {activeLesson.resources.map((res: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs hover:border-indigo-200 transition"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                                <div className="min-w-0">
+                                  <span className="font-bold text-slate-800 block truncate">{res.name}</span>
+                                  <span className="text-[10px] text-slate-500">
+                                    {res.size || 'Attachment'} • {res.type || 'Document'}
+                                  </span>
+                                </div>
+                              </div>
+                              <a
+                                href={res.url || '#'}
+                                download={res.name}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                Download
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* TAB 2: Q&A DOUBTS WITH TWO-WAY NOTIFICATIONS */}
+                {classroomTab === 'qa' && (
+                  <div className="space-y-6">
+                    {/* Ask a Question Form */}
+                    <form onSubmit={handleAskQuestion} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                        <HelpCircle className="w-4 h-4 text-indigo-600" />
+                        <span>Ask a Question or Doubt</span>
+                      </div>
+                      <textarea
+                        value={newQuestionText}
+                        onChange={(e) => setNewQuestionText(e.target.value)}
+                        placeholder={`Have a doubt about "${activeLesson?.title || 'this topic'}"? Post it here, and your instructor will receive an immediate in-app notification to answer.`}
+                        rows={3}
+                        className="w-full text-xs p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 resize-none"
+                      />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                        <span className="text-[11px] text-slate-500">
+                          Instant two-way notification dispatched upon reply.
+                        </span>
+                        <button
+                          type="submit"
+                          disabled={submittingQuestion || !newQuestionText.trim()}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>{submittingQuestion ? 'Posting...' : 'Ask Question'}</span>
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Questions Feed */}
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Previous Questions & Discussions ({questions.length})
+                      </h4>
+
+                      {questions.length === 0 ? (
+                        <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200/80 p-4">
+                          <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          <p className="text-xs font-semibold text-slate-600">No questions posted yet.</p>
+                          <p className="text-[11px] text-slate-400 mt-1">Be the first to post a doubt about this lesson!</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {questions.map((q) => (
+                            <div key={q._id} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0">
+                                    {q.user.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-slate-900">{q.user.name}</span>
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium">
+                                        {q.user.role}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400">
+                                      {new Date(q.createdAt).toLocaleDateString(undefined, {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                    q.status === 'ANSWERED'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}
+                                >
+                                  {q.status}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-slate-800 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                {q.question}
+                              </p>
+
+                              {/* Answers List */}
+                              {q.answers && q.answers.length > 0 && (
+                                <div className="pl-4 border-l-2 border-indigo-200 space-y-2 pt-1">
+                                  {q.answers.map((ans) => (
+                                    <div key={ans._id} className="bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100 space-y-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] font-bold text-slate-900">{ans.user.name}</span>
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 font-bold">
+                                          {ans.user.role}
+                                        </span>
+                                        <span className="text-[9px] text-slate-400">
+                                          {new Date(ans.createdAt).toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                          })}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-slate-700">{ans.answer}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Post Reply Box */}
+                              <div className="flex items-center gap-2 pt-1">
+                                <input
+                                  type="text"
+                                  value={replyInputs[q._id] || ''}
+                                  onChange={(e) =>
+                                    setReplyInputs((prev) => ({ ...prev, [q._id]: e.target.value }))
+                                  }
+                                  placeholder="Reply or answer this doubt..."
+                                  className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={submittingReply[q._id] || !replyInputs[q._id]?.trim()}
+                                  onClick={() => handleAnswerQuestion(q._id)}
+                                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                                >
+                                  {submittingReply[q._id] ? 'Sending...' : 'Reply'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: COURSE RATING & REVIEWS */}
+                {classroomTab === 'reviews' && (
+                  <div className="space-y-5">
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Course Experience & Rating
+                      </h3>
+                      <p className="text-xs text-slate-600">
+                        Help us improve! Share your honest feedback and rating out of 5 stars.
+                      </p>
+                    </div>
+
+                    {existingReview && (
+                      <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-900">Your Submitted Review</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className={`w-3.5 h-3.5 ${
+                                  s <= (existingReview.rating || 5)
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-slate-300'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {existingReview.review && (
+                          <p className="text-xs text-emerald-800">{existingReview.review}</p>
+                        )}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSubmitReview} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
+                      {/* Star Rating Selector */}
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-2">
+                          Select Star Rating
+                        </label>
+                        <div className="flex items-center gap-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setUserRating(star)}
+                              className="p-1 rounded-md hover:scale-110 transition cursor-pointer"
+                            >
+                              <Star
+                                className={`w-6 h-6 transition-colors ${
+                                  star <= userRating
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-slate-300 hover:text-amber-300'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                          <span className="text-xs font-extrabold text-slate-800 ml-2">
+                            {userRating} / 5 Stars
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Review Comment Textarea */}
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                          Your Feedback & Review (Optional)
+                        </label>
+                        <textarea
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value)}
+                          placeholder="What did you like the most about this course? What could be improved?"
+                          rows={3}
+                          className="w-full text-xs p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800 resize-none"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={submittingReview}
+                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-white text-white" />
+                        <span>{submittingReview ? 'Submitting...' : existingReview ? 'Update Review' : 'Submit Review'}</span>
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right 4 Cols: Interactive Curriculum Classroom Drawer */}
+            <div className="lg:col-span-4 space-y-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 sticky top-20 shadow-xs">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Course Curriculum</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {allLessons.length} Lessons • All Unlocked
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                    Full Access
+                  </span>
+                </div>
+
+                {/* Modules & Lessons Scrollable Accordion */}
+                <div className="mt-4 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+                  {syllabus.map((mod: any, mIdx: number) => {
+                    const isModExpanded = expandedModules[mod._id] !== false;
+
+                    return (
+                      <div key={mod._id || mIdx} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                        {/* Module Header */}
+                        <button
+                          type="button"
+                          onClick={() => toggleModule(mod._id)}
+                          className="w-full p-3 bg-slate-100/70 hover:bg-slate-100 text-left flex items-center justify-between gap-2 cursor-pointer transition"
+                        >
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">
+                              Module {mIdx + 1}
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-800 truncate">{mod.title}</h4>
+                          </div>
+                          {isModExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                          )}
+                        </button>
+
+                        {/* Module Lessons List */}
+                        {isModExpanded && (
+                          <div className="p-2 space-y-1 bg-white">
+                            {(mod.topics || []).flatMap((top: any) =>
+                              (top.lessons && top.lessons.length > 0 ? top.lessons : [top]).map((les: any) => {
+                                const lessonId = les._id || les.id || `${mod._id}_${top._id}_${les.title}`;
+                                const isSelected = activeLesson?.id === lessonId;
+                                const isDone = completedLessonIds.includes(lessonId);
+
+                                return (
+                                  <button
+                                    key={lessonId}
+                                    type="button"
+                                    onClick={() =>
+                                      setActiveLesson({
+                                        id: lessonId,
+                                        title: les.title,
+                                        duration: les.duration || top.duration || 15,
+                                        videoUrl: les.playbackReference || les.videoUrl || top.videoUrl || '',
+                                        moduleTitle: mod.title,
+                                        topicTitle: top.title,
+                                        topicId: top._id || top.id,
+                                        resources: Array.isArray(les.resources) && les.resources.length > 0 ? les.resources : [],
+                                      })
+                                    }
+                                    className={`w-full p-2.5 rounded-lg text-left flex items-center justify-between gap-2.5 transition cursor-pointer text-xs ${
+                                      isSelected
+                                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                                        : 'hover:bg-slate-50 text-slate-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {isDone ? (
+                                        <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-emerald-600'}`} />
+                                      ) : (
+                                        <Play className={`w-3 h-3 shrink-0 ${isSelected ? 'fill-white text-white' : 'text-indigo-600'}`} />
+                                      )}
+                                      <span className="truncate">{les.title}</span>
+                                    </div>
+                                    <span className={`text-[10px] shrink-0 ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                      {les.duration || 15}m
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Footer />
+      </div>
+    );
+  }
+
 
   const displayPrice = course.coursePrice ?? course.price ?? 0;
   const isSoldOut = Boolean(

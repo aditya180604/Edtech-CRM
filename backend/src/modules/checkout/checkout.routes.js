@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { CheckoutController } from './checkout.controller.js';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
 
 const router = Router();
 
-// Strict Authentication required for all checkout operations
-router.use(authenticate);
+// Pricing quote is accessible to both guests and authenticated students
+router.post('/checkout/quote', optionalAuthenticate, CheckoutController.getQuote);
 
-router.post('/checkout/quote', CheckoutController.getQuote);
-router.post('/checkout', CheckoutController.processCheckout);
-router.get('/checkout/:orderId/status', CheckoutController.getCheckoutStatus);
-router.get('/checkout/:orderId', CheckoutController.getOrderDetails);
+// Strict Authentication required for final checkout operations
+router.post('/checkout', authenticate, CheckoutController.processCheckout);
+router.get('/checkout/:orderId/status', authenticate, CheckoutController.getCheckoutStatus);
+router.get('/checkout/:orderId', authenticate, CheckoutController.getOrderDetails);
 
 export const checkoutRoutes = router;

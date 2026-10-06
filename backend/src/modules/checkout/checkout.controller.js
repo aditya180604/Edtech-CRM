@@ -3,10 +3,10 @@ import { ApiResponse, asyncHandler } from '../../utils/apiResponse.js';
 
 export class CheckoutController {
   static getQuote = asyncHandler(async (req, res) => {
-    const userId = req.user.userId || req.user._id;
-    const { couponCode } = req.body;
+    const userId = req.user?.userId || req.user?._id || null;
+    const { couponCode, items } = req.body || {};
     try {
-      const quote = await CheckoutService.getQuote({ userId, couponCode });
+      const quote = await CheckoutService.getQuote({ userId, couponCode, items });
       return ApiResponse.success(res, quote, 'Pricing quote calculated successfully.');
     } catch (error) {
       if (error.code) {

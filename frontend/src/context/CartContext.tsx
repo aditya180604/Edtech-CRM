@@ -46,22 +46,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Fetch Cart & Live Quote
   const syncCart = useCallback(
-    async (currentCoupon = couponCode) => {
+    async (currentCoupon = couponCode, guestItemsOverride?: any[]) => {
       if (!isAuthenticated) {
         // Guest cart from localStorage
         try {
           const raw = localStorage.getItem(GUEST_STORAGE_KEY);
-          const guestItems = raw ? JSON.parse(raw) : [];
-          if (guestItems.length === 0) {
+          const guestItems = guestItemsOverride || (raw ? JSON.parse(raw) : []);
+          if (!guestItems || guestItems.length === 0) {
             setItems([]);
             setQuote(null);
             return;
           }
           // Request quote for guest items
-          const res = await checkoutApi.getQuote({ couponCode: currentCoupon || undefined }).catch(() => null);
-          if (res?.success && res.data) {
+          const res = await checkoutApi.getQuote({
+            couponCode: currentCoupon || undefined,
+            items: guestItems,
+          }).catch(() => null);
+
+          if (res?.success && res.data && Array.isArray(res.data.items) && res.data.items.length > 0) {
             setItems(res.data.items);
             setQuote(res.data);
+          } else {
+            // Offline/fallback item representation for guest cart
+            const fallbackItems: CartLineItem[] = guestItems.map((g: any) => ({
+              productId: g.productId || g.id || g._id,
+              productType: g.productType || 'COURSE',
+              title: g.title || 'Course Item',
+              unitPrice: g.price || 0,
+              discount: 0,
+              finalPrice: g.price || 0,
+              currency: 'INR',
+            }));
+            setItems(fallbackItems);
           }
         } catch {
           setItems([]);
@@ -132,7 +148,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         currentGuest.push({ productId, productType });
         localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(currentGuest));
-        await syncCart();
+        await syncCart(couponCode, currentGuest);
         return { success: true, message: 'Added to cart successfully!' };
       } catch (err: any) {
         return { success: false, message: err?.message || 'Failed to add to cart.' };

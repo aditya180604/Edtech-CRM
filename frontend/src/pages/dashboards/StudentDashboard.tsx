@@ -50,6 +50,17 @@ export const StudentDashboard: React.FC = () => {
       setError(null);
       const data = await getStudentDashboard();
       setDashboardData(data);
+      if (data?.activeCourses && Array.isArray(data.activeCourses)) {
+        try {
+          const enrolledList = data.activeCourses.map((c: any) => ({
+            id: c.id || c._id,
+            slug: c.slug,
+          }));
+          sessionStorage.setItem('edtech_student_enrolled_courses', JSON.stringify(enrolledList));
+        } catch {
+          // ignore storage errors
+        }
+      }
       if (data?.wishlist) {
         const initialWishMap: Record<string, boolean> = {};
         data.wishlist.forEach((w) => {

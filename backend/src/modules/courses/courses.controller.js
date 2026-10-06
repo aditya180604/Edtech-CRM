@@ -28,4 +28,72 @@ export class CoursesController {
     const topics = await CoursesService.getAllTopics(req.query);
     return ApiResponse.success(res, topics, 'Dynamic topics retrieved successfully.');
   });
+
+  static updateProgress = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { lessonId, topicId, completed } = req.body;
+    const result = await CoursesService.updateProgress({
+      slug,
+      userId,
+      lessonId,
+      topicId,
+      completed,
+    });
+    return ApiResponse.success(res, result, 'Lesson progress updated successfully.');
+  });
+
+  static getMyReview = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const result = await CoursesService.getMyReview({ slug, userId });
+    return ApiResponse.success(res, result, 'Course review retrieved successfully.');
+  });
+
+  static submitReview = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { rating, comment, title } = req.body;
+    const result = await CoursesService.submitReview({
+      slug,
+      userId,
+      rating,
+      comment,
+      title,
+    });
+    return ApiResponse.success(res, result, 'Course review submitted successfully.');
+  });
+
+  static getQuestions = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const result = await CoursesService.getQuestions({ slug });
+    return ApiResponse.success(res, result, 'Course questions retrieved successfully.');
+  });
+
+  static askQuestion = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { question, lessonId, topicId } = req.body;
+    const result = await CoursesService.askQuestion({
+      slug,
+      userId,
+      question,
+      lessonId,
+      topicId,
+    });
+    return ApiResponse.created(res, result, 'Question posted successfully.');
+  });
+
+  static answerQuestion = asyncHandler(async (req, res) => {
+    const { slug, questionId } = req.params;
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { answer } = req.body;
+    const result = await CoursesService.answerQuestion({
+      slug,
+      userId,
+      questionId,
+      answer,
+    });
+    return ApiResponse.created(res, result, 'Answer submitted successfully.');
+  });
 }

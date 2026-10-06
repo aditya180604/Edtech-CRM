@@ -24,6 +24,7 @@ export interface CourseDetailsResponse {
   isEnrolled?: boolean;
   enrolledTopicsCount?: number;
   totalTopicsCount?: number;
+  completedLessonIds?: string[];
   course: Course & {
     description?: string;
     skills?: string[];
@@ -57,10 +58,42 @@ export interface CourseDetailsResponse {
         playbackReference?: string;
         videoUrl?: string;
         isLocked?: boolean;
-        resources?: Array<{ name: string; type: string; size: string }>;
+        resources?: Array<{ name: string; type: string; size?: string; url?: string }>;
       }>;
     }>;
   }>;
+}
+
+export interface QuestionAnswerItem {
+  _id: string;
+  answer: string;
+  createdAt: string;
+  isAccepted?: boolean;
+  user: {
+    name: string;
+    avatar?: string;
+    role: string;
+  };
+}
+
+export interface QuestionItem {
+  _id: string;
+  question: string;
+  createdAt: string;
+  status: string;
+  user: {
+    name: string;
+    avatar?: string;
+    role: string;
+  };
+  answers: QuestionAnswerItem[];
+}
+
+export interface CourseReviewItem {
+  _id: string;
+  rating: number;
+  review?: string;
+  createdAt?: string;
 }
 
 export interface TopicItem {
@@ -117,4 +150,51 @@ export const coursesApi = {
     const res = await apiClient.get('/courses/topics', { params });
     return res.data;
   },
+
+  // 5. Update Lesson Progress
+  async updateProgress(
+    slug: string,
+    body: { lessonId: string; topicId?: string; completed: boolean }
+  ): Promise<{ success: boolean; data: { completedLessonIds: string[]; progressPercent: number; isCompleted: boolean } }> {
+    const res = await apiClient.post(`/courses/${slug}/progress`, body);
+    return res.data;
+  },
+
+  // 6. Course Reviews & Ratings
+  async getMyReview(slug: string): Promise<{ success: boolean; data: CourseReviewItem | null }> {
+    const res = await apiClient.get(`/courses/${slug}/review/my-review`);
+    return res.data;
+  },
+
+  async submitReview(
+    slug: string,
+    body: { rating: number; comment?: string; title?: string }
+  ): Promise<{ success: boolean; data: CourseReviewItem }> {
+    const res = await apiClient.post(`/courses/${slug}/review`, body);
+    return res.data;
+  },
+
+  // 7. Course Q&A
+  async getQuestions(slug: string): Promise<{ success: boolean; data: QuestionItem[] }> {
+    const res = await apiClient.get(`/courses/${slug}/qa`);
+    return res.data;
+  },
+
+  async askQuestion(
+    slug: string,
+    body: { question: string; lessonId?: string; topicId?: string }
+  ): Promise<{ success: boolean; data: any }> {
+    const res = await apiClient.post(`/courses/${slug}/qa`, body);
+    return res.data;
+  },
+
+  async answerQuestion(
+    slug: string,
+    questionId: string,
+    body: { answer: string }
+  ): Promise<{ success: boolean; data: any }> {
+    const res = await apiClient.post(`/courses/${slug}/qa/${questionId}/answer`, body);
+    return res.data;
+  },
 };
+

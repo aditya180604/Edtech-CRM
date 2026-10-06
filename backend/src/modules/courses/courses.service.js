@@ -1,5 +1,20 @@
 import mongoose from 'mongoose';
-import { Course, Module, Topic, Lesson, Resource, User, Review, Entitlement, InstructorProfile } from '../../models/index.js';
+import {
+  Course,
+  Module,
+  Topic,
+  Lesson,
+  Resource,
+  User,
+  Review,
+  Rating,
+  Entitlement,
+  InstructorProfile,
+  LearningProgress,
+  CommunityQuestion,
+  Answer,
+  Notification,
+} from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
 
 export class CoursesService {
@@ -258,22 +273,48 @@ export class CoursesService {
     let enrolledTopicsCount = 0;
     const entitledTopicIdSet = new Set();
 
-    if (userId && mongoose.isValidObjectId(userId)) {
+    if (userId && (mongoose.isValidObjectId(userId) || typeof userId === 'string')) {
+      const userObjId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
+      const userQueries = [{ userId: String(userId) }];
+      if (userObjId) userQueries.push({ userId: userObjId });
+
       const activeEntitlements = await Entitlement.find({
-        userId,
-        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: userQueries,
+        status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
         $or: [
           { productId: course._id },
           { courseId: course._id },
+          { productId: course._id.toString() },
+          { courseId: course._id.toString() },
+          { productId: { $in: topicIds } },
+          { topicId: { $in: topicIds } },
         ],
       }).lean();
 
       for (const ent of activeEntitlements) {
-        if (ent.productType === PRODUCT_TYPES.COURSE || ent.productId?.toString() === course._id.toString()) {
+        const matchesCourse =
+          ent.courseId?.toString() === course._id.toString() ||
+          ent.productId?.toString() === course._id.toString();
+
+        if (
+          (ent.productType === PRODUCT_TYPES.COURSE || ent.productType === 'COURSE') &&
+          matchesCourse
+        ) {
           isEnrolled = true;
-        } else if (ent.topicId || ent.productId) {
-          entitledTopicIdSet.add((ent.topicId || ent.productId).toString());
+        } else if (matchesCourse && !ent.topicId) {
+          isEnrolled = true;
         }
+
+        if (ent.topicId) {
+          entitledTopicIdSet.add(ent.topicId.toString());
+        }
+        if (ent.productId && topicIds.some((tId) => tId.toString() === ent.productId.toString())) {
+          entitledTopicIdSet.add(ent.productId.toString());
+        }
+      }
+
+      if (topics.length > 0 && entitledTopicIdSet.size >= topics.length) {
+        isEnrolled = true;
       }
 
       enrolledTopicsCount = isEnrolled ? topics.length : entitledTopicIdSet.size;
@@ -322,10 +363,7 @@ export class CoursesService {
                 playbackReference: les.playbackReference || '',
                 videoUrl: les.playbackReference || '',
                 isLocked: !isTopicOwned && !t.isFree,
-                resources: [
-                  { name: 'Lecture Slides.pdf', type: 'PDF', size: '2.4 MB' },
-                  { name: 'Starter Code.zip', type: 'ZIP', size: '4.8 MB' },
-                ],
+                resources: Array.isArray(les.resources) && les.resources.length > 0 ? les.resources : [],
               });
             }
           }
@@ -338,10 +376,7 @@ export class CoursesService {
               playbackReference: t.videoUrl || '',
               videoUrl: t.videoUrl || '',
               isLocked: !isTopicOwned && !t.isFree,
-              resources: [
-                { name: 'Lecture Slides.pdf', type: 'PDF', size: '2.4 MB' },
-                { name: 'Starter Code.zip', type: 'ZIP', size: '4.8 MB' },
-              ],
+              resources: Array.isArray(t.resources) && t.resources.length > 0 ? t.resources : [],
             });
           }
 
@@ -377,6 +412,21 @@ export class CoursesService {
     const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
     const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
 
+    let completedLessonIds = [];
+    if (userId) {
+      const userObjId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
+      const uQueries = [{ userId: String(userId) }];
+      if (userObjId) uQueries.push({ userId: userObjId });
+
+      const progressDocs = await LearningProgress.find({
+        $or: uQueries,
+        courseId: course._id,
+        completed: true,
+      }).lean();
+
+      completedLessonIds = progressDocs.map((p) => p.lessonId?.toString()).filter(Boolean);
+    }
+
     return {
       course: {
         ...course,
@@ -388,8 +438,8 @@ export class CoursesService {
         instructorTitle: instructorHeadline,
         instructorBio,
         instructorExperience,
-        rating: 4.8,
-        reviewCount: '12,450 ratings',
+        rating: course.rating || 4.8,
+        reviewCount: course.reviewCount ? `${course.reviewCount} ratings` : '12,450 ratings',
         studentCount: '45,820 students',
         isEnrolled,
         enrolledTopicsCount,
@@ -408,6 +458,7 @@ export class CoursesService {
       isEnrolled,
       enrolledTopicsCount,
       totalTopicsCount: topics.length,
+      completedLessonIds,
       syllabus,
     };
   }
@@ -480,5 +531,282 @@ export class CoursesService {
     }
 
     return formatted;
+  }
+
+  /**
+   * 5. Real-Time Student Course Progress Synchronization
+   */
+  static async updateProgress({ slug, userId, lessonId, topicId, completed }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query);
+    if (!course) {
+      throw new Error('Course not found');
+    }
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const courseObjId = course._id;
+    let lessonObjId = mongoose.isValidObjectId(lessonId) ? new mongoose.Types.ObjectId(lessonId) : null;
+    let topicObjId = mongoose.isValidObjectId(topicId) ? new mongoose.Types.ObjectId(topicId) : null;
+
+    if (!lessonObjId && lessonId) {
+      const foundLesson = await Lesson.findOne({ $or: [{ _id: lessonId }, { title: lessonId }] }).lean();
+      if (foundLesson) {
+        lessonObjId = foundLesson._id;
+        topicObjId = foundLesson.topicId;
+      }
+    }
+
+    const progFilter = {
+      userId: userObjId,
+      courseId: courseObjId,
+    };
+    if (lessonObjId) progFilter.lessonId = lessonObjId;
+    else if (topicObjId) progFilter.topicId = topicObjId;
+
+    if (completed) {
+      await LearningProgress.findOneAndUpdate(
+        progFilter,
+        {
+          $set: {
+            userId: userObjId,
+            courseId: courseObjId,
+            lessonId: lessonObjId,
+            topicId: topicObjId,
+            completed: true,
+            lastWatchedAt: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+    } else {
+      await LearningProgress.deleteOne(progFilter);
+    }
+
+    // Fetch all completed records for this course
+    const allCompletedRecords = await LearningProgress.find({
+      userId: userObjId,
+      courseId: courseObjId,
+      completed: true,
+    }).lean();
+
+    const courseTopics = await Topic.find({ courseId: courseObjId }).select('_id').lean();
+    const topicIds = courseTopics.map((t) => t._id);
+    const totalLessons = (await Lesson.countDocuments({ topicId: { $in: topicIds } })) || courseTopics.length || 1;
+
+    const completedCount = allCompletedRecords.length;
+    const progressPercent = Math.min(100, Math.round((completedCount / totalLessons) * 100));
+
+    await LearningProgress.updateMany(
+      { userId: userObjId, courseId: courseObjId },
+      { $set: { progressPercent } }
+    );
+
+    return {
+      progressPercent,
+      completedCount,
+      totalLessons,
+      completedLessonIds: allCompletedRecords.map((r) => r.lessonId?.toString()).filter(Boolean),
+    };
+  }
+
+  /**
+   * 6. Course Reviews & Ratings System
+   */
+  static async getMyReview({ slug, userId }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query).lean();
+    if (!course) return null;
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const review = await Review.findOne({
+      courseId: course._id,
+      userId: userObjId,
+    }).lean();
+
+    return review;
+  }
+
+  static async submitReview({ slug, userId, rating, comment, title }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query);
+    if (!course) {
+      throw new Error('Course not found');
+    }
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const numRating = Math.max(1, Math.min(5, Number(rating) || 5));
+
+    const review = await Review.findOneAndUpdate(
+      { courseId: course._id, userId: userObjId },
+      {
+        $set: {
+          rating: numRating,
+          comment: (comment || '').trim() || 'Great course!',
+          title: (title || '').trim(),
+          isVerifiedPurchase: true,
+          status: 'PUBLISHED',
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    await Rating.findOneAndUpdate(
+      { courseId: course._id, userId: userObjId },
+      { $set: { rating: numRating } },
+      { upsert: true }
+    );
+
+    const allReviews = await Review.find({ courseId: course._id, status: 'PUBLISHED' }).lean();
+    const avgRating = allReviews.length > 0
+      ? Number((allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1))
+      : numRating;
+
+    course.rating = avgRating;
+    course.reviewCount = allReviews.length;
+    await course.save();
+
+    return {
+      review,
+      avgRating,
+      reviewCount: allReviews.length,
+    };
+  }
+
+  /**
+   * 7. Dedicated Q&A Section with Two-Way Notifications
+   */
+  static async getQuestions({ slug }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query).lean();
+    if (!course) return [];
+
+    const questions = await CommunityQuestion.find({ courseId: course._id })
+      .populate('userId', 'firstName lastName profilePhoto role')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const qIds = questions.map((q) => q._id);
+    const answers = await Answer.find({ questionId: { $in: qIds } })
+      .populate('userId', 'firstName lastName profilePhoto role')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    return questions.map((q) => ({
+      _id: q._id.toString(),
+      question: q.question,
+      createdAt: q.createdAt,
+      status: q.status,
+      user: {
+        name: [q.userId?.firstName, q.userId?.lastName].filter(Boolean).join(' ') || 'Student',
+        avatar: q.userId?.profilePhoto || null,
+        role: q.userId?.role || 'STUDENT',
+      },
+      answers: answers
+        .filter((a) => a.questionId.toString() === q._id.toString())
+        .map((a) => ({
+          _id: a._id.toString(),
+          answer: a.answer,
+          createdAt: a.createdAt,
+          isAccepted: a.isAccepted,
+          user: {
+            name: [a.userId?.firstName, a.userId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+            avatar: a.userId?.profilePhoto || null,
+            role: a.userId?.role || 'INSTRUCTOR',
+          },
+        })),
+    }));
+  }
+
+  static async askQuestion({ slug, userId, question, lessonId, topicId }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query);
+    if (!course) throw new Error('Course not found');
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const newQ = await CommunityQuestion.create({
+      userId: userObjId,
+      courseId: course._id,
+      topicId: mongoose.isValidObjectId(topicId) ? topicId : null,
+      lessonId: mongoose.isValidObjectId(lessonId) ? lessonId : null,
+      question: question.trim(),
+      status: 'OPEN',
+    });
+
+    const student = await User.findById(userId).lean();
+    const studentName = [student?.firstName, student?.lastName].filter(Boolean).join(' ') || 'A student';
+
+    // Trigger in-app notification to the instructor
+    if (course.instructorId) {
+      await Notification.create({
+        notificationId: `notif_q_${newQ._id}_${Date.now()}`,
+        userId: course.instructorId,
+        type: 'COURSE_QUESTION',
+        title: `New Question in "${course.title}"`,
+        message: `${studentName} asked: "${question.trim().slice(0, 100)}${question.trim().length > 100 ? '...' : ''}"`,
+        entityType: 'COURSE',
+        entityId: course._id,
+        isRead: false,
+        createdAt: new Date(),
+      }).catch((e) => console.warn('Failed to dispatch question notification:', e.message));
+    }
+
+    return newQ;
+  }
+
+  static async answerQuestion({ slug, userId, questionId, answer }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query);
+    if (!course) throw new Error('Course not found');
+
+    const question = await CommunityQuestion.findById(questionId);
+    if (!question) throw new Error('Question not found');
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const newAns = await Answer.create({
+      questionId: question._id,
+      userId: userObjId,
+      answer: answer.trim(),
+    });
+
+    question.status = 'ANSWERED';
+    await question.save();
+
+    const responder = await User.findById(userId).lean();
+    const responderName = [responder?.firstName, responder?.lastName].filter(Boolean).join(' ') || 'Instructor';
+
+    // Trigger notification back to the student who asked
+    if (question.userId && question.userId.toString() !== userId.toString()) {
+      await Notification.create({
+        notificationId: `notif_ans_${newAns._id}_${Date.now()}`,
+        userId: question.userId,
+        type: 'QUESTION_ANSWERED',
+        title: `Your question in "${course.title}" was answered!`,
+        message: `${responderName} replied: "${answer.trim().slice(0, 100)}${answer.trim().length > 100 ? '...' : ''}"`,
+        entityType: 'COURSE',
+        entityId: course._id,
+        isRead: false,
+        createdAt: new Date(),
+      }).catch((e) => console.warn('Failed to dispatch answer notification:', e.message));
+    }
+
+    return newAns;
   }
 }

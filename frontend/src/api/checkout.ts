@@ -72,8 +72,8 @@ export interface CheckoutProcessResponse {
 
 export const checkoutApi = {
   // 1. Get Live Authoritative Pricing Quote
-  async getQuote(payload: { couponCode?: string }): Promise<{ success: boolean; data: CheckoutQuoteResponse }> {
-    const response = await apiClient.post('/checkout/quote', payload);
+  async getQuote(payload?: { couponCode?: string; items?: any[] }): Promise<{ success: boolean; data: CheckoutQuoteResponse }> {
+    const response = await apiClient.post('/checkout/quote', payload || {});
     return response.data;
   },
 

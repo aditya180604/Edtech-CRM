@@ -24,15 +24,21 @@ import {
 
 export class CheckoutService {
   /**
-   * 1. GET PRICING QUOTE
+   * 1. GET PRICING QUOTE (Supports both Authenticated Cart and Guest Items)
    */
-  static async getQuote({ userId, couponCode = null }) {
-    if (!userId || !mongoose.isValidObjectId(userId)) {
-      throw new Error('Valid authenticated user required to calculate quote.');
+  static async getQuote({ userId = null, couponCode = null, items = null }) {
+    let cartItems = [];
+
+    if (Array.isArray(items) && items.length > 0) {
+      cartItems = items;
+    } else if (userId && mongoose.isValidObjectId(userId)) {
+      const cart = await Cart.findOne({ userId });
+      if (cart && Array.isArray(cart.items)) {
+        cartItems = cart.items;
+      }
     }
 
-    const cart = await Cart.findOne({ userId });
-    if (!cart || cart.items.length === 0) {
+    if (!cartItems || cartItems.length === 0) {
       return {
         items: [],
         subtotal: 0,
@@ -47,7 +53,7 @@ export class CheckoutService {
     }
 
     return PricingService.calculateCartPricing({
-      items: cart.items,
+      items: cartItems,
       couponCode,
       userId,
     });
