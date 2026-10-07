@@ -11,4 +11,9 @@ export class UsersController {
     const user = await UsersService.updateProfile(req.user.userId, req.body);
     return ApiResponse.success(res, user, 'Profile updated successfully.');
   });
+
+  static getPassport = asyncHandler(async (req, res) => {
+    const passport = await UsersService.getPassport(req.params.identifier);
+    return ApiResponse.success(res, passport, 'Skill passport retrieved successfully.');
+  });
 }

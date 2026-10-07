@@ -18,6 +18,9 @@ export interface CartLineItem {
   alreadyOwned?: boolean;
   unavailable?: boolean;
   isEligibleForCoupon?: boolean;
+  creditDeduction?: number;
+  hasUpgradeCredit?: boolean;
+  ownedTopicCount?: number;
 }
 
 export interface BackendCartResponse {

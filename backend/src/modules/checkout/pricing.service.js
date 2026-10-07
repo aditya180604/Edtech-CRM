@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Course, TopicContentOffering, LearningPath, Entitlement, Coupon, User } from '../../models/index.js';
+import { Course, Topic, TopicContentOffering, LearningPath, Entitlement, Coupon, TopicCredit, User } from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
 
 export class PricingService {
@@ -56,8 +56,11 @@ export class PricingService {
 
         defaultCurrency = course.currency || 'INR';
 
-        // Check if student already owns active entitlement for this course
+        // Check if student already owns active entitlement for this course or has topic credits
         let alreadyOwned = false;
+        let eligibleCredit = 0;
+        let ownedTopicCount = 0;
+
         if (userId && mongoose.isValidObjectId(userId)) {
           const existingEntitlement = await Entitlement.findOne({
             userId,
@@ -67,6 +70,25 @@ export class PricingService {
           });
           if (existingEntitlement) {
             alreadyOwned = true;
+          } else {
+            // Check for accumulated atomic topic credits for course upgrade
+            const topicCredit = await TopicCredit.findOne({
+              userId,
+              courseId: course._id,
+              status: 'ACTIVE',
+              remainingAmount: { $gt: 0 },
+            }).lean();
+
+            ownedTopicCount = await Entitlement.countDocuments({
+              userId,
+              courseId: course._id,
+              productType: { $in: [PRODUCT_TYPES.CONTENT_OFFERING, 'TOPIC'] },
+              status: ENTITLEMENT_STATUS.ACTIVE,
+            });
+
+            if (topicCredit && topicCredit.remainingAmount > 0) {
+              eligibleCredit = Math.min(authoritativePrice, Number(topicCredit.remainingAmount) || 0);
+            }
           }
         }
 
@@ -86,22 +108,43 @@ export class PricingService {
           price: authoritativePrice,
           unitPrice: authoritativePrice,
           discount: 0,
-          finalPrice: authoritativePrice,
+          creditDeduction: eligibleCredit,
+          hasUpgradeCredit: eligibleCredit > 0,
+          ownedTopicCount,
+          finalPrice: Math.max(0, authoritativePrice - eligibleCredit),
           currency: course.currency || 'INR',
           status: course.status,
           alreadyOwned,
           unavailable: course.status === 'ARCHIVED' || course.status === 'DRAFT',
         });
-      } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING) {
-        const offering = await TopicContentOffering.findById(productId)
+      } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING || productType === 'TOPIC') {
+        let offering = await TopicContentOffering.findById(productId)
           .populate('instructorId', 'firstName lastName email')
           .lean();
 
+        let topicDoc = null;
+        let parentCourse = null;
+
         if (!offering) {
+          offering = await TopicContentOffering.findOne({ topicId: productId })
+            .populate('instructorId', 'firstName lastName email')
+            .lean();
+        }
+
+        if (!offering) {
+          topicDoc = await Topic.findById(productId).lean();
+          if (topicDoc && topicDoc.courseId) {
+            parentCourse = await Course.findById(topicDoc.courseId)
+              .populate('instructorId', 'firstName lastName email')
+              .lean();
+          }
+        }
+
+        if (!offering && !topicDoc) {
           lineItems.push({
             productId: productId.toString(),
             productType: PRODUCT_TYPES.CONTENT_OFFERING,
-            title: 'Unavailable Offering',
+            title: 'Unavailable Topic',
             unavailable: true,
             unitPrice: 0,
             discount: 0,
@@ -111,14 +154,29 @@ export class PricingService {
           continue;
         }
 
-        defaultCurrency = offering.currency || 'INR';
+        const resolvedPrice = offering
+          ? Math.max(0, Number(offering.price) || 0)
+          : Math.max(0, Number(topicDoc.price) || (topicDoc.isFree ? 0 : 299));
+
+        const resolvedTitle = offering ? offering.title : topicDoc.title;
+        const resolvedCourseId = offering ? offering.courseId?.toString() : topicDoc.courseId?.toString() || null;
+        const resolvedTopicId = offering ? offering.topicId?.toString() : topicDoc._id?.toString();
+
+        const instructorObj = offering?.instructorId || parentCourse?.instructorId;
+        const instructorName = instructorObj
+          ? `${instructorObj.firstName || ''} ${instructorObj.lastName || ''}`.trim()
+          : 'Lead Instructor';
+        const instructorId = instructorObj?._id?.toString() || instructorObj?.toString() || null;
 
         let alreadyOwned = false;
         if (userId && mongoose.isValidObjectId(userId)) {
           const existingEntitlement = await Entitlement.findOne({
             userId,
-            productType: PRODUCT_TYPES.CONTENT_OFFERING,
-            productId: offering._id,
+            $or: [
+              { productType: PRODUCT_TYPES.CONTENT_OFFERING, productId },
+              { productType: PRODUCT_TYPES.CONTENT_OFFERING, topicId: resolvedTopicId },
+              { productType: PRODUCT_TYPES.COURSE, productId: resolvedCourseId },
+            ],
             status: ENTITLEMENT_STATUS.ACTIVE,
           });
           if (existingEntitlement) {
@@ -126,26 +184,23 @@ export class PricingService {
           }
         }
 
-        const authoritativePrice = Math.max(0, Number(offering.price) || 0);
-
         lineItems.push({
-          productId: offering._id.toString(),
+          productId: productId.toString(),
           productType: PRODUCT_TYPES.CONTENT_OFFERING,
-          courseId: offering.courseId?.toString() || null,
-          topicId: offering.topicId?.toString() || null,
-          title: offering.title,
-          instructorId: offering.instructorId?._id?.toString() || offering.instructorId?.toString() || null,
-          instructorName: offering.instructorId
-            ? `${offering.instructorId.firstName || ''} ${offering.instructorId.lastName || ''}`.trim()
-            : 'Tutor',
-          price: authoritativePrice,
-          unitPrice: authoritativePrice,
+          courseId: resolvedCourseId,
+          topicId: resolvedTopicId,
+          title: resolvedTitle,
+          instructorId,
+          instructorName,
+          price: resolvedPrice,
+          unitPrice: resolvedPrice,
           discount: 0,
-          finalPrice: authoritativePrice,
-          currency: offering.currency || 'INR',
-          status: offering.status,
+          finalPrice: resolvedPrice,
+          currency: offering?.currency || topicDoc?.currency || parentCourse?.currency || 'INR',
+          thumbnail: parentCourse?.thumbnail,
+          status: 'PUBLISHED',
           alreadyOwned,
-          unavailable: offering.status !== 'PUBLISHED',
+          unavailable: false,
         });
       } else if (productType === PRODUCT_TYPES.LEARNING_PATH) {
         const pathDoc = await LearningPath.findById(productId).lean();
@@ -318,14 +373,18 @@ export class PricingService {
       };
     }
 
-    const finalAmount = Math.max(0, subtotal - totalDiscount);
+    const totalCredit = lineItems
+      .filter((i) => !i.unavailable && !i.alreadyOwned)
+      .reduce((sum, item) => sum + (item.creditDeduction || 0), 0);
+
+    const finalAmount = Math.max(0, subtotal - totalDiscount - totalCredit);
 
     return {
       items: lineItems,
       subtotal,
       discount: totalDiscount,
+      credit: totalCredit,
       tax: 0,
-      credit: 0,
       finalAmount,
       currency: defaultCurrency,
       coupon: appliedCouponInfo,

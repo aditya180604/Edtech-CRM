@@ -8,13 +8,18 @@ interface CartContextType {
   itemCount: number;
   subtotal: number;
   discount: number;
+  credit: number;
   total: number;
   currency: string;
   appliedCoupon: AppliedCouponQuote | null;
   quote: CheckoutQuoteResponse | null;
   loading: boolean;
   isValidatingCoupon: boolean;
-  addToCart: (productId: string, productType?: 'COURSE' | 'CONTENT_OFFERING') => Promise<{ success: boolean; message?: string }>;
+  addToCart: (
+    productId: string,
+    productType?: 'COURSE' | 'CONTENT_OFFERING',
+    meta?: { title?: string; price?: number; thumbnail?: string; courseId?: string; topicId?: string }
+  ) => Promise<{ success: boolean; message?: string }>;
   removeFromCart: (productId: string) => Promise<void>;
   clearCart: () => Promise<void>;
   isInCart: (productId: string) => boolean;
@@ -76,6 +81,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               discount: 0,
               finalPrice: g.price || 0,
               currency: 'INR',
+              thumbnail: g.thumbnail,
             }));
             setItems(fallbackItems);
           }
@@ -135,7 +141,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Add Item
   const addToCart = async (
     productId: string,
-    productType: 'COURSE' | 'CONTENT_OFFERING' = 'COURSE'
+    productType: 'COURSE' | 'CONTENT_OFFERING' = 'COURSE',
+    meta?: { title?: string; price?: number; thumbnail?: string; courseId?: string; topicId?: string }
   ): Promise<{ success: boolean; message?: string }> => {
     if (!isAuthenticated) {
       // Guest cart
@@ -144,9 +151,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const currentGuest = raw ? JSON.parse(raw) : [];
         const exists = currentGuest.some((g: any) => (g.productId || g.id) === productId);
         if (exists) {
-          return { success: false, message: 'This course is already in your cart.' };
+          return { success: false, message: 'This item is already in your cart.' };
         }
-        currentGuest.push({ productId, productType });
+        currentGuest.push({ productId, productType, ...meta });
         localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(currentGuest));
         await syncCart(couponCode, currentGuest);
         return { success: true, message: 'Added to cart successfully!' };
@@ -266,7 +273,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Computed values from authoritative server quote
   const subtotal = quote?.subtotal ?? items.reduce((sum, i) => sum + (Number(i.unitPrice) || 0), 0);
   const discount = quote?.discount ?? 0;
-  const total = quote?.finalAmount ?? Math.max(0, subtotal - discount);
+  const credit = quote?.credit ?? 0;
+  const total = quote?.finalAmount ?? Math.max(0, subtotal - discount - credit);
   const currency = quote?.currency || 'INR';
   const appliedCoupon = quote?.coupon?.applied ? quote.coupon : null;
 
@@ -277,6 +285,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         itemCount: quote?.itemCount ?? items.length,
         subtotal,
         discount,
+        credit,
         total,
         currency,
         appliedCoupon,

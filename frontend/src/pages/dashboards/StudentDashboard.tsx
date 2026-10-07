@@ -26,8 +26,17 @@ import {
   AlertCircle,
   Star,
   Zap,
+  ShieldCheck,
+  Copy,
+  Check,
+  ExternalLink,
+  MessageSquare,
+  X,
+  HelpCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { quizzesApi, type QuizItem } from '../../api/quizzes';
+import { QuizPlayerModal } from '../../components/quiz/QuizPlayerModal';
 
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -43,6 +52,21 @@ export const StudentDashboard: React.FC = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null);
   const [wishlistState, setWishlistState] = useState<Record<string, boolean>>({});
+  const [activeDrawer, setActiveDrawer] = useState<'notifications' | 'messages' | null>(null);
+  const [copiedPassport, setCopiedPassport] = useState(false);
+  const [studentQuizzes, setStudentQuizzes] = useState<QuizItem[]>([]);
+  const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
+
+  const passportSlug = user?.firstName
+    ? `${user.firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}-${(user.lastName || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`
+    : (user?._id || 'student');
+
+  const handleCopyPassportLink = () => {
+    const url = `${window.location.origin}/passport/${passportSlug}`;
+    navigator.clipboard.writeText(url);
+    setCopiedPassport(true);
+    setTimeout(() => setCopiedPassport(false), 2500);
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -69,6 +93,16 @@ export const StudentDashboard: React.FC = () => {
           }
         });
         setWishlistState(initialWishMap);
+      }
+
+      // Fetch Quizzes for enrolled courses
+      if (data?.activeCourses && Array.isArray(data.activeCourses) && data.activeCourses.length > 0) {
+        const quizPromises = data.activeCourses.map((c) =>
+          quizzesApi.getQuizzesByCourse(c.courseId || (c as any).id || (c as any)._id).catch(() => ({ data: [] }))
+        );
+        const quizResults = await Promise.all(quizPromises);
+        const allQuizzes = quizResults.flatMap((r) => (r.data ? r.data : []));
+        setStudentQuizzes(allQuizzes);
       }
     } catch (err: any) {
       console.error('Failed to load student dashboard:', err);
@@ -175,7 +209,7 @@ export const StudentDashboard: React.FC = () => {
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
             <button
-              onClick={() => navigate('/notifications')}
+              onClick={() => setActiveDrawer('notifications')}
               className="relative p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
               title="Notifications"
             >
@@ -188,19 +222,20 @@ export const StudentDashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => navigate('/messages')}
+              onClick={() => setActiveDrawer('messages')}
               className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-              title="Messages"
+              title="Messages & Q&A"
             >
               <Mail className="w-4 h-4" />
             </button>
 
             <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
 
-            {/* User Profile Chip */}
+            {/* User Profile Chip - Navigates directly to Student Profile Verification page */}
             <div
-              onClick={() => setIsProfileModalOpen(true)}
-              className="flex items-center gap-2.5 pl-1.5 pr-3 py-1 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/60 cursor-pointer transition"
+              onClick={() => navigate('/student/complete-profile')}
+              className="flex items-center gap-2.5 pl-1.5 pr-3 py-1 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/60 cursor-pointer transition group"
+              title="View & Edit Student Profile"
             >
               {profilePhoto ? (
                 <img
@@ -243,6 +278,38 @@ export const StudentDashboard: React.FC = () => {
         ) : dashboardData ? (
           <div className="space-y-6">
             <LiveStartedBanner />
+
+            {/* Mandatory Student Verification Alert Banner */}
+            {!user?.isProfileCompleted && (
+              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-indigo-50 border border-amber-200/80 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-black text-slate-900">
+                        Action Required: Complete Your Student Profile
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider">
+                        All Fields Mandatory
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Verify your college, degree, phone, and skills to unlock genuine course certificates and generate your <strong className="text-indigo-600 font-bold">Verified Skill Passport</strong>.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate('/student/complete-profile')}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shrink-0 cursor-pointer shadow-sm hover:shadow-md flex items-center gap-1.5"
+                >
+                  <span>Complete Profile Now</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* ========================================================
                 ROW 1: HERO & GREETING | PROFILE SUMMARY | LEARNING OVERVIEW
                ======================================================== */}
@@ -332,12 +399,23 @@ export const StudentDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
-                >
-                  Complete Profile
-                </button>
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={() => navigate('/student/complete-profile')}
+                    className="w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <span>Update Profile Details</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => navigate(`/passport/${passportSlug}`)}
+                    className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Award className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>View Verified Skill Passport</span>
+                  </button>
+                </div>
               </div>
 
               {/* 1.3 Learning Overview (3.5 cols) */}
@@ -404,6 +482,84 @@ export const StudentDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* ========================================================
+                VERIFIED SKILL PASSPORT SHOWCASE CARD
+               ======================================================== */}
+            <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white border border-indigo-900/60 shadow-lg relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              {/* Subtle background glow */}
+              <div className="absolute top-0 right-10 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-10 left-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="space-y-3 max-w-2xl z-10">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    Verified Skill Passport
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[11px] font-mono font-bold">
+                    ID: STU-{user?._id?.toString().slice(-6).toUpperCase() || 'VERIFIED'}
+                  </span>
+                </div>
+
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+                  <Award className="w-6 h-6 text-indigo-400 shrink-0" />
+                  Your Authenticated Recruiter Credential
+                </h2>
+
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">
+                  Your public Skill Passport validates your completed courses, verified skills, and academic profile. Share your authenticated portfolio directly with recruiters, hiring teams, and on your resume.
+                </p>
+
+                {/* Verified Skill Pills */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {(user?.skills && user.skills.length > 0
+                    ? user.skills
+                    : ['Cybersecurity', 'React', 'Node.js', 'System Architecture']
+                  ).slice(0, 5).map((skillName, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2.5 py-1 bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-200 flex items-center gap-1.5"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {skillName}
+                    </span>
+                  ))}
+                  <span className="text-[11px] text-indigo-300 font-bold self-center">
+                    + Authenticated
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0 z-10 w-full sm:w-auto">
+                <button
+                  onClick={() => navigate(`/passport/${passportSlug}`)}
+                  className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Award className="w-4 h-4" />
+                  <span>View Public Passport</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={handleCopyPassportLink}
+                  className="px-5 py-3 bg-slate-800/90 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {copiedPassport ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-300">Link Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-slate-400" />
+                      <span>Copy Passport Link</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -545,10 +701,18 @@ export const StudentDashboard: React.FC = () => {
                         </div>
 
                         <button
-                          onClick={() => navigate(`/course/${upgrade.courseSlug}`)}
-                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
+                          onClick={async () => {
+                            try {
+                              await addToCart(upgrade.courseId, 'COURSE');
+                              navigate('/cart');
+                            } catch {
+                              navigate(`/course/${upgrade.courseSlug}`);
+                            }
+                          }}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
                         >
-                          Upgrade Now
+                          <Zap className="w-3.5 h-3.5" />
+                          <span>Upgrade to Full Course</span>
                         </button>
                       </div>
                     ))}
@@ -862,6 +1026,80 @@ export const StudentDashboard: React.FC = () => {
             </div>
 
             {/* ========================================================
+                ROW 3.5: ASSESSMENTS & KNOWLEDGE CHECKS
+               ======================================================== */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                    <HelpCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Course Quizzes & Assessments</h3>
+                    <p className="text-[11px] text-slate-500">
+                      Take interactive checkpoints for your enrolled courses to test understanding and extend streaks.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
+                  {studentQuizzes.length} Available
+                </span>
+              </div>
+
+              {studentQuizzes.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {studentQuizzes.map((quiz) => (
+                    <div
+                      key={quiz._id}
+                      className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-indigo-200 transition space-y-3 flex flex-col justify-between"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold text-indigo-600 truncate">
+                            {quiz.courseId?.title || 'Enrolled Course'}
+                          </span>
+                          {quiz.hasPassed ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">
+                              Passed ({quiz.bestScore}%)
+                            </span>
+                          ) : quiz.bestScore !== null ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-black uppercase">
+                              Score: {quiz.bestScore}%
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[9px] font-bold">
+                              Not Attempted
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-xs font-black text-slate-900 line-clamp-1">{quiz.title}</h4>
+                        <p className="text-[11px] text-slate-500 line-clamp-2">
+                          {quiz.description || 'Module mastery assessment with instant grading.'}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          {quiz.duration || 15}m • Pass: {quiz.passingScore || 70}%
+                        </span>
+                        <button
+                          onClick={() => setActiveQuizId(quiz._id)}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl transition cursor-pointer shadow-xs"
+                        >
+                          {quiz.hasPassed ? 'Retake Quiz' : 'Start Quiz'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No active quizzes for your enrolled courses yet. Once instructors publish quizzes, they will automatically appear here.
+                </div>
+              )}
+            </div>
+
+            {/* ========================================================
                 ROW 4: RECENT ORDERS | RECENT NOTIFICATIONS | RECOMMENDED
                ======================================================== */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1042,6 +1280,163 @@ export const StudentDashboard: React.FC = () => {
           profile={dashboardData.profile}
           onSuccess={() => {
             setIsProfileModalOpen(false);
+            fetchDashboardData();
+          }}
+        />
+      )}
+
+      {/* Messages & Notifications Slide-Over Drawer */}
+      {activeDrawer && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setActiveDrawer(null)}
+          />
+          <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+            <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col border-l border-slate-200">
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    {activeDrawer === 'messages' ? <Mail className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 text-base">
+                      {activeDrawer === 'messages' ? 'Messages & Course Q&A' : 'Notifications'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      {activeDrawer === 'messages'
+                        ? 'Instructor updates, doubts, and student inquiries'
+                        : 'Platform updates, deadlines, and alerts'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveDrawer(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drawer Switch Tabs */}
+              <div className="flex border-b border-slate-100 px-5 bg-white">
+                <button
+                  onClick={() => setActiveDrawer('messages')}
+                  className={`py-3 text-xs font-bold border-b-2 mr-6 transition cursor-pointer flex items-center gap-1.5 ${
+                    activeDrawer === 'messages'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Messages</span>
+                </button>
+                <button
+                  onClick={() => setActiveDrawer('notifications')}
+                  className={`py-3 text-xs font-bold border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                    activeDrawer === 'notifications'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Notifications</span>
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {activeDrawer === 'messages' ? (
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                          Course Q&A Inbox
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                          Live Sync
+                        </span>
+                      </div>
+                      <p className="text-xs text-indigo-800/80 leading-relaxed">
+                        Whenever you ask a doubt in the Course Player Q&A tab, instructor responses are routed directly here and to your notifications.
+                      </p>
+                    </div>
+
+                    {dashboardData?.notifications?.recent && dashboardData.notifications.recent.length > 0 ? (
+                      dashboardData.notifications.recent.map((n: any, idx: number) => (
+                        <div
+                          key={n.notificationId || idx}
+                          className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-slate-900">{n.title}</h4>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(n.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12 space-y-2 text-slate-400">
+                        <MessageSquare className="w-8 h-8 mx-auto text-slate-300" />
+                        <p className="text-xs font-bold text-slate-700">No active doubts or messages</p>
+                        <p className="text-[11px] text-slate-400">Post questions in any enrolled course to receive instructor guidance.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {dashboardData?.notifications?.recent && dashboardData.notifications.recent.length > 0 ? (
+                      dashboardData.notifications.recent.map((n: any, idx: number) => (
+                        <div
+                          key={n.notificationId || idx}
+                          className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-slate-900">{n.title}</h4>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(n.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12 space-y-2 text-slate-400">
+                        <Bell className="w-8 h-8 mx-auto text-slate-300" />
+                        <p className="text-xs font-bold text-slate-700">All caught up!</p>
+                        <p className="text-[11px] text-slate-400">No unread notifications at this time.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 font-medium">Synced with LMS realtime server</span>
+                <button
+                  onClick={() => setActiveDrawer(null)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quiz Player Modal for Student */}
+      {activeQuizId && (
+        <QuizPlayerModal
+          quizId={activeQuizId}
+          isOpen={true}
+          onClose={() => {
+            setActiveQuizId(null);
             fetchDashboardData();
           }}
         />

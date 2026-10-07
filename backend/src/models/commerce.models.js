@@ -104,6 +104,7 @@ const orderItemSchema = new mongoose.Schema(
     quantity: { type: Number, default: 1 },
     unitPrice: { type: Number, required: true, default: 0 },
     discount: { type: Number, default: 0 },
+    creditDeduction: { type: Number, default: 0 },
     tax: { type: Number, default: 0 },
     finalPrice: { type: Number, required: true, default: 0 },
     currency: { type: String, default: 'INR' },

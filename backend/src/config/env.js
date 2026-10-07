@@ -44,4 +44,7 @@ export const config = {
         ? 'https://api.cashfree.com/pg'
         : 'https://sandbox.cashfree.com/pg',
   },
+  ai: {
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+  },
 };

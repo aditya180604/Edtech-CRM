@@ -9,6 +9,13 @@ export interface User {
   email: string;
   phone?: string;
   profilePhoto?: string;
+  headline?: string;
+  institution?: string;
+  qualification?: string;
+  graduationYear?: number;
+  country?: string;
+  state?: string;
+  city?: string;
   role: UserRole;
   status: UserStatus;
   emailVerified: boolean;

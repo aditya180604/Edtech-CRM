@@ -8,6 +8,8 @@ import {
   CouponRedemption,
   InstructorEarning,
   FinancialLedger,
+  TopicCredit,
+  CourseUpgrade,
   Cart,
 } from '../../models/index.js';
 import { CashfreeService } from './providers/cashfree/cashfree.service.js';
@@ -145,6 +147,41 @@ export class PaymentService {
       const targetCourseId = item.courseId || item.productId;
 
       if (productType === PRODUCT_TYPES.COURSE) {
+        // Check for accumulated Topic Credit upgrade deduction
+        const topicCredit = await TopicCredit.findOne({
+          userId: order.userId,
+          courseId: targetCourseId,
+          status: 'ACTIVE',
+          remainingAmount: { $gt: 0 },
+        });
+
+        let creditUsed = item.creditDeduction || 0;
+        if (topicCredit) {
+          if (creditUsed === 0) {
+            creditUsed = Math.min(item.unitPrice || 0, topicCredit.remainingAmount);
+          }
+          topicCredit.usedAmount = (topicCredit.usedAmount || 0) + creditUsed;
+          topicCredit.remainingAmount = Math.max(0, topicCredit.remainingAmount - creditUsed);
+          if (topicCredit.remainingAmount <= 0) {
+            topicCredit.status = 'CONSUMED';
+          }
+          await topicCredit.save();
+
+          // Create CourseUpgrade record
+          await CourseUpgrade.create({
+            upgradeId: `UPG-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+            userId: order.userId,
+            courseId: targetCourseId,
+            coursePrice: item.unitPrice || item.finalPrice || 0,
+            eligibleCredit: creditUsed,
+            upgradePrice: item.finalPrice || 0,
+            currency: item.currency || order.currency || 'INR',
+            orderId: order._id,
+            status: 'COMPLETED',
+            completedAt: new Date(),
+          });
+        }
+
         const existingEntitlement = await Entitlement.findOne({
           userId: order.userId,
           productType: PRODUCT_TYPES.COURSE,
@@ -159,12 +196,12 @@ export class PaymentService {
             productId: targetCourseId,
             courseId: targetCourseId,
             orderId: order._id,
-            source: 'PURCHASE',
+            source: topicCredit && creditUsed > 0 ? 'UPGRADE' : 'PURCHASE',
             status: ENTITLEMENT_STATUS.ACTIVE,
             grantedAt: new Date(),
           });
         }
-      } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING) {
+      } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING || productType === 'TOPIC') {
         const existingEntitlement = await Entitlement.findOne({
           userId: order.userId,
           productType: PRODUCT_TYPES.CONTENT_OFFERING,
@@ -185,6 +222,39 @@ export class PaymentService {
             status: ENTITLEMENT_STATUS.ACTIVE,
             grantedAt: new Date(),
           });
+        }
+
+        // Accrue TopicCredit toward future course upgrade
+        if (item.courseId) {
+          const topicPrice = Number(item.finalPrice ?? item.unitPrice ?? 0);
+          if (topicPrice > 0) {
+            let creditDoc = await TopicCredit.findOne({
+              userId: order.userId,
+              courseId: item.courseId,
+              status: 'ACTIVE',
+            });
+
+            const topicRefId = item.productId || item.topicId;
+            if (!creditDoc) {
+              await TopicCredit.create({
+                creditId: `CRD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+                userId: order.userId,
+                courseId: item.courseId,
+                sourceTopicPurchases: topicRefId ? [topicRefId] : [],
+                eligibleAmount: topicPrice,
+                usedAmount: 0,
+                remainingAmount: topicPrice,
+                status: 'ACTIVE',
+              });
+            } else {
+              creditDoc.eligibleAmount += topicPrice;
+              creditDoc.remainingAmount += topicPrice;
+              if (topicRefId && !creditDoc.sourceTopicPurchases.some((id) => id?.toString() === topicRefId.toString())) {
+                creditDoc.sourceTopicPurchases.push(topicRefId);
+              }
+              await creditDoc.save();
+            }
+          }
         }
       } else if (productType === PRODUCT_TYPES.LEARNING_PATH) {
         const existingEntitlement = await Entitlement.findOne({

@@ -12,6 +12,9 @@ import { featuredCoursesData } from '../data/mockData';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { AiLearningCopilotTab } from '../components/classroom/AiLearningCopilotTab';
+import { quizzesApi, type QuizItem } from '../api/quizzes';
+import { QuizPlayerModal } from '../components/quiz/QuizPlayerModal';
 import {
   CheckCircle2,
   ChevronDown,
@@ -55,8 +58,8 @@ export const CourseDetailPage: React.FC = () => {
   const [allExpanded, setAllExpanded] = useState(true);
   const [showSyllabusModal, setShowSyllabusModal] = useState(false);
 
-  // Active Classroom Tabs: 'overview' | 'qa' | 'reviews'
-  const [classroomTab, setClassroomTab] = useState<'overview' | 'qa' | 'reviews'>('overview');
+  // Active Classroom Tabs: 'overview' | 'qa' | 'reviews' | 'ai_copilot'
+  const [classroomTab, setClassroomTab] = useState<'overview' | 'qa' | 'reviews' | 'ai_copilot'>('overview');
 
   // Rating & Review State
   const [userRating, setUserRating] = useState<number>(5);
@@ -80,6 +83,8 @@ export const CourseDetailPage: React.FC = () => {
     topicPrice: number;
     duration: number;
   } | null>(null);
+  const [courseQuizzes, setCourseQuizzes] = useState<QuizItem[]>([]);
+  const [activeQuizModalId, setActiveQuizModalId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -89,6 +94,14 @@ export const CourseDetailPage: React.FC = () => {
         const res = await coursesApi.getDetails(slug);
         if (res.success && res.data) {
           setCourseData(res.data);
+          const cId = res.data.course?._id || res.data.course?.id;
+          if (cId) {
+            quizzesApi.getQuizzesByCourse(cId).then((qRes) => {
+              if (qRes.success && qRes.data) {
+                setCourseQuizzes(qRes.data);
+              }
+            }).catch(() => {});
+          }
           if (Array.isArray(res.data.completedLessonIds) && res.data.completedLessonIds.length > 0) {
             setCompletedLessonIds(res.data.completedLessonIds);
             try {
@@ -705,6 +718,18 @@ export const CourseDetailPage: React.FC = () => {
                     <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                     <span>Rate Course</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setClassroomTab('ai_copilot')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                      classroomTab === 'ai_copilot'
+                        ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-md shadow-indigo-100'
+                        : 'bg-gradient-to-r from-indigo-50 to-cyan-50 hover:from-indigo-100 hover:to-cyan-100 text-indigo-700 border border-indigo-200'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 text-cyan-500 animate-pulse" />
+                    <span>✨ AI Learning Copilot</span>
+                  </button>
                 </div>
 
                 {/* TAB 1: OVERVIEW & DYNAMIC DOWNLOADABLE MATERIALS */}
@@ -983,6 +1008,17 @@ export const CourseDetailPage: React.FC = () => {
                     </form>
                   </div>
                 )}
+
+                {/* TAB 4: AI LEARNING COPILOT (CONTEXT-AWARE AI TUTOR) */}
+                {classroomTab === 'ai_copilot' && (
+                  <AiLearningCopilotTab
+                    courseTitle={course.title}
+                    moduleTitle={activeLesson?.moduleTitle || activeLesson?.topicTitle || 'Core Curriculum'}
+                    lessonTitle={activeLesson?.title || 'Interactive Lesson'}
+                    lessonDescription={activeLesson?.description || course.description}
+                    userAvatar={user?.profilePhoto}
+                  />
+                )}
               </div>
             </div>
 
@@ -1079,10 +1115,68 @@ export const CourseDetailPage: React.FC = () => {
                     );
                   })}
                 </div>
+
+                {/* Module Checkpoint Quizzes in Curriculum Drawer */}
+                {courseQuizzes.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span>Module Quizzes</span>
+                      <span className="text-[10px] text-indigo-600 font-extrabold">{courseQuizzes.length} Available</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {courseQuizzes.map((q) => (
+                        <div
+                          key={q._id}
+                          onClick={() => {
+                            if (!q.isLocked) {
+                              setActiveQuizModalId(q._id);
+                            }
+                          }}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition text-xs ${
+                            q.isLocked
+                              ? 'bg-slate-50 border-slate-200 opacity-70 cursor-not-allowed'
+                              : 'bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200/80 cursor-pointer text-indigo-950 font-bold'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {q.isLocked ? (
+                              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            ) : q.hasPassed ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            ) : (
+                              <HelpCircle className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            )}
+                            <span className="truncate">{q.title}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {q.hasPassed ? (
+                              <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-black">
+                                {q.bestScore}%
+                              </span>
+                            ) : !q.isLocked ? (
+                              <span className="text-[10px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded font-black">
+                                Start
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
+
+        {/* Quiz Player Modal in Classroom */}
+        {activeQuizModalId && (
+          <QuizPlayerModal
+            quizId={activeQuizModalId}
+            isOpen={true}
+            onClose={() => setActiveQuizModalId(null)}
+          />
+        )}
 
         <Footer />
       </div>
@@ -1643,7 +1737,12 @@ export const CourseDetailPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      await addToCart(course._id || course.id, 'COURSE');
+                      await addToCart(course._id || course.id, 'COURSE', {
+                        title: course.title,
+                        price: course.coursePrice || 0,
+                        thumbnail: course.thumbnail,
+                        courseId: course._id || course.id,
+                      });
                       success('Added to Cart', `"${course.title}" has been added to your shopping cart.`);
                       navigate('/cart');
                     }}
@@ -1928,7 +2027,12 @@ export const CourseDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={async () => {
-                  await addToCart(course._id || course.id, 'COURSE');
+                  await addToCart(course._id || course.id, 'COURSE', {
+                    title: course.title,
+                    price: course.coursePrice || 0,
+                    thumbnail: course.thumbnail,
+                    courseId: course._id || course.id,
+                  });
                   setLockedLessonModal(null);
                   navigate('/cart');
                 }}
@@ -1942,7 +2046,12 @@ export const CourseDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={async () => {
-                    await addToCart(lockedLessonModal.topicId!, 'CONTENT_OFFERING');
+                    await addToCart(lockedLessonModal.topicId!, 'CONTENT_OFFERING', {
+                      title: lockedLessonModal.topicTitle || 'Topic Offering',
+                      price: lockedLessonModal.topicPrice || 299,
+                      topicId: lockedLessonModal.topicId!,
+                      courseId: course._id || course.id,
+                    });
                     setLockedLessonModal(null);
                     navigate('/cart');
                   }}

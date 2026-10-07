@@ -22,7 +22,9 @@ import { LearningPathDetailPage } from './pages/LearningPathDetailPage';
 import { TopicDetailPage } from './pages/TopicDetailPage';
 import { OfferingDetailPage } from './pages/OfferingDetailPage';
 import { StudentProfilePage } from './pages/StudentProfilePage';
+import { StudentOnboardingPage } from './pages/StudentOnboardingPage';
 import { LiveWebinarRoomPage } from './pages/LiveWebinarRoomPage';
+import { SkillPassportPage } from './pages/SkillPassportPage';
 
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
@@ -66,11 +68,19 @@ export const App: React.FC = () => {
 
 
             {/* Student Dashboards & Profile */}
-            <Route path="/profile" element={<StudentProfilePage />} />
-            <Route path="/dashboard/student/profile" element={<StudentProfilePage />} />
-            <Route path="/settings" element={<StudentProfilePage />} />
+            <Route path="/student/onboarding" element={<StudentOnboardingPage />} />
+            <Route path="/student/complete-profile" element={<StudentOnboardingPage />} />
+            <Route path="/profile" element={<StudentOnboardingPage />} />
+            <Route path="/dashboard/student/profile" element={<StudentOnboardingPage />} />
+            <Route path="/settings" element={<StudentOnboardingPage />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/dashboard/student" element={<StudentDashboard />} />
+            <Route path="/messages" element={<StudentDashboard />} />
+            <Route path="/notifications" element={<StudentDashboard />} />
+
+            {/* Verified Skill Passport */}
+            <Route path="/passport/:identifier" element={<SkillPassportPage />} />
+            <Route path="/passport" element={<SkillPassportPage />} />
 
             {/* Instructor Dashboards & Verification Lobby */}
             <Route path="/instructor/onboarding" element={<InstructorOnboardingPage />} />

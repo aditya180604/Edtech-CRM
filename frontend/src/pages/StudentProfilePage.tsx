@@ -23,14 +23,18 @@ export const StudentProfilePage: React.FC = () => {
 
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
+  const [headline, setHeadline] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [profilePhoto, setProfilePhoto] = useState<string>('');
   const [country, setCountry] = useState<string>('India');
+  const [state, setState] = useState<string>('');
+  const [city, setCity] = useState<string>('');
   const [timezone, setTimezone] = useState<string>('Asia/Kolkata');
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const [learningPreferences, setLearningPreferences] = useState<string>('Visual / Project-Based');
   const [qualification, setQualification] = useState<string>('');
   const [institution, setInstitution] = useState<string>('');
+  const [graduationYear, setGraduationYear] = useState<number | ''>('');
   const [skillsInput, setSkillsInput] = useState<string>('');
   const [interestsInput, setInterestsInput] = useState<string>('');
 
@@ -49,14 +53,18 @@ export const StudentProfilePage: React.FC = () => {
           const p = data.profile;
           setFirstName(p.firstName || user?.firstName || '');
           setLastName(p.lastName || user?.lastName || '');
-          setPhone(p.phone || '');
-          setProfilePhoto(p.profilePhoto || '');
-          setCountry(p.country || 'India');
+          setHeadline(p.headline || user?.headline || '');
+          setPhone(p.phone || user?.phone || '');
+          setProfilePhoto(p.profilePhoto || user?.profilePhoto || '');
+          setCountry(p.country || user?.country || 'India');
+          setState(p.state || user?.state || '');
+          setCity(p.city || user?.city || '');
           setTimezone(p.timezone || 'Asia/Kolkata');
           setPreferredLanguage(p.preferredLanguage || 'English');
           setLearningPreferences(p.learningPreferences || 'Visual / Project-Based');
-          setQualification(p.qualification || '');
-          setInstitution(p.institution || '');
+          setQualification(p.qualification || user?.qualification || '');
+          setInstitution(p.institution || user?.institution || '');
+          setGraduationYear(p.graduationYear || user?.graduationYear || '');
           setSkillsInput(Array.isArray(p.skills) ? p.skills.join(', ') : '');
           setInterestsInput(Array.isArray(p.interests) ? p.interests.join(', ') : '');
           setCompletionPercentage(p.completionPercentage || 0);
@@ -93,14 +101,18 @@ export const StudentProfilePage: React.FC = () => {
       await authApi.updateMe({
         firstName: firstName.trim() || undefined,
         lastName: lastName.trim() || undefined,
+        headline: headline.trim() || undefined,
         phone: phone.trim() || undefined,
         profilePhoto: profilePhoto.trim() || undefined,
         country: country.trim() || undefined,
+        state: state.trim() || undefined,
+        city: city.trim() || undefined,
         timezone: timezone.trim() || undefined,
         preferredLanguage: preferredLanguage.trim() || undefined,
         learningPreferences: learningPreferences.trim() || undefined,
         qualification: qualification.trim() || undefined,
         institution: institution.trim() || undefined,
+        graduationYear: graduationYear ? Number(graduationYear) : undefined,
         skills: parsedSkills,
         interests: parsedInterests,
       });
@@ -235,12 +247,12 @@ export const StudentProfilePage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Country</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Professional Headline / Target Role</label>
                   <input
                     type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="e.g. India"
+                    value={headline}
+                    onChange={(e) => setHeadline(e.target.value)}
+                    placeholder="e.g. Aspiring Full Stack Developer"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
                   />
                 </div>
@@ -278,6 +290,39 @@ export const StudentProfilePage: React.FC = () => {
                 )}
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">City</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Bengaluru"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">State / Region</label>
+                  <input
+                    type="text"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    placeholder="e.g. Karnataka"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Country</label>
+                  <input
+                    type="text"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    placeholder="e.g. India"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">Preferred Language</label>
@@ -309,7 +354,7 @@ export const StudentProfilePage: React.FC = () => {
                 <h2 className="text-sm font-bold text-slate-900">Academic & Education Information</h2>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">Degree / Qualification</label>
                   <input
@@ -327,6 +372,16 @@ export const StudentProfilePage: React.FC = () => {
                     value={institution}
                     onChange={(e) => setInstitution(e.target.value)}
                     placeholder="e.g. Andhra University"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Graduation Year</label>
+                  <input
+                    type="number"
+                    value={graduationYear}
+                    onChange={(e) => setGraduationYear(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g. 2025"
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition shadow-2xs"
                   />
                 </div>

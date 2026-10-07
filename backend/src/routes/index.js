@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { usersRoutes } from '../modules/users/users.routes.js';
+import { UsersController } from '../modules/users/users.controller.js';
 import { superAdminRoutes } from '../modules/superAdmin/superAdmin.routes.js';
 import { instructorRoutes } from '../modules/instructor/instructor.routes.js';
 import { coursesRoutes } from '../modules/courses/courses.routes.js';
@@ -14,6 +15,8 @@ import { checkoutRoutes } from '../modules/checkout/checkout.routes.js';
 import { paymentRoutes as studentPaymentRoutes } from '../modules/payments/payment.routes.js';
 import { paymentRoutes as instructorPaymentRoutes } from '../modules/payments/payments.routes.js';
 import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
+import { aiRoutes } from '../modules/ai/ai.routes.js';
+import { quizRoutes } from '../modules/quizzes/quiz.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -35,6 +38,7 @@ router.get('/health', (req, res) => {
 // Domain Routes
 router.use('/auth', authRoutes);
 router.use('/users', usersRoutes);
+router.get('/passport/:identifier', UsersController.getPassport);
 router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
@@ -43,6 +47,8 @@ router.use('/notifications', notificationsRoutes);
 router.use('/payments', instructorPaymentRoutes);
 router.use('/payments', studentPaymentRoutes);
 router.use('/dashboard/student', studentDashboardRoutes);
+router.use('/ai', aiRoutes);
+router.use('/quizzes', quizRoutes);
 router.use('/', learningPathRoutes);
 router.use('/catalog', catalogRoutes);
 router.use('/', catalogRoutes);

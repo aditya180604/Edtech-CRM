@@ -172,6 +172,7 @@ export class CheckoutService {
         title: item.title,
         unitPrice: item.unitPrice,
         discount: item.discount || 0,
+        creditDeduction: item.creditDeduction || 0,
         finalPrice: item.finalPrice,
         currency: item.currency,
       })),
@@ -199,6 +200,7 @@ export class CheckoutService {
         instructorId: item.instructorId,
         unitPrice: item.unitPrice,
         discount: item.discount || 0,
+        creditDeduction: item.creditDeduction || 0,
         finalPrice: item.finalPrice,
         currency: item.currency,
       });

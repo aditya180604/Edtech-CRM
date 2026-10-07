@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Cart, Course, TopicContentOffering, LearningPath, Entitlement } from '../../models/index.js';
+import { Cart, Course, Topic, TopicContentOffering, LearningPath, Entitlement } from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
 import { PricingService } from '../checkout/pricing.service.js';
 
@@ -52,7 +52,7 @@ export class CartService {
 
     // 1. Verify item is not already in cart
     const exists = cart.items.some(
-      (item) => item.productId.toString() === productId.toString() && item.productType === productType
+      (item) => item.productId.toString() === productId.toString() && (item.productType === productType || (productType === 'CONTENT_OFFERING' && item.productType === 'CONTENT_OFFERING'))
     );
     if (exists) {
       const error = new Error('This item is already in your cart.');
@@ -90,30 +90,48 @@ export class CartService {
         price: course.coursePrice || 0,
         currency: course.currency || 'INR',
       });
-    } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING) {
-      const offering = await TopicContentOffering.findById(productId);
-      if (!offering || offering.status !== 'PUBLISHED') {
-        throw new Error('This tutor offering is not currently available for purchase.');
+    } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING || productType === 'TOPIC') {
+      let offering = await TopicContentOffering.findById(productId);
+      let topicDoc = null;
+
+      if (!offering) {
+        offering = await TopicContentOffering.findOne({ topicId: productId });
       }
+
+      if (!offering) {
+        topicDoc = await Topic.findById(productId);
+      }
+
+      if (!offering && !topicDoc) {
+        throw new Error('This topic is not currently available for purchase.');
+      }
+
+      const resolvedId = offering ? offering._id : topicDoc._id;
+      const resolvedPrice = offering ? (offering.price || 0) : (topicDoc.price || (topicDoc.isFree ? 0 : 299));
+      const resolvedCourseId = offering ? offering.courseId : topicDoc.courseId;
 
       const existingEntitlement = await Entitlement.findOne({
         userId,
-        productType: PRODUCT_TYPES.CONTENT_OFFERING,
-        productId: offering._id,
+        $or: [
+          { productType: PRODUCT_TYPES.CONTENT_OFFERING, productId: resolvedId },
+          { productType: PRODUCT_TYPES.CONTENT_OFFERING, topicId: resolvedId },
+          { productType: PRODUCT_TYPES.COURSE, productId: resolvedCourseId },
+        ],
         status: ENTITLEMENT_STATUS.ACTIVE,
       });
 
       if (existingEntitlement) {
-        const error = new Error('You already own this tutor offering.');
+        const error = new Error('You already own this topic or the parent course.');
         error.code = 'ALREADY_OWNED';
         throw error;
       }
 
       cart.items.push({
         productType: PRODUCT_TYPES.CONTENT_OFFERING,
-        productId: offering._id,
-        price: offering.price || 0,
-        currency: offering.currency || 'INR',
+        productId: resolvedId,
+        courseId: resolvedCourseId,
+        price: resolvedPrice,
+        currency: offering?.currency || topicDoc?.currency || 'INR',
       });
     } else if (productType === PRODUCT_TYPES.LEARNING_PATH) {
       const pathDoc = await LearningPath.findById(productId);

@@ -26,7 +26,7 @@ export const TopicsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
 
   const courseIdParam = searchParams.get('courseId') || '';
   const initialCat = searchParams.get('category') || 'All';
@@ -146,9 +146,18 @@ export const TopicsPage: React.FC = () => {
   const handleBuyTopic = async (topic: TopicItem) => {
     const topicId = topic._id || topic.id;
     if (!topicId) return;
-    await addToCart(topicId, 'CONTENT_OFFERING');
-    success('Topic Added to Cart', `"${topic.title}" is ready for checkout.`);
-    navigate('/cart');
+    const res = await addToCart(topicId, 'CONTENT_OFFERING', {
+      title: topic.title,
+      price: topic.price || (topic.isFree ? 0 : 299),
+      topicId: topicId,
+      courseId: topic.courseId,
+    });
+    if (res.success) {
+      success('Topic Added to Cart', `"${topic.title}" is ready for checkout.`);
+      navigate('/cart');
+    } else {
+      toastError('Cart Notice', res.message || 'Failed to add topic to cart.');
+    }
   };
 
   return (

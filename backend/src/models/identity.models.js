@@ -38,6 +38,7 @@ const userSchema = new mongoose.Schema(
     qualification: { type: String },
     institution: { type: String },
     graduationYear: { type: Number },
+    headline: { type: String, trim: true },
     skills: { type: [String], default: [] },
     interests: { type: [String], default: [] },
     role: {

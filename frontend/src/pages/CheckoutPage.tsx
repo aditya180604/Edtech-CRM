@@ -27,6 +27,7 @@ export const CheckoutPage: React.FC = () => {
     items,
     subtotal,
     discount,
+    credit,
     total,
     appliedCoupon,
     isValidatingCoupon,
@@ -292,27 +293,32 @@ export const CheckoutPage: React.FC = () => {
                             <Sparkles className="w-2.5 h-2.5" /> Coupon Target
                           </span>
                         )}
+                        {item.hasUpgradeCredit && (item.creditDeduction ?? 0) > 0 && (
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-indigo-200">
+                            <Sparkles className="w-2.5 h-2.5 text-indigo-600" /> Topic Credit: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} owned)
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
                       <p className="text-xs text-slate-500 font-medium">Instructor: {item.instructorName || 'Lead Instructor'}</p>
                     </div>
 
                     <div className="text-right shrink-0">
-                      {item.discount > 0 ? (
+                      {(item.discount > 0 || (item.creditDeduction ?? 0) > 0) ? (
                         <div>
                           <span className="text-xs text-slate-400 line-through block">
                             ₹{item.unitPrice.toLocaleString('en-IN')}
                           </span>
                           <span className="text-base font-black text-emerald-600">
-                            ₹{item.finalPrice.toLocaleString('en-IN')}
+                            {item.finalPrice === 0 ? 'FREE' : `₹${item.finalPrice.toLocaleString('en-IN')}`}
                           </span>
                           <span className="text-[10px] font-bold text-emerald-700 block">
-                            (Saved ₹{item.discount.toLocaleString('en-IN')})
+                            (Saved ₹{((item.discount || 0) + (item.creditDeduction || 0)).toLocaleString('en-IN')})
                           </span>
                         </div>
                       ) : (
                         <span className="text-base font-black text-slate-900">
-                          ₹{item.unitPrice.toLocaleString('en-IN')}
+                          {item.unitPrice === 0 ? 'FREE' : `₹${item.unitPrice.toLocaleString('en-IN')}`}
                         </span>
                       )}
                     </div>
@@ -441,6 +447,18 @@ export const CheckoutPage: React.FC = () => {
                         Applied to: <span className="font-bold">{appliedCoupon.courseTitle}</span>
                       </p>
                     )}
+                  </div>
+                )}
+
+                {credit > 0 && (
+                  <div className="flex justify-between items-center bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100">
+                    <span className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Topic Credit (Upgrade)</span>
+                    </span>
+                    <span className="font-black text-indigo-700 text-xs sm:text-sm">
+                      -₹{credit.toLocaleString('en-IN')}
+                    </span>
                   </div>
                 )}
 

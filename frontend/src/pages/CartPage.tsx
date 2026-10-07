@@ -15,6 +15,7 @@ export const CartPage: React.FC = () => {
     clearCart,
     subtotal,
     discount,
+    credit,
     total,
     appliedCoupon,
     isValidatingCoupon,
@@ -110,7 +111,7 @@ export const CartPage: React.FC = () => {
                           : 'bg-cyan-500/10 text-cyan-700 border border-cyan-100'
                       }`}
                     >
-                      {item.productType}
+                      {item.productType === 'COURSE' ? 'COURSE' : 'TOPIC'}
                     </div>
 
                     <div className="min-w-0 space-y-0.5">
@@ -123,6 +124,11 @@ export const CartPage: React.FC = () => {
                         {item.isEligibleForCoupon && (
                           <span className="px-2 py-0.2 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-emerald-200">
                             <Sparkles className="w-2.5 h-2.5" /> Coupon Discount Applied
+                          </span>
+                        )}
+                        {item.hasUpgradeCredit && (item.creditDeduction ?? 0) > 0 && (
+                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-indigo-200">
+                            <Sparkles className="w-2.5 h-2.5 text-indigo-600" /> Topic Credit Applied: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} {item.ownedTopicCount === 1 ? 'topic' : 'topics'} owned)
                           </span>
                         )}
                       </div>
@@ -140,13 +146,13 @@ export const CartPage: React.FC = () => {
                   </div>
 
                   <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-50 shrink-0">
-                    {item.discount > 0 ? (
+                    {(item.discount > 0 || (item.creditDeduction ?? 0) > 0) ? (
                       <div className="text-right">
                         <span className="text-xs text-slate-400 line-through block">
                           ₹{item.unitPrice.toLocaleString('en-IN')}
                         </span>
                         <span className="text-base sm:text-lg font-black text-emerald-600 block">
-                          ₹{item.finalPrice.toLocaleString('en-IN')}
+                          {item.finalPrice === 0 ? 'FREE' : `₹${item.finalPrice.toLocaleString('en-IN')}`}
                         </span>
                       </div>
                     ) : (
@@ -213,6 +219,18 @@ export const CartPage: React.FC = () => {
                           Target: <span className="font-bold">{appliedCoupon.courseTitle}</span>
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {credit > 0 && (
+                    <div className="flex justify-between items-center bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100">
+                      <span className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Topic Credit (Upgrade)</span>
+                      </span>
+                      <span className="font-black text-indigo-700 text-xs sm:text-sm">
+                        -₹{credit.toLocaleString('en-IN')}
+                      </span>
                     </div>
                   )}
 

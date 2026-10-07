@@ -43,5 +43,11 @@ export const authApi = {
     const response = await apiClient.post<AuthResponse>('/auth/firebase-login', { idToken });
     return response.data;
   },
+
+  // 8. Get Public Verified Skill Passport
+  async getPassport(identifier: string): Promise<{ statusCode: number; success: boolean; data: any }> {
+    const response = await apiClient.get(`/passport/${encodeURIComponent(identifier)}`);
+    return response.data;
+  },
 };
 

@@ -68,6 +68,7 @@ import { instructorApi, type InstructorDashboardData } from '../../api/instructo
 import { useToast } from '../../context/ToastContext';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
+import { InstructorQuizStudio } from '../../components/quiz/InstructorQuizStudio';
 
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -76,7 +77,7 @@ export const InstructorDashboard: React.FC = () => {
 
   // Navigation Sub-tab state
   const [activeNav, setActiveNav] = useState<
-    'dashboard' | 'courses' | 'create-course' | 'webinars' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
+    'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'webinars' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
   >('dashboard');
 
   // Dashboard Telemetry Data
@@ -1440,6 +1441,7 @@ export const InstructorDashboard: React.FC = () => {
               { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
               { id: 'courses', label: 'My Courses', icon: BookOpen },
               { id: 'create-course', label: 'Create Course', icon: PlusCircle },
+              { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
               { id: 'webinars', label: 'Webinars', icon: Video },
               { id: 'students', label: 'Students', icon: Users },
               { id: 'reviews', label: 'Reviews & Ratings', icon: Star },
@@ -4393,6 +4395,13 @@ export const InstructorDashboard: React.FC = () => {
               )}
             </div>
           </div>
+        )}
+
+        {/* =========================================================================
+            VIEW 3.5: QUIZZES & QUESTION BANK STUDIO
+           ========================================================================= */}
+        {activeNav === 'quizzes' && (
+          <InstructorQuizStudio courses={dashboardData?.myCourses || []} />
         )}
 
         {/* =========================================================================

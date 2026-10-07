@@ -4,6 +4,9 @@ import { authenticate } from '../../middleware/auth.js';
 
 const router = Router();
 
+// Public verified skill passport route (publicly shareable)
+router.get('/passport/:identifier', UsersController.getPassport);
+
 router.use(authenticate);
 
 router.get('/me', UsersController.getMe);

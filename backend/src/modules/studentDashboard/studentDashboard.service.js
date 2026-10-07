@@ -239,6 +239,9 @@ export class StudentDashboardService {
       phone: user.phone || null,
       profilePhoto: user.profilePhoto || null,
       country: user.country || null,
+      state: user.state || null,
+      city: user.city || null,
+      headline: user.headline || null,
       timezone: user.timezone || null,
       preferredLanguage: user.preferredLanguage || null,
       learningPreferences:
@@ -249,9 +252,11 @@ export class StudentDashboardService {
           : null,
       qualification: user.qualification || null,
       institution: user.institution || null,
+      graduationYear: user.graduationYear || null,
       skills: Array.isArray(user.skills) ? user.skills : [],
       interests: Array.isArray(user.interests) ? user.interests : [],
       status: user.status || 'ACTIVE',
+      isProfileCompleted: Boolean(user.isProfileCompleted),
       completionPercentage,
       missingFields,
     };

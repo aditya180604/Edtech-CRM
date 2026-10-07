@@ -17,12 +17,16 @@ export interface StudentDashboardProfile {
   email: string;
   phone: string | null;
   profilePhoto: string | null;
+  headline?: string | null;
   country: string | null;
+  state?: string | null;
+  city?: string | null;
   timezone: string | null;
   preferredLanguage: string | null;
   learningPreferences?: string | null;
   qualification?: string | null;
   institution?: string | null;
+  graduationYear?: number | null;
   skills?: string[];
   interests?: string[];
   status: string;
