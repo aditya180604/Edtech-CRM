@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Eye, EyeOff, Lock, Mail, User, ArrowLeft, AlertCircle } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Lock, Mail, User, Phone, ArrowLeft, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import {
+  validateEmail,
+  validateFullName,
+  validatePassword,
+  validatePasswordConfirm,
+  validatePhone,
+  getPasswordStrength,
+} from '../utils/validators';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -9,12 +17,34 @@ export const RegisterPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'STUDENT' | 'INSTRUCTOR'>('STUDENT');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Field touched state
+  const [touched, setTouched] = useState({
+    fullName: false,
+    email: false,
+    phone: false,
+    password: false,
+    confirmPassword: false,
+  });
+
+  // Real-time password strength calculation
+  const passStrength = getPasswordStrength(password);
+
+  // Form field errors
+  const fieldErrors = {
+    fullName: touched.fullName ? validateFullName(fullName) : null,
+    email: touched.email ? validateEmail(email) : null,
+    phone: touched.phone ? validatePhone(phone) : null,
+    password: touched.password ? validatePassword(password) : null,
+    confirmPassword: touched.confirmPassword ? validatePasswordConfirm(password, confirmPassword) : null,
+  };
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
@@ -33,8 +63,22 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
+    // Mark all as touched
+    setTouched({
+      fullName: true,
+      email: true,
+      phone: true,
+      password: true,
+      confirmPassword: true,
+    });
+
+    const nameErr = validateFullName(fullName);
+    const emailErr = validateEmail(email);
+    const phoneErr = validatePhone(phone);
+    const passErr = validatePassword(password);
+    const confirmErr = validatePasswordConfirm(password, confirmPassword);
+
+    if (nameErr || emailErr || phoneErr || passErr || confirmErr) {
       return;
     }
 
@@ -46,7 +90,8 @@ export const RegisterPage: React.FC = () => {
     const result = await register({
       firstName,
       lastName,
-      email,
+      email: email.trim(),
+      phone: phone.trim() || undefined,
       password,
       role: selectedRole,
     });
@@ -61,7 +106,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/70 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 relative selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50/70 flex flex-col justify-center items-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-indigo-500 selection:text-white">
       {/* Back to Home link */}
       <Link
         to="/"
@@ -72,10 +117,10 @@ export const RegisterPage: React.FC = () => {
       </Link>
 
       {/* Auth Card */}
-      <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-xl shadow-slate-200/60 border border-slate-100">
+      <div className="w-full max-w-md bg-white rounded-3xl p-7 sm:p-9 shadow-xl shadow-slate-200/60 border border-slate-100 my-4">
         {/* Brand Logo */}
-        <div className="flex flex-col items-center mb-6">
-          <Link to="/" className="flex items-center gap-2 group mb-3">
+        <div className="flex flex-col items-center mb-5">
+          <Link to="/" className="flex items-center gap-2 group mb-2.5">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
               <GraduationCap className="w-6 h-6" />
             </div>
@@ -84,8 +129,8 @@ export const RegisterPage: React.FC = () => {
             </span>
           </Link>
           <h2 className="text-2xl font-bold text-slate-900">Create Your Account</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 text-center">
-            Join thousands of learners and start learning today.
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 text-center">
+            Join thousands of learners and instructors today.
           </p>
         </div>
 
@@ -97,12 +142,12 @@ export const RegisterPage: React.FC = () => {
           </div>
         )}
 
-        {/* Role Selector Tabs (Student & Instructor ONLY - Admin removed!) */}
-        <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
+        {/* Role Selector Tabs (Student & Instructor ONLY) */}
+        <div className="flex p-1 bg-slate-100 rounded-xl mb-5">
           <button
             type="button"
             onClick={() => setSelectedRole('STUDENT')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${
               selectedRole === 'STUDENT'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'text-slate-500 hover:text-slate-900'
@@ -113,7 +158,7 @@ export const RegisterPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('INSTRUCTOR')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 ${
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${
               selectedRole === 'INSTRUCTOR'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'text-slate-500 hover:text-slate-900'
@@ -124,9 +169,12 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} className="space-y-3.5" noValidate>
+          {/* Full Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <User className="w-4 h-4" />
@@ -134,16 +182,31 @@ export const RegisterPage: React.FC = () => {
               <input
                 type="text"
                 required
+                maxLength={50}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, fullName: true }))}
                 placeholder="Rahul Sharma"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  fieldErrors.fullName
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
             </div>
+            {fieldErrors.fullName && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.fullName}</span>
+              </p>
+            )}
           </div>
 
+          {/* Email */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Email address</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Email address <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Mail className="w-4 h-4" />
@@ -151,16 +214,62 @@ export const RegisterPage: React.FC = () => {
               <input
                 type="email"
                 required
+                maxLength={100}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
                 placeholder="rahul@example.com"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  fieldErrors.email
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
             </div>
+            {fieldErrors.email && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.email}</span>
+              </p>
+            )}
           </div>
 
+          {/* Phone (Optional) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Phone Number <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Phone className="w-4 h-4" />
+              </div>
+              <input
+                type="tel"
+                maxLength={15}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, phone: true }))}
+                placeholder="+91 9876543210"
+                className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  fieldErrors.phone
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
+              />
+            </div>
+            {fieldErrors.phone && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.phone}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Password <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Lock className="w-4 h-4" />
@@ -168,24 +277,83 @@ export const RegisterPage: React.FC = () => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
+                maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  fieldErrors.password
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+
+            {/* Live Password Strength Meter */}
+            {password.length > 0 && (
+              <div className="mt-2 space-y-1.5 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Strength:</span>
+                  <span className={`font-bold ${
+                    passStrength.score === 4 ? 'text-emerald-600' :
+                    passStrength.score === 3 ? 'text-blue-600' :
+                    passStrength.score === 2 ? 'text-amber-600' : 'text-red-500'
+                  }`}>
+                    {passStrength.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 h-1.5 w-full">
+                  <div className={`rounded-full ${passStrength.score >= 1 ? passStrength.color : 'bg-slate-200'}`} />
+                  <div className={`rounded-full ${passStrength.score >= 2 ? passStrength.color : 'bg-slate-200'}`} />
+                  <div className={`rounded-full ${passStrength.score >= 3 ? passStrength.color : 'bg-slate-200'}`} />
+                  <div className={`rounded-full ${passStrength.score >= 4 ? passStrength.color : 'bg-slate-200'}`} />
+                </div>
+
+                {/* Password Requirement Badges */}
+                <div className="grid grid-cols-2 gap-1 pt-1 text-[10px]">
+                  <span className={`flex items-center gap-1 ${passStrength.rules.minLength ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {passStrength.rules.minLength ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                    8+ Characters
+                  </span>
+                  <span className={`flex items-center gap-1 ${passStrength.rules.hasUpper ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {passStrength.rules.hasUpper ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                    Uppercase Letter
+                  </span>
+                  <span className={`flex items-center gap-1 ${passStrength.rules.hasLower ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {passStrength.rules.hasLower ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                    Lowercase Letter
+                  </span>
+                  <span className={`flex items-center gap-1 ${passStrength.rules.hasNumber ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {passStrength.rules.hasNumber ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                    Number
+                  </span>
+                  <span className={`flex items-center gap-1 col-span-2 ${passStrength.rules.hasSpecial ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {passStrength.rules.hasSpecial ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                    Special Symbol (@$!%*?&#)
+                  </span>
+                </div>
+              </div>
+            )}
+            {fieldErrors.password && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.password}</span>
+              </p>
+            )}
           </div>
 
+          {/* Confirm Password */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Confirm Password
+              Confirm Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -194,32 +362,51 @@ export const RegisterPage: React.FC = () => {
               <input
                 type={showConfirmPassword ? 'text' : 'password'}
                 required
+                maxLength={128}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                onBlur={() => setTouched((prev) => ({ ...prev, confirmPassword: true }))}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  fieldErrors.confirmPassword
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {fieldErrors.confirmPassword && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.confirmPassword}</span>
+              </p>
+            )}
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all mt-2 disabled:opacity-70 cursor-pointer"
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all mt-2 disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
           >
-            {loading ? 'Creating Account...' : `Create ${selectedRole === 'STUDENT' ? 'Student' : 'Instructor'} Account`}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Creating Account...</span>
+              </>
+            ) : (
+              `Create ${selectedRole === 'STUDENT' ? 'Student' : 'Instructor'} Account`
+            )}
           </button>
         </form>
 
         {/* Social Divider */}
-        <div className="relative my-5">
+        <div className="relative my-4">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-slate-100" />
           </div>
@@ -257,7 +444,7 @@ export const RegisterPage: React.FC = () => {
         </button>
 
         {/* Footer */}
-        <p className="text-center text-xs text-slate-500 mt-5">
+        <p className="text-center text-xs text-slate-500 mt-4">
           Already have an account?{' '}
           <Link to="/login" className="font-bold text-indigo-600 hover:text-indigo-700">
             Sign in
@@ -267,3 +454,4 @@ export const RegisterPage: React.FC = () => {
     </div>
   );
 };
+

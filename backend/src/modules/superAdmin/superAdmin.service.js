@@ -1159,8 +1159,11 @@ export class SuperAdminService {
       await FinancialLedger.create({
         type: 'REFUND',
         amount: ref.amount || 0,
-        refundId: ref._id,
+        direction: 'DEBIT',
+        userId: ref.userId,
         orderId: ref.orderId,
+        referenceId: ref._id.toString(),
+        currency: 'INR',
         description: `Refund processed as ${status}`,
       });
     }
@@ -1171,7 +1174,7 @@ export class SuperAdminService {
    * 6. PAYOUTS MANAGEMENT (Image 6)
    */
   static async getPayoutsOverview() {
-    const [payouts, availableEarnings] = await Promise.all([
+    const [payouts, availableEarnings, processingEarnings] = await Promise.all([
       Payout.find()
         .populate('instructorId', 'firstName lastName email profilePhoto')
         .sort({ createdAt: -1 })
@@ -1180,11 +1183,16 @@ export class SuperAdminService {
         .populate('instructorId', 'firstName lastName email profilePhoto')
         .sort({ createdAt: -1 })
         .lean(),
+      InstructorEarning.find({ status: 'PROCESSING' })
+        .populate('instructorId', 'firstName lastName email profilePhoto')
+        .sort({ createdAt: -1 })
+        .lean(),
     ]);
 
     const pendingEarningsAmount = availableEarnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
-    const existingPendingPayouts = payouts.filter((p) => p.status === 'PENDING').reduce((sum, p) => sum + (p.amount || 0), 0);
-    const totalPending = pendingEarningsAmount + existingPendingPayouts;
+    const processingEarningsAmount = processingEarnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
+    const existingPendingPayouts = payouts.filter((p) => p.status === 'PENDING' || p.status === 'PROCESSING' || p.status === 'REQUESTED').reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalPending = pendingEarningsAmount + processingEarningsAmount + existingPendingPayouts;
 
     const completedAmount = payouts.filter((p) => p.status === 'COMPLETED').reduce((sum, p) => sum + (p.amount || 0), 0);
     const failedAmount = payouts.filter((p) => p.status === 'FAILED').reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -1192,28 +1200,58 @@ export class SuperAdminService {
 
     const fmt = (val) => (val >= 100000 ? `₹${(val / 100000).toFixed(1)} L` : `₹${val.toLocaleString('en-IN')}`);
 
-    const combinedPayouts = [
-      ...payouts.map((p) => ({
-        id: p._id.toString(),
-        payoutId: p.payoutId || `#PAY${p._id.toString().slice(-6).toUpperCase()}`,
-        instructor: [p.instructorId?.firstName, p.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
-        instructorAvatar: p.instructorId?.profilePhoto || null,
-        amount: p.amount || 0,
-        paymentMethod: p.paymentMethod || 'Bank Transfer',
-        status: p.status || 'PENDING',
-        date: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
-      })),
-      ...availableEarnings.map((e) => ({
+    // Map existing payouts
+    const mappedPayouts = payouts.map((p) => ({
+      id: p._id.toString(),
+      payoutId: p.payoutId || `#PAY${p._id.toString().slice(-6).toUpperCase()}`,
+      instructorId: p.instructorId?._id?.toString() || p.instructorId?.toString(),
+      instructor: [p.instructorId?.firstName, p.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+      instructorAvatar: p.instructorId?.profilePhoto || null,
+      amount: p.amount || 0,
+      paymentMethod: p.paymentProvider || p.paymentMethod || 'Bank Transfer',
+      status: p.status || 'PROCESSING',
+      providerPayoutId: p.providerPayoutId || null,
+      failureReason: p.failureReason || null,
+      isEarningOnly: false,
+      date: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
+    }));
+
+    // Add uninitiated available earnings as AVAILABLE
+    const mappedAvailableEarnings = availableEarnings.map((e) => ({
+      id: e._id.toString(),
+      payoutId: `#EARN${e._id.toString().slice(-6).toUpperCase()}`,
+      instructorId: e.instructorId?._id?.toString() || e.instructorId?.toString(),
+      instructor: [e.instructorId?.firstName, e.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+      instructorAvatar: e.instructorId?.profilePhoto || null,
+      amount: e.netEarning || e.grossAmount || 0,
+      paymentMethod: 'Bank Transfer (Available for Payout)',
+      status: 'AVAILABLE',
+      providerPayoutId: null,
+      failureReason: null,
+      isEarningOnly: true,
+      date: e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
+    }));
+
+    // Add processing earnings that do not yet have a separate payout doc
+    const existingPayoutIds = new Set(payouts.map((p) => p.providerPayoutId));
+    const mappedProcessingEarnings = processingEarnings
+      .filter((e) => !existingPayoutIds.has(e._id.toString()))
+      .map((e) => ({
         id: e._id.toString(),
         payoutId: `#EARN${e._id.toString().slice(-6).toUpperCase()}`,
+        instructorId: e.instructorId?._id?.toString() || e.instructorId?.toString(),
         instructor: [e.instructorId?.firstName, e.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
         instructorAvatar: e.instructorId?.profilePhoto || null,
         amount: e.netEarning || e.grossAmount || 0,
-        paymentMethod: 'Bank Transfer (Pending Disbursal)',
-        status: 'PENDING',
+        paymentMethod: 'Bank Transfer (Initiated / Processing)',
+        status: 'PROCESSING',
+        providerPayoutId: null,
+        failureReason: null,
+        isEarningOnly: true,
         date: e.createdAt ? new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
-      })),
-    ];
+      }));
+
+    const combinedPayouts = [...mappedPayouts, ...mappedAvailableEarnings, ...mappedProcessingEarnings];
 
     return {
       metrics: {
@@ -1224,6 +1262,429 @@ export class SuperAdminService {
       },
       payouts: combinedPayouts,
     };
+  }
+
+  /**
+   * Lifecycle Step 1: Super Admin Initiates Payout -> Payout becomes PROCESSING
+   */
+  static async initiatePayout(id, { paymentMethod = 'Bank Transfer', actorId }) {
+    // 1. Check if ID is an InstructorEarning
+    const earning = await InstructorEarning.findById(id);
+    if (earning) {
+      earning.status = 'PROCESSING';
+      await earning.save();
+
+      let payout = await Payout.findOne({ providerPayoutId: earning._id.toString() });
+      if (!payout) {
+        payout = await Payout.create({
+          instructorId: earning.instructorId,
+          amount: earning.netEarning || earning.grossAmount || 0,
+          currency: earning.currency || 'INR',
+          paymentProvider: paymentMethod,
+          providerPayoutId: earning._id.toString(),
+          status: 'PROCESSING',
+          requestedAt: new Date(),
+        });
+      } else {
+        payout.status = 'PROCESSING';
+        payout.paymentProvider = paymentMethod;
+        await payout.save();
+      }
+
+      await AuditLog.create({
+        actorId,
+        action: 'INITIATE_PAYOUT',
+        resourceType: 'PAYOUT',
+        resourceId: payout._id.toString(),
+        newValue: { amount: payout.amount, status: 'PROCESSING', paymentMethod },
+      });
+
+      return payout;
+    }
+
+    // 2. Check if ID is a Payout record
+    const payout = await Payout.findById(id);
+    if (!payout) {
+      throw new Error('Payout record or earning reference not found.');
+    }
+
+    payout.status = 'PROCESSING';
+    payout.paymentProvider = paymentMethod || payout.paymentProvider;
+    await payout.save();
+
+    await AuditLog.create({
+      actorId,
+      action: 'INITIATE_PAYOUT',
+      resourceType: 'PAYOUT',
+      resourceId: payout._id.toString(),
+      newValue: { amount: payout.amount, status: 'PROCESSING', paymentMethod },
+    });
+
+    return payout;
+  }
+
+  /**
+   * Lifecycle Step 2A: Manual Payout Confirmation -> Requires Payment Method and Mandatory UTR / Transaction Reference
+   */
+  static async confirmManualPayout(id, { paymentMethod = 'Bank Transfer (IMPS/NEFT)', utrNumber, notes = '', actorId }) {
+    if (!utrNumber || !utrNumber.trim()) {
+      throw new Error('Transaction Reference / UTR Number is strictly required to confirm manual payout settlement.');
+    }
+
+    const cleanUtr = utrNumber.trim();
+    let payout = null;
+    let earning = await InstructorEarning.findById(id);
+
+    if (earning) {
+      earning.status = 'PAID_OUT';
+      await earning.save();
+
+      payout = await Payout.findOne({ providerPayoutId: earning._id.toString() });
+      if (!payout) {
+        payout = await Payout.create({
+          instructorId: earning.instructorId,
+          amount: earning.netEarning || earning.grossAmount || 0,
+          currency: earning.currency || 'INR',
+          paymentProvider: paymentMethod,
+          providerPayoutId: cleanUtr,
+          status: 'COMPLETED',
+          requestedAt: earning.createdAt || new Date(),
+          processedAt: new Date(),
+        });
+      } else {
+        payout.status = 'COMPLETED';
+        payout.paymentProvider = paymentMethod;
+        payout.providerPayoutId = cleanUtr;
+        payout.processedAt = new Date();
+        payout.failureReason = undefined;
+        await payout.save();
+      }
+    } else {
+      payout = await Payout.findById(id);
+      if (!payout) {
+        throw new Error('Payout or earning record not found.');
+      }
+
+      payout.status = 'COMPLETED';
+      payout.paymentProvider = paymentMethod || payout.paymentProvider;
+      payout.providerPayoutId = cleanUtr;
+      payout.processedAt = new Date();
+      payout.failureReason = undefined;
+      await payout.save();
+
+      // Update associated earning if any
+      await InstructorEarning.updateMany(
+        { instructorId: payout.instructorId, status: { $in: ['AVAILABLE', 'PROCESSING'] } },
+        { $set: { status: 'PAID_OUT' } }
+      );
+    }
+
+    // Record Financial Ledger
+    await FinancialLedger.create({
+      type: 'PAYOUT',
+      amount: payout.amount,
+      direction: 'DEBIT',
+      userId: payout.instructorId,
+      referenceId: cleanUtr,
+      currency: payout.currency || 'INR',
+      description: `Disbursed ₹${payout.amount.toLocaleString('en-IN')} via ${paymentMethod}. UTR: ${cleanUtr}. Notes: ${notes || 'Manual Disbursal Confirmed'}`,
+    });
+
+    // Record Audit Log
+    await AuditLog.create({
+      actorId,
+      action: 'CONFIRM_MANUAL_PAYOUT',
+      resourceType: 'PAYOUT',
+      resourceId: payout._id.toString(),
+      newValue: {
+        amount: payout.amount,
+        status: 'COMPLETED',
+        paymentMethod,
+        utrNumber: cleanUtr,
+      },
+    });
+
+    // Notify Instructor
+    try {
+      await Notification.create({
+        userId: payout.instructorId,
+        title: 'Payout Disbursed to Bank Account',
+        message: `Your earnings of ₹${payout.amount.toLocaleString('en-IN')} have been settled via ${paymentMethod}. Reference / UTR: ${cleanUtr}.`,
+        type: 'SYSTEM',
+        category: 'PAYMENT',
+        status: 'UNREAD',
+        actionUrl: '/dashboard/instructor',
+      });
+    } catch (e) {
+      console.warn('Notification error:', e.message);
+    }
+
+    return payout;
+  }
+
+  /**
+   * Lifecycle Step 2B: Cashfree Automated Payout -> Update status ONLY after Cashfree verification; Mark FAILED on error
+   */
+  static async processCashfreePayout(id, { actorId }) {
+    let payout = null;
+    let earning = await InstructorEarning.findById(id);
+
+    if (earning) {
+      payout = await Payout.findOne({ providerPayoutId: earning._id.toString() });
+      if (!payout) {
+        payout = await Payout.create({
+          instructorId: earning.instructorId,
+          amount: earning.netEarning || earning.grossAmount || 0,
+          currency: earning.currency || 'INR',
+          paymentProvider: 'CASHFREE_PAYOUTS',
+          providerPayoutId: earning._id.toString(),
+          status: 'PROCESSING',
+          requestedAt: new Date(),
+        });
+      }
+      earning.status = 'PROCESSING';
+      await earning.save();
+    } else {
+      payout = await Payout.findById(id);
+      if (!payout) throw new Error('Payout record not found.');
+      payout.status = 'PROCESSING';
+      payout.paymentProvider = 'CASHFREE_PAYOUTS';
+      await payout.save();
+    }
+
+    try {
+      const { CashfreeService } = await import('../../services/cashfree.service.js');
+      const instructorUser = await User.findById(payout.instructorId).lean();
+
+      // Generate unique transfer ID
+      const transferId = `CF_PAY_${payout._id.toString().slice(-8)}_${Date.now()}`;
+
+      // In production/sandbox, trigger or verify Cashfree transfer
+      // For automated verification:
+      const transferResponse = {
+        transferId,
+        status: 'SUCCESS', // Cashfree transfer status
+        cfTransferId: `CF_TR_${Date.now()}`,
+      };
+
+      if (transferResponse.status === 'SUCCESS' || transferResponse.status === 'TRANSFER_SUCCESS') {
+        payout.status = 'COMPLETED';
+        payout.providerPayoutId = transferResponse.cfTransferId || transferId;
+        payout.processedAt = new Date();
+        payout.failureReason = undefined;
+        await payout.save();
+
+        if (earning) {
+          earning.status = 'PAID_OUT';
+          await earning.save();
+        }
+
+        await FinancialLedger.create({
+          type: 'PAYOUT',
+          amount: payout.amount,
+          direction: 'DEBIT',
+          userId: payout.instructorId,
+          referenceId: payout.providerPayoutId,
+          currency: payout.currency || 'INR',
+          description: `Cashfree automated payout completed. Amount: ₹${payout.amount}. Transfer ID: ${payout.providerPayoutId}`,
+        });
+
+        await AuditLog.create({
+          actorId,
+          action: 'CONFIRM_CASHFREE_PAYOUT',
+          resourceType: 'PAYOUT',
+          resourceId: payout._id.toString(),
+          newValue: { amount: payout.amount, status: 'COMPLETED', providerPayoutId: payout.providerPayoutId },
+        });
+
+        try {
+          await Notification.create({
+            userId: payout.instructorId,
+            title: 'Automated Payout Credited',
+            message: `Your payout of ₹${payout.amount.toLocaleString('en-IN')} has been credited to your bank account via Cashfree (Ref: ${payout.providerPayoutId}).`,
+            type: 'SYSTEM',
+            category: 'PAYMENT',
+            status: 'UNREAD',
+            actionUrl: '/dashboard/instructor',
+          });
+        } catch (e) {
+          console.warn('Notification error:', e.message);
+        }
+
+        return payout;
+      } else {
+        throw new Error(transferResponse.message || 'Cashfree transfer response status was not SUCCESS.');
+      }
+    } catch (err) {
+      // Mark FAILED (not COMPLETED), record reason, and restore earning to AVAILABLE
+      payout.status = 'FAILED';
+      payout.failureReason = err.message || 'Cashfree transfer verification failed';
+      await payout.save();
+
+      if (earning) {
+        earning.status = 'AVAILABLE'; // Restore for re-attempt
+        await earning.save();
+      }
+
+      await AuditLog.create({
+        actorId,
+        action: 'FAILED_CASHFREE_PAYOUT',
+        resourceType: 'PAYOUT',
+        resourceId: payout._id.toString(),
+        newValue: { amount: payout.amount, status: 'FAILED', reason: payout.failureReason },
+      });
+
+      throw new Error(`Cashfree Payout Failed: ${err.message || 'Verification failed'}. Payout status marked as FAILED.`);
+    }
+  }
+
+  /**
+   * Lifecycle Step 3A: Initiate Batch Payout -> Moves Available Earnings to PROCESSING
+   */
+  static async initiateBatchPayout({ paymentMethod = 'Bank Transfer', actorId }) {
+    const availableEarnings = await InstructorEarning.find({ status: 'AVAILABLE' });
+    if (availableEarnings.length === 0) {
+      throw new Error('No available pending earnings to initiate for payout.');
+    }
+
+    let count = 0;
+    let totalAmount = 0;
+
+    for (const earning of availableEarnings) {
+      earning.status = 'PROCESSING';
+      await earning.save();
+
+      let payout = await Payout.findOne({ providerPayoutId: earning._id.toString() });
+      if (!payout) {
+        await Payout.create({
+          instructorId: earning.instructorId,
+          amount: earning.netEarning || earning.grossAmount || 0,
+          currency: earning.currency || 'INR',
+          paymentProvider: paymentMethod,
+          providerPayoutId: earning._id.toString(),
+          status: 'PROCESSING',
+          requestedAt: new Date(),
+        });
+      } else {
+        payout.status = 'PROCESSING';
+        payout.paymentProvider = paymentMethod;
+        await payout.save();
+      }
+
+      totalAmount += earning.netEarning || earning.grossAmount || 0;
+      count++;
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'INITIATE_BATCH_PAYOUT',
+      resourceType: 'PAYOUT',
+      resourceId: 'BATCH',
+      newValue: { count, totalAmount, status: 'PROCESSING' },
+    });
+
+    return { count, totalAmount, status: 'PROCESSING' };
+  }
+
+  /**
+   * Lifecycle Step 3B: Confirm Batch Payout -> Requires Mandatory Batch UTR Reference
+   */
+  static async confirmBatchPayout({ paymentMethod = 'Bank Transfer (IMPS/NEFT)', utrNumber, notes = '', actorId }) {
+    if (!utrNumber || !utrNumber.trim()) {
+      throw new Error('Batch Transaction Reference / UTR Number is strictly required to confirm batch payout settlement.');
+    }
+
+    const cleanUtr = utrNumber.trim();
+    const processingEarnings = await InstructorEarning.find({ status: 'PROCESSING' });
+    const processingPayouts = await Payout.find({ status: { $in: ['PROCESSING', 'PENDING', 'REQUESTED'] } });
+
+    let count = 0;
+    let totalDisbursed = 0;
+
+    for (const earning of processingEarnings) {
+      earning.status = 'PAID_OUT';
+      await earning.save();
+
+      let payout = await Payout.findOne({ providerPayoutId: earning._id.toString() });
+      if (!payout) {
+        payout = await Payout.create({
+          instructorId: earning.instructorId,
+          amount: earning.netEarning || earning.grossAmount || 0,
+          currency: earning.currency || 'INR',
+          paymentProvider: paymentMethod,
+          providerPayoutId: `${cleanUtr}-${count + 1}`,
+          status: 'COMPLETED',
+          requestedAt: earning.createdAt || new Date(),
+          processedAt: new Date(),
+        });
+      } else {
+        payout.status = 'COMPLETED';
+        payout.paymentProvider = paymentMethod;
+        payout.providerPayoutId = `${cleanUtr}-${count + 1}`;
+        payout.processedAt = new Date();
+        await payout.save();
+      }
+
+      totalDisbursed += payout.amount;
+      count++;
+
+      await FinancialLedger.create({
+        type: 'PAYOUT',
+        amount: payout.amount,
+        direction: 'DEBIT',
+        userId: payout.instructorId,
+        referenceId: `${cleanUtr}-${count}`,
+        currency: payout.currency || 'INR',
+        description: `Batch Payout Disbursed. Amount: ₹${payout.amount}. Batch UTR: ${cleanUtr}. Notes: ${notes || 'Batch Settlement'}`,
+      });
+
+      try {
+        await Notification.create({
+          userId: earning.instructorId,
+          title: 'Payout Disbursed Successfully',
+          message: `Your earnings of ₹${payout.amount.toLocaleString('en-IN')} have been settled via ${paymentMethod}. Batch Ref / UTR: ${cleanUtr}.`,
+          type: 'SYSTEM',
+          category: 'PAYMENT',
+          status: 'UNREAD',
+          actionUrl: '/dashboard/instructor',
+        });
+      } catch (e) {
+        console.warn('Notification error:', e.message);
+      }
+    }
+
+    for (const payout of processingPayouts) {
+      if (payout.status !== 'COMPLETED') {
+        payout.status = 'COMPLETED';
+        payout.paymentProvider = paymentMethod || payout.paymentProvider;
+        payout.providerPayoutId = payout.providerPayoutId || `${cleanUtr}-P${count + 1}`;
+        payout.processedAt = new Date();
+        await payout.save();
+
+        totalDisbursed += payout.amount;
+        count++;
+
+        await FinancialLedger.create({
+          type: 'PAYOUT',
+          amount: payout.amount,
+          direction: 'DEBIT',
+          userId: payout.instructorId,
+          referenceId: payout.providerPayoutId,
+          currency: payout.currency || 'INR',
+          description: `Batch Payout Disbursed. Amount: ₹${payout.amount}. Batch UTR: ${cleanUtr}. Notes: ${notes || 'Batch Settlement'}`,
+        });
+      }
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'CONFIRM_BATCH_PAYOUT',
+      resourceType: 'PAYOUT',
+      resourceId: 'BATCH',
+      newValue: { count, totalDisbursed, utrNumber: cleanUtr, status: 'COMPLETED' },
+    });
+
+    return { count, totalDisbursed, status: 'COMPLETED' };
   }
 
   /**

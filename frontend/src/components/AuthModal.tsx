@@ -2,7 +2,25 @@ import React, { useState } from 'react';
 import { useAuthModal } from '../context/AuthModalContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, X, Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import {
+  GraduationCap,
+  X,
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react';
+import {
+  validateEmail,
+  validateFullName,
+  validatePassword,
+  validatePasswordConfirm,
+  getPasswordStrength,
+} from '../utils/validators';
 
 export const AuthModal: React.FC = () => {
   const { authMode, closeAuth, switchMode } = useAuthModal();
@@ -21,6 +39,17 @@ export const AuthModal: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Field touched states
+  const [loginTouched, setLoginTouched] = useState({ email: false, password: false });
+  const [signupTouched, setSignupTouched] = useState({
+    fullName: false,
+    email: false,
+    password: false,
+    confirmPassword: false,
+  });
+
+  const passStrength = getPasswordStrength(password);
 
   if (!authMode) return null;
 
@@ -41,9 +70,17 @@ export const AuthModal: React.FC = () => {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setLoading(true);
 
-    const result = await login({ email, password });
+    setLoginTouched({ email: true, password: true });
+    const emailErr = validateEmail(email);
+    const passErr = password ? null : 'Password is required.';
+
+    if (emailErr || passErr) {
+      return;
+    }
+
+    setLoading(true);
+    const result = await login({ email: email.trim(), password });
     setLoading(false);
 
     if (result.success && result.role) {
@@ -59,8 +96,19 @@ export const AuthModal: React.FC = () => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
+    setSignupTouched({
+      fullName: true,
+      email: true,
+      password: true,
+      confirmPassword: true,
+    });
+
+    const nameErr = validateFullName(fullName);
+    const emailErr = validateEmail(email);
+    const passErr = validatePassword(password);
+    const confirmErr = validatePasswordConfirm(password, confirmPassword);
+
+    if (nameErr || emailErr || passErr || confirmErr) {
       return;
     }
 
@@ -72,7 +120,7 @@ export const AuthModal: React.FC = () => {
     const result = await register({
       firstName,
       lastName,
-      email,
+      email: email.trim(),
       password,
       role: signupRole,
     });
@@ -93,13 +141,13 @@ export const AuthModal: React.FC = () => {
       onClick={closeAuth}
     >
       <div
-        className="relative w-full max-w-[420px] bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 select-none"
+        className="relative w-full max-w-[420px] bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150 select-none max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
           onClick={closeAuth}
-          className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           aria-label="Close Modal"
         >
           <X className="w-4 h-4" />
@@ -132,12 +180,12 @@ export const AuthModal: React.FC = () => {
           </div>
         )}
 
-        {/* ===================== SIGN IN FORM (UNIFIED - NO ROLE TABS) ===================== */}
+        {/* ===================== SIGN IN FORM ===================== */}
         {authMode === 'login' && (
-          <form onSubmit={handleLoginSubmit} className="space-y-3">
+          <form onSubmit={handleLoginSubmit} className="space-y-3" noValidate>
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Email address
+                Email address <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -146,20 +194,31 @@ export const AuthModal: React.FC = () => {
                 <input
                   type="email"
                   required
+                  maxLength={100}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setLoginTouched((prev) => ({ ...prev, email: true }))}
                   placeholder="toppix851@gmail.com"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                  className={`w-full pl-9 pr-3 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                    loginTouched.email && validateEmail(email)
+                      ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                      : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                  }`}
                 />
               </div>
+              {loginTouched.email && validateEmail(email) && (
+                <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                  <span>{validateEmail(email)}</span>
+                </p>
+              )}
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-semibold text-slate-700">Password</label>
-                <a href="#" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700">
-                  Forgot password?
-                </a>
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Password <span className="text-red-500">*</span>
+                </label>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -168,40 +227,59 @@ export const AuthModal: React.FC = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  maxLength={128}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setLoginTouched((prev) => ({ ...prev, password: true }))}
                   placeholder="••••••••••••"
-                  className="w-full pl-9 pr-9 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                  className={`w-full pl-9 pr-9 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                    loginTouched.password && !password
+                      ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                      : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              {loginTouched.password && !password && (
+                <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                  <span>Password is required.</span>
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer"
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Signing in...</span>
+                </>
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
         )}
 
-        {/* ===================== SIGN UP FORM (STUDENT & INSTRUCTOR ONLY) ===================== */}
+        {/* ===================== SIGN UP FORM ===================== */}
         {authMode === 'signup' && (
           <div className="space-y-3">
-            {/* Role Tabs - Student & Instructor Only */}
+            {/* Role Tabs */}
             <div className="flex p-0.5 bg-slate-100 rounded-lg mb-2">
               <button
                 type="button"
                 onClick={() => setSignupRole('STUDENT')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 ${
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 cursor-pointer ${
                   signupRole === 'STUDENT'
                     ? 'bg-white text-indigo-600 shadow-xs'
                     : 'text-slate-500 hover:text-slate-900'
@@ -212,7 +290,7 @@ export const AuthModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSignupRole('INSTRUCTOR')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 ${
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 cursor-pointer ${
                   signupRole === 'INSTRUCTOR'
                     ? 'bg-white text-indigo-600 shadow-xs'
                     : 'text-slate-500 hover:text-slate-900'
@@ -222,10 +300,10 @@ export const AuthModal: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSignupSubmit} className="space-y-2">
+            <form onSubmit={handleSignupSubmit} className="space-y-2.5" noValidate>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Full Name
+                  Full Name <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -234,17 +312,29 @@ export const AuthModal: React.FC = () => {
                   <input
                     type="text"
                     required
+                    maxLength={50}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
+                    onBlur={() => setSignupTouched((prev) => ({ ...prev, fullName: true }))}
                     placeholder="Rahul Sharma"
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                    className={`w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                      signupTouched.fullName && validateFullName(fullName)
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    }`}
                   />
                 </div>
+                {signupTouched.fullName && validateFullName(fullName) && (
+                  <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                    <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                    <span>{validateFullName(fullName)}</span>
+                  </p>
+                )}
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Email address
+                  Email address <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -253,16 +343,30 @@ export const AuthModal: React.FC = () => {
                   <input
                     type="email"
                     required
+                    maxLength={100}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => setSignupTouched((prev) => ({ ...prev, email: true }))}
                     placeholder="rahul@example.com"
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                    className={`w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                      signupTouched.email && validateEmail(email)
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    }`}
                   />
                 </div>
+                {signupTouched.email && validateEmail(email) && (
+                  <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                    <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                    <span>{validateEmail(email)}</span>
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Password</label>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                  Password <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                     <Lock className="w-3.5 h-3.5" />
@@ -270,24 +374,76 @@ export const AuthModal: React.FC = () => {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
+                    maxLength={128}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => setSignupTouched((prev) => ({ ...prev, password: true }))}
                     placeholder="••••••••••••"
-                    className="w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                    className={`w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                      signupTouched.password && validatePassword(password)
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
+
+                {/* Password strength mini meter */}
+                {password.length > 0 && (
+                  <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500">Strength:</span>
+                      <span className={`font-bold ${
+                        passStrength.score === 4 ? 'text-emerald-600' :
+                        passStrength.score === 3 ? 'text-blue-600' :
+                        passStrength.score === 2 ? 'text-amber-600' : 'text-red-500'
+                      }`}>
+                        {passStrength.label}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 h-1 w-full">
+                      <div className={`rounded-full ${passStrength.score >= 1 ? passStrength.color : 'bg-slate-200'}`} />
+                      <div className={`rounded-full ${passStrength.score >= 2 ? passStrength.color : 'bg-slate-200'}`} />
+                      <div className={`rounded-full ${passStrength.score >= 3 ? passStrength.color : 'bg-slate-200'}`} />
+                      <div className={`rounded-full ${passStrength.score >= 4 ? passStrength.color : 'bg-slate-200'}`} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-0.5 text-[9px] pt-0.5">
+                      <span className={`flex items-center gap-1 ${passStrength.rules.minLength ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {passStrength.rules.minLength ? <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
+                        8+ Chars
+                      </span>
+                      <span className={`flex items-center gap-1 ${passStrength.rules.hasUpper ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {passStrength.rules.hasUpper ? <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
+                        Uppercase
+                      </span>
+                      <span className={`flex items-center gap-1 ${passStrength.rules.hasLower ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {passStrength.rules.hasLower ? <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
+                        Lowercase
+                      </span>
+                      <span className={`flex items-center gap-1 ${passStrength.rules.hasSpecial ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {passStrength.rules.hasSpecial ? <CheckCircle2 className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
+                        Symbol (@$!%*?)
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {signupTouched.password && validatePassword(password) && (
+                  <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                    <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                    <span>{validatePassword(password)}</span>
+                  </p>
+                )}
               </div>
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Confirm Password
+                  Confirm Password <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -296,27 +452,46 @@ export const AuthModal: React.FC = () => {
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
+                    maxLength={128}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    onBlur={() => setSignupTouched((prev) => ({ ...prev, confirmPassword: true }))}
                     placeholder="••••••••••••"
-                    className="w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10"
+                    className={`w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                      signupTouched.confirmPassword && validatePasswordConfirm(password, confirmPassword)
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
+                {signupTouched.confirmPassword && validatePasswordConfirm(password, confirmPassword) && (
+                  <p className="text-[10px] text-red-500 mt-0.5 flex items-center gap-1">
+                    <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                    <span>{validatePasswordConfirm(password, confirmPassword)}</span>
+                  </p>
+                )}
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer mt-1"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer mt-1 flex items-center justify-center gap-2"
               >
-                {loading ? 'Creating Account...' : `Create ${signupRole === 'STUDENT' ? 'Student' : 'Instructor'} Account`}
+                {loading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  `Create ${signupRole === 'STUDENT' ? 'Student' : 'Instructor'} Account`
+                )}
               </button>
             </form>
           </div>

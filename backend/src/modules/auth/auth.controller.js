@@ -25,6 +25,7 @@ export class AuthController {
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       },
       'User registered successfully.'
     );
@@ -49,6 +50,7 @@ export class AuthController {
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       },
       'Login successful.'
     );
@@ -110,6 +112,7 @@ export class AuthController {
       {
         user: result.user,
         accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
         isNewUser: result.isNewUser,
       },
       result.isNewUser ? 'User registered and linked via Firebase.' : 'Login successful via Firebase.'

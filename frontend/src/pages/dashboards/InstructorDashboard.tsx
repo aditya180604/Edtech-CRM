@@ -4523,7 +4523,7 @@ export const InstructorDashboard: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-3.5 px-4 font-bold text-indigo-600">
-                            {w.registrations?.length || 0}
+                            {Math.max(w.registrationsCount ?? 0, w.registrations?.length ?? 0, w.attendanceCount ?? 0, w.attendance?.length ?? 0)}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 100}</td>
                           <td className="py-3.5 px-4">
@@ -5029,12 +5029,36 @@ export const InstructorDashboard: React.FC = () => {
             </div>
 
             {/* Analytics Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
               <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
                 <p className="text-2xl font-black">
-                  ₹{((analyticsData?.metrics?.totalRevenue ?? analyticsData?.totalRevenue) || 0).toLocaleString('en-IN')}
+                  ₹{(
+                    (analyticsData?.courses || analyticsData?.coursePerformance)?.length > 0
+                      ? (analyticsData?.courses || analyticsData?.coursePerformance).reduce(
+                          (sum: number, c: any) => sum + (c.revenue || 0),
+                          0
+                        )
+                      : ((analyticsData?.metrics?.totalRevenue ?? analyticsData?.totalRevenue) || 0)
+                  ).toLocaleString('en-IN')}
                 </p>
                 <p className="font-semibold text-slate-600">Total Revenue</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-teal-50 text-teal-700">
+                <p className="text-2xl font-black">
+                  ₹{(
+                    analyticsData?.metrics?.netEarnings ??
+                    analyticsData?.netEarnings ??
+                    Math.round(
+                      ((analyticsData?.courses || analyticsData?.coursePerformance)?.length > 0
+                        ? (analyticsData?.courses || analyticsData?.coursePerformance).reduce(
+                            (sum: number, c: any) => sum + (c.revenue || 0),
+                            0
+                          )
+                        : ((analyticsData?.metrics?.totalRevenue ?? analyticsData?.totalRevenue) || 0)) * 0.8
+                    )
+                  ).toLocaleString('en-IN')}
+                </p>
+                <p className="font-semibold text-slate-600">Net Earnings</p>
               </div>
               <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-700">
                 <p className="text-2xl font-black">

@@ -13,8 +13,6 @@ import {
   Coins,
   Receipt,
   BarChart3,
-  ShieldAlert,
-  Server,
   Plus,
   Search,
   X,
@@ -87,8 +85,6 @@ export const SuperAdminDashboard: React.FC = () => {
     | 'currencies'
     | 'taxes'
     | 'analytics'
-    | 'fraud'
-    | 'infrastructure'
   >('dashboard');
 
   // Loading States
@@ -202,6 +198,18 @@ export const SuperAdminDashboard: React.FC = () => {
   });
   const [verificationStatusFilter, setVerificationStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
   const [verificationSearch, setVerificationSearch] = useState('');
+
+  // Payout Disbursal State (Strict Settlement Lifecycle)
+  const [selectedPayoutToDisburse, setSelectedPayoutToDisburse] = useState<SuperAdminPayout | null>(null);
+  const [showDisburseModal, setShowDisburseModal] = useState(false);
+  const [showBulkDisburseModal, setShowBulkDisburseModal] = useState(false);
+  const [disbursePaymentMethod, setDisbursePaymentMethod] = useState<'Bank Transfer (IMPS/NEFT)' | 'UPI / Instant Transfer' | 'CASHFREE_PAYOUTS' | 'Manual Cheque / Direct Deposit'>('Bank Transfer (IMPS/NEFT)');
+  const [disburseUtr, setDisburseUtr] = useState('');
+  const [disburseNotes, setDisburseNotes] = useState('');
+  const [processingPayout, setProcessingPayout] = useState(false);
+  const [batchUtr, setBatchUtr] = useState('');
+  const [batchNotes, setBatchNotes] = useState('');
+  const [batchMethod, setBatchMethod] = useState('Bank Transfer (IMPS/NEFT)');
   const [selectedVerification, setSelectedVerification] = useState<SuperAdminInstructorVerification | null>(null);
   const [showInspectVerificationModal, setShowInspectVerificationModal] = useState(false);
   const [showRejectVerificationModal, setShowRejectVerificationModal] = useState(false);
@@ -211,119 +219,200 @@ export const SuperAdminDashboard: React.FC = () => {
   // Super Admin Registered Instructors List (For On Behalf Creation)
   const [instructorsList, setInstructorsList] = useState<any[]>([]);
 
-  // Load Dashboard Overview and active sub-view data
+  // Redirect to login if user session is completely missing
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    const storedToken = localStorage.getItem('accessToken');
+    if (!storedUser || !storedToken) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
+
+  // Load Dashboard Overview and active sub-view data in parallel
   const loadData = useCallback(
     async (isSilent = false) => {
       try {
         if (!isSilent) setRefreshing(true);
 
-        const overviewRes = await superAdminApi.getDashboard().catch(() => null);
-        if (overviewRes?.success && overviewRes.data) {
-          setOverview(overviewRes.data);
-        }
+        const promises: Promise<any>[] = [];
 
-        // Fetch registered instructors list for dropdown & on-behalf creation
-        const instRes = await superAdminApi.getInstructorsList().catch(() => null);
-        if (instRes?.success && instRes.data) {
-          setInstructorsList(instRes.data);
-        }
+        // 1. Always load Overview
+        promises.push(
+          superAdminApi
+            .getDashboard()
+            .then((res) => {
+              if (res?.success && res.data) setOverview(res.data);
+            })
+            .catch(() => null)
+        );
 
-        // Sub-view data loading
+        // 2. Instructors List
+        promises.push(
+          superAdminApi
+            .getInstructorsList()
+            .then((res) => {
+              if (res?.success && res.data) setInstructorsList(res.data);
+            })
+            .catch(() => null)
+        );
+
+        // 3. Approvals Queue (for badges)
+        promises.push(
+          superAdminApi
+            .getApprovalsQueue()
+            .then((res) => {
+              if (res?.success && res.data) setApprovalsList(res.data);
+            })
+            .catch(() => null)
+        );
+
+        // 4. Instructor Verifications
+        promises.push(
+          superAdminApi
+            .getInstructorVerifications({
+              status: activeNav === 'instructor-verifications' ? (verificationStatusFilter === 'ALL' ? undefined : verificationStatusFilter) : undefined,
+              search: activeNav === 'instructor-verifications' ? (verificationSearch.trim() || undefined) : undefined,
+              limit: 100,
+            })
+            .then((res) => {
+              if (res?.success && res.data) {
+                setInstructorVerificationsList(res.data.instructors || []);
+                setVerificationCounts(res.data.counts || { all: 0, pending: 0, approved: 0, rejected: 0 });
+              }
+            })
+            .catch(() => null)
+        );
+
+        // 5. Active Nav specific views
         if (activeNav === 'users' || activeNav === 'creators' || activeNav === 'dashboard') {
           const roleToQuery = activeNav === 'creators' ? 'INSTRUCTOR' : userRoleFilter === 'ALL' ? undefined : userRoleFilter;
-          const uRes = await superAdminApi.getUsers({
-            role: roleToQuery,
-            status: userStatusFilter === 'ALL' ? undefined : userStatusFilter,
-            search: userSearch.trim() || undefined,
-            limit: 100,
-          }).catch(() => null);
-          if (uRes?.success && uRes.data?.users) {
-            setUsersList(uRes.data.users);
-          }
-        }
-
-        // Always fetch approvals queue for live sidebar badge and queue pipeline
-        const appRes = await superAdminApi.getApprovalsQueue().catch(() => null);
-        if (appRes?.success && appRes.data) {
-          setApprovalsList(appRes.data);
-        }
-
-        // Always fetch instructor verifications for live sidebar badge and queue pipeline
-        const verRes = await superAdminApi.getInstructorVerifications({
-          status: activeNav === 'instructor-verifications' ? (verificationStatusFilter === 'ALL' ? undefined : verificationStatusFilter) : undefined,
-          search: activeNav === 'instructor-verifications' ? (verificationSearch.trim() || undefined) : undefined,
-          limit: 100,
-        }).catch(() => null);
-        if (verRes?.success && verRes.data) {
-          setInstructorVerificationsList(verRes.data.instructors || []);
-          setVerificationCounts(verRes.data.counts || { all: 0, pending: 0, approved: 0, rejected: 0 });
+          promises.push(
+            superAdminApi
+              .getUsers({
+                role: roleToQuery,
+                status: userStatusFilter === 'ALL' ? undefined : userStatusFilter,
+                search: userSearch.trim() || undefined,
+                limit: 100,
+              })
+              .then((res) => {
+                if (res?.success && res.data?.users) setUsersList(res.data.users);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'courses' || activeNav === 'approvals' || activeNav === 'dashboard') {
-          const cRes = await superAdminApi.getCourses({
-            status: courseStatusFilter === 'ALL' ? undefined : courseStatusFilter,
-            search: courseSearch.trim() || undefined,
-          }).catch(() => null);
-          if (cRes?.success && cRes.data?.courses) {
-            setCoursesList(cRes.data.courses);
-          }
+          promises.push(
+            superAdminApi
+              .getCourses({
+                status: courseStatusFilter === 'ALL' ? undefined : courseStatusFilter,
+                search: courseSearch.trim() || undefined,
+              })
+              .then((res) => {
+                if (res?.success && res.data?.courses) setCoursesList(res.data.courses);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'orders' || activeNav === 'dashboard') {
-          const oRes = await superAdminApi.getOrders({
-            status: orderStatusFilter === 'ALL' ? undefined : orderStatusFilter,
-            search: orderSearch.trim() || undefined,
-          }).catch(() => null);
-          if (oRes?.success && oRes.data?.orders) {
-            setOrdersList(oRes.data.orders);
-          }
+          promises.push(
+            superAdminApi
+              .getOrders({
+                status: orderStatusFilter === 'ALL' ? undefined : orderStatusFilter,
+                search: orderSearch.trim() || undefined,
+              })
+              .then((res) => {
+                if (res?.success && res.data?.orders) setOrdersList(res.data.orders);
+              })
+              .catch(() => null)
+          );
         }
 
-        // Platform Fees Ledger Data (Cashfree Real-Time Fees)
         if (activeNav === 'platform-fees' || activeNav === 'dashboard') {
           setPlatformFeesLoading(true);
-          const pfRes = await superAdminApi.getPlatformFees({
-            status: platformFeesStatusFilter === 'ALL' ? undefined : platformFeesStatusFilter,
-            search: platformFeesSearch.trim() || undefined,
-            limit: 100,
-          }).catch(() => null);
-          if (pfRes?.success && pfRes.data) {
-            setPlatformFeesList(pfRes.data.fees || []);
-            setPlatformFeesMetrics(pfRes.data.metrics || {
-              totalCollected: 0,
-              successfulTransactions: 0,
-              pendingTransactions: 0,
-              failedTransactions: 0,
-              totalTransactions: 0,
-            });
-          }
-          setPlatformFeesLoading(false);
+          promises.push(
+            superAdminApi
+              .getPlatformFees({
+                status: platformFeesStatusFilter === 'ALL' ? undefined : platformFeesStatusFilter,
+                search: platformFeesSearch.trim() || undefined,
+                limit: 100,
+              })
+              .then((res) => {
+                if (res?.success && res.data) {
+                  setPlatformFeesList(res.data.fees || []);
+                  setPlatformFeesMetrics(
+                    res.data.metrics || {
+                      totalCollected: 0,
+                      successfulTransactions: 0,
+                      pendingTransactions: 0,
+                      failedTransactions: 0,
+                      totalTransactions: 0,
+                    }
+                  );
+                }
+              })
+              .catch(() => null)
+              .finally(() => setPlatformFeesLoading(false))
+          );
         }
 
         if (activeNav === 'refunds') {
-          const rRes = await superAdminApi.getRefunds().catch(() => null);
-          if (rRes?.success && rRes.data) setRefundsList(rRes.data);
+          promises.push(
+            superAdminApi
+              .getRefunds()
+              .then((res) => {
+                if (res?.success && res.data) setRefundsList(res.data);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'payouts') {
-          const pRes = await superAdminApi.getPayouts().catch(() => null);
-          if (pRes?.success && pRes.data) setPayoutsData(pRes.data);
+          promises.push(
+            superAdminApi
+              .getPayouts()
+              .then((res) => {
+                if (res?.success && res.data) setPayoutsData(res.data);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'countries') {
-          const cRes = await superAdminApi.getCountries().catch(() => null);
-          if (cRes?.success && cRes.data) setCountriesList(cRes.data);
+          promises.push(
+            superAdminApi
+              .getCountries()
+              .then((res) => {
+                if (res?.success && res.data) setCountriesList(res.data);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'currencies') {
-          const currRes = await superAdminApi.getCurrencies().catch(() => null);
-          if (currRes?.success && currRes.data) setCurrenciesList(currRes.data);
+          promises.push(
+            superAdminApi
+              .getCurrencies()
+              .then((res) => {
+                if (res?.success && res.data) setCurrenciesList(res.data);
+              })
+              .catch(() => null)
+          );
         }
 
         if (activeNav === 'taxes') {
-          const tRes = await superAdminApi.getTaxes().catch(() => null);
-          if (tRes?.success && tRes.data) setTaxesList(tRes.data);
+          promises.push(
+            superAdminApi
+              .getTaxes()
+              .then((res) => {
+                if (res?.success && res.data) setTaxesList(res.data);
+              })
+              .catch(() => null)
+          );
         }
+
+        await Promise.all(promises);
       } catch (err) {
         console.error('Failed to load super admin telemetry:', err);
       } finally {
@@ -520,6 +609,119 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  // Payout Disbursal Handlers (Strict Settlement Lifecycle)
+  const handleInitiateSinglePayout = async (payout: SuperAdminPayout) => {
+    try {
+      setProcessingPayout(true);
+      const res = await superAdminApi.initiatePayout(payout.id, { paymentMethod: payout.paymentMethod });
+      if (res.success) {
+        success('Payout Initiated', `Payout for ${payout.instructor} moved to PROCESSING state.`);
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Initiation Failed', err.response?.data?.message || err.message || 'Could not initiate payout.');
+    } finally {
+      setProcessingPayout(false);
+    }
+  };
+
+  const handleOpenDisburseModal = (payout: SuperAdminPayout) => {
+    setSelectedPayoutToDisburse(payout);
+    setDisbursePaymentMethod('Bank Transfer (IMPS/NEFT)');
+    setDisburseUtr('');
+    setDisburseNotes('');
+    setShowDisburseModal(true);
+  };
+
+  const handleConfirmDisburse = async () => {
+    if (!selectedPayoutToDisburse) return;
+
+    if (disbursePaymentMethod === 'CASHFREE_PAYOUTS') {
+      try {
+        setProcessingPayout(true);
+        const res = await superAdminApi.processCashfreePayout(selectedPayoutToDisburse.id);
+        if (res.success) {
+          success('Automated Payout Verified!', `₹${selectedPayoutToDisburse.amount.toLocaleString('en-IN')} disbursed via Cashfree.`);
+          setShowDisburseModal(false);
+          setSelectedPayoutToDisburse(null);
+          await loadData(true);
+        }
+      } catch (err: any) {
+        toastError('Cashfree Payout Failed', err.response?.data?.message || err.message || 'Payment verification failed.');
+        await loadData(true);
+      } finally {
+        setProcessingPayout(false);
+      }
+      return;
+    }
+
+    // Manual Payout with MANDATORY UTR Reference
+    if (!disburseUtr || !disburseUtr.trim()) {
+      toastError('Validation Required', 'Transaction / UTR Reference Number is strictly required to confirm manual payout.');
+      return;
+    }
+
+    try {
+      setProcessingPayout(true);
+      const res = await superAdminApi.confirmManualPayout(selectedPayoutToDisburse.id, {
+        paymentMethod: disbursePaymentMethod,
+        utrNumber: disburseUtr.trim(),
+        notes: disburseNotes,
+      });
+      if (res.success) {
+        success('Payout Completed!', `₹${selectedPayoutToDisburse.amount.toLocaleString('en-IN')} has been disbursed and marked as COMPLETED.`);
+        setShowDisburseModal(false);
+        setSelectedPayoutToDisburse(null);
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Disbursal Confirmation Failed', err.response?.data?.message || err.message || 'Could not confirm payout.');
+    } finally {
+      setProcessingPayout(false);
+    }
+  };
+
+  const handleInitiateBatchPayout = async () => {
+    try {
+      setProcessingPayout(true);
+      const res = await superAdminApi.initiateBatchPayout({ paymentMethod: batchMethod });
+      if (res.success) {
+        success('Batch Payouts Initiated', `${res.data?.count || 0} pending earnings moved to PROCESSING.`);
+        setShowBulkDisburseModal(false);
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Batch Initiation Failed', err.response?.data?.message || err.message || 'Could not initiate batch.');
+    } finally {
+      setProcessingPayout(false);
+    }
+  };
+
+  const handleConfirmBatchDisburse = async () => {
+    if (!batchUtr || !batchUtr.trim()) {
+      toastError('Validation Required', 'Batch Transaction / UTR Reference Number is required to settle the batch.');
+      return;
+    }
+
+    try {
+      setProcessingPayout(true);
+      const res = await superAdminApi.confirmBatchPayout({
+        paymentMethod: batchMethod,
+        utrNumber: batchUtr.trim(),
+        notes: batchNotes,
+      });
+      if (res.success) {
+        success('Batch Disbursal Completed!', `Settled ${res.data?.count || 0} payouts totaling ₹${(res.data?.totalDisbursed || 0).toLocaleString('en-IN')}.`);
+        setShowBulkDisburseModal(false);
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Batch Settlement Failed', err.response?.data?.message || err.message || 'Could not confirm batch disbursal.');
+    } finally {
+      setProcessingPayout(false);
+    }
+  };
+
   // Country, Currency, Tax Actions
   const handleCreateCountry = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -599,8 +801,6 @@ export const SuperAdminDashboard: React.FC = () => {
               { id: 'currencies', label: 'Currencies', icon: Coins },
               { id: 'taxes', label: 'Taxes', icon: Receipt },
               { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-              { id: 'fraud', label: 'Fraud & Risk', icon: ShieldAlert },
-              { id: 'infrastructure', label: 'Infrastructure', icon: Server },
             ].map((item) => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
@@ -2152,13 +2352,29 @@ export const SuperAdminDashboard: React.FC = () => {
           )}
 
           {/* =========================================================================
-              VIEW 7: PAYOUTS MANAGEMENT (100% Dynamic from DB)
+              VIEW 7: PAYOUTS MANAGEMENT (100% Dynamic from DB - Strict Lifecycle)
              ========================================================================= */}
           {activeNav === 'payouts' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Payouts Management</h2>
-                <p className="text-xs text-slate-500">Manage instructor creator earnings, payouts, and transfers.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">Payouts Management</h2>
+                  <p className="text-xs text-slate-500">Lifecycle: Available Earnings &rarr; Initiated / Processing &rarr; Verified Settlement (Completed)</p>
+                </div>
+                {payoutsData.payouts.some((p) => p.status === 'AVAILABLE' || p.status === 'PROCESSING' || p.status === 'PENDING') && (
+                  <button
+                    onClick={() => {
+                      setBatchMethod('Bank Transfer (IMPS/NEFT)');
+                      setBatchUtr('');
+                      setBatchNotes('');
+                      setShowBulkDisburseModal(true);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20 transition active:scale-95"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Batch Settlement ({payoutsData.metrics.pendingPayouts})</span>
+                  </button>
+                )}
               </div>
 
               {/* 4 Summary Cards */}
@@ -2169,15 +2385,15 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100">
                   <p className="text-2xl font-black text-amber-700">{payoutsData.metrics.pendingPayouts}</p>
-                  <p className="text-xs font-bold text-slate-500">Pending</p>
+                  <p className="text-xs font-bold text-slate-500">Pending / Processing</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
                   <p className="text-2xl font-black text-emerald-700">{payoutsData.metrics.completedPayouts}</p>
-                  <p className="text-xs font-bold text-slate-500">Completed</p>
+                  <p className="text-xs font-bold text-slate-500">Completed (Settled)</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100">
                   <p className="text-2xl font-black text-rose-700">{payoutsData.metrics.failedPayouts}</p>
-                  <p className="text-xs font-bold text-slate-500">Failed</p>
+                  <p className="text-xs font-bold text-slate-500">Failed / Rejected</p>
                 </div>
               </div>
 
@@ -2185,38 +2401,111 @@ export const SuperAdminDashboard: React.FC = () => {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
-                      <th className="py-3 px-4">Payout ID</th>
+                      <th className="py-3 px-4">Payout / Ref ID</th>
                       <th className="py-3 px-4">Instructor</th>
                       <th className="py-3 px-4">Amount</th>
                       <th className="py-3 px-4">Payment Method</th>
-                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Lifecycle Status</th>
+                      <th className="py-3 px-4">UTR / Gateway Ref</th>
                       <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payoutsData.payouts.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-6 text-center text-slate-400 font-medium">
+                        <td colSpan={8} className="py-6 text-center text-slate-400 font-medium">
                           No instructor payout disbursements generated.
                         </td>
                       </tr>
                     ) : (
                       payoutsData.payouts.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50/80">
-                          <td className="py-3 px-4 font-bold text-indigo-600">{p.payoutId}</td>
-                          <td className="py-3 px-4 font-bold text-slate-900">{p.instructor}</td>
+                        <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-bold text-indigo-600 font-mono">{p.payoutId}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            <div className="flex items-center gap-2">
+                              {p.instructorAvatar ? (
+                                <img src={p.instructorAvatar} alt={p.instructor} className="w-6 h-6 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center">
+                                  {p.instructor[0] || 'I'}
+                                </div>
+                              )}
+                              <span>{p.instructor}</span>
+                            </div>
+                          </td>
                           <td className="py-3 px-4 font-black text-slate-900">₹{p.amount.toLocaleString('en-IN')}</td>
                           <td className="py-3 px-4 text-slate-600">{p.paymentMethod}</td>
                           <td className="py-3 px-4">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                                p.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 ${
+                                p.status === 'COMPLETED'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : p.status === 'PROCESSING' || p.status === 'PENDING'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                                  : p.status === 'AVAILABLE'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : 'bg-rose-50 text-rose-700 border border-rose-200'
                               }`}
                             >
                               {p.status}
                             </span>
                           </td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-slate-500">
+                            {p.providerPayoutId ? (
+                              <span className="text-slate-800 font-bold">{p.providerPayoutId}</span>
+                            ) : p.failureReason ? (
+                              <span className="text-rose-600 truncate max-w-[120px] block" title={p.failureReason}>
+                                {p.failureReason}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Pending UTR</span>
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-slate-500">{p.date}</td>
+                          <td className="py-3 px-4 text-right">
+                            {p.status === 'AVAILABLE' ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleInitiateSinglePayout(p)}
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl inline-flex items-center gap-1 cursor-pointer transition border border-blue-200"
+                                >
+                                  <span>Initiate</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDisburseModal(p)}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Settle Payout</span>
+                                </button>
+                              </div>
+                            ) : p.status === 'PROCESSING' || p.status === 'PENDING' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDisburseModal(p)}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Confirm UTR</span>
+                              </button>
+                            ) : p.status === 'COMPLETED' ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-xs">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                <span>Settled</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDisburseModal(p)}
+                                className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg inline-flex items-center gap-1 cursor-pointer transition"
+                              >
+                                <span>Retry</span>
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -3291,6 +3580,247 @@ export const SuperAdminDashboard: React.FC = () => {
               >
                 {processingVerification ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Payout Settlement Modal (Strict Lifecycle with Mandatory UTR & Cashfree Gateway) */}
+      {showDisburseModal && selectedPayoutToDisburse && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                  ₹
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">Instructor Payout Settlement</h3>
+                  <p className="text-[11px] text-slate-500 font-mono">{selectedPayoutToDisburse.payoutId}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisburseModal(false);
+                  setSelectedPayoutToDisburse(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-100/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-900 font-semibold">Instructor:</span>
+                <span className="text-xs text-slate-900 font-bold">{selectedPayoutToDisburse.instructor}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-900 font-semibold">Settlement Amount:</span>
+                <span className="text-base text-emerald-700 font-black">₹{selectedPayoutToDisburse.amount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-900 font-semibold">Current State:</span>
+                <span className="text-xs font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                  {selectedPayoutToDisburse.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Payment / Disbursal Method</label>
+                <select
+                  value={disbursePaymentMethod}
+                  onChange={(e) => setDisbursePaymentMethod(e.target.value as any)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Bank Transfer (IMPS/NEFT)">Bank Transfer (IMPS/NEFT)</option>
+                  <option value="UPI / Instant Transfer">UPI / Instant Transfer</option>
+                  <option value="CASHFREE_PAYOUTS">Cashfree Automated Payout (API Gateway)</option>
+                  <option value="Manual Cheque / Direct Deposit">Manual Cheque / Direct Deposit</option>
+                </select>
+              </div>
+
+              {disbursePaymentMethod === 'CASHFREE_PAYOUTS' ? (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1.5 text-blue-900">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <span>Automated Cashfree Verification</span>
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-blue-800">
+                    The platform will initiate and verify the transfer via the Cashfree Payouts API. The status will only update to <strong>COMPLETED</strong> upon verified gateway success. Failed transfers will be marked <strong>FAILED</strong>.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Bank Transaction / UTR Reference Number <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. UTR / IMPS Ref # 20261008001923"
+                      value={disburseUtr}
+                      onChange={(e) => setDisburseUtr(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-mono font-medium focus:bg-white focus:outline-none focus:border-emerald-500"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Required for proof of payment, financial ledger auditing, and instructor notification.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Internal Notes / Reference (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Cleared via Corporate Net Banking"
+                      value={disburseNotes}
+                      onChange={(e) => setDisburseNotes(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisburseModal(false);
+                  setSelectedPayoutToDisburse(null);
+                }}
+                className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer hover:bg-slate-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={processingPayout}
+                onClick={handleConfirmDisburse}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  {processingPayout
+                    ? 'Processing...'
+                    : disbursePaymentMethod === 'CASHFREE_PAYOUTS'
+                    ? 'Trigger Cashfree Payout'
+                    : 'Confirm & Settle Payout'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Settlement Modal (Strict Lifecycle with Mandatory Batch UTR) */}
+      {showBulkDisburseModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center font-black">
+                  ₹
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">Batch Payout Settlement</h3>
+                  <p className="text-[11px] text-slate-500">Lifecycle-driven batch settlement with mandatory UTR audit</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkDisburseModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-900 font-semibold">Total Pending / Processing:</span>
+                <span className="text-xl text-emerald-700 font-black">{payoutsData.metrics.pendingPayouts}</span>
+              </div>
+              <p className="text-[11px] text-emerald-800">
+                You can either initiate the batch into <strong>PROCESSING</strong> state, or confirm full batch settlement with a verified Bank Batch UTR.
+              </p>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Batch Settlement Method</label>
+                <select
+                  value={batchMethod}
+                  onChange={(e) => setBatchMethod(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold focus:bg-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Bank Transfer (IMPS/NEFT)">Corporate Bank Batch Transfer (IMPS/NEFT)</option>
+                  <option value="UPI / Batch Settlement">UPI Bulk File Settlement</option>
+                  <option value="Cashfree Auto-Payout">Cashfree Batch Payout</option>
+                  <option value="Manual Direct Deposit">Manual Direct Deposit</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Batch Bank UTR / Transaction Reference <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. BATCH-UTR-20261008-001"
+                  value={batchUtr}
+                  onChange={(e) => setBatchUtr(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-mono font-medium focus:bg-white focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Mandatory to confirm batch settlement and create ledger records.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Batch Notes (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Monthly Instructor Revenue Settlement Batch"
+                  value={batchNotes}
+                  onChange={(e) => setBatchNotes(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={processingPayout}
+                onClick={handleInitiateBatchPayout}
+                className="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-xs border border-blue-200 cursor-pointer transition disabled:opacity-60"
+              >
+                <span>Move All to Processing</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDisburseModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer hover:bg-slate-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={processingPayout}
+                  onClick={handleConfirmBatchDisburse}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{processingPayout ? 'Settling...' : 'Confirm Batch Settlement'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

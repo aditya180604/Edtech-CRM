@@ -407,40 +407,7 @@ export class PaymentsService {
    * 5. Super Admin Platform Fees Overview & Ledger
    * Shows all collected platform fees with metrics, search, and pagination
    */
-  static async getPlatformFeesOverview({ search, status, page = 1, limit = 20 }) {
-    // 1. Reconcile and auto-backfill courses marked paid but missing PlatformFee document
-    try {
-      const paidCourses = await Course.find({
-        publishingFeePaid: true,
-        $or: [{ publishingFeeAmount: { $gt: 0 } }, { platformFee: { $gt: 0 } }],
-      }).lean();
-
-      for (const c of paidCourses) {
-        const feeAmount = c.publishingFeeAmount || c.platformFee || Number(((c.coursePrice || 0) * 0.10).toFixed(2));
-        if (feeAmount > 0) {
-          const existing = await PlatformFee.findOne({ course_id: c._id });
-          if (!existing) {
-            const ordId = c.cashfreeOrderId || `PUBFEE_${c._id.toString().slice(-6)}_${new Date(c.publishingFeePaidAt || c.createdAt || Date.now()).getTime()}`;
-            await PlatformFee.create({
-              order_id: ordId,
-              course_id: c._id,
-              instructor_id: c.instructorId,
-              amount: feeAmount,
-              coursePrice: c.coursePrice || 0,
-              currency: c.currency || 'INR',
-              payment_status: 'SUCCESS',
-              cashfreeOrderId: c.cashfreeOrderId || ordId,
-              cashfreePaymentId: c.cashfreePaymentId || `CF_SETTLED_${c._id.toString().slice(-6)}`,
-              paymentMethod: 'Cashfree PG',
-              paidAt: c.publishingFeePaidAt || c.updatedAt || new Date(),
-            });
-          }
-        }
-      }
-    } catch (reconcileErr) {
-      console.warn('[PlatformFee Reconciliation Warning]:', reconcileErr.message);
-    }
-
+  static async getPlatformFeesOverview({ search, status, page = 1, limit = 50 }) {
     const query = {};
 
     if (status && status !== 'ALL') {
@@ -451,75 +418,79 @@ export class PaymentsService {
     const limitNum = Math.max(1, parseInt(limit, 10));
     const skip = (pageNum - 1) * limitNum;
 
-    let [fees, totalCount, successAggregate] = await Promise.all([
-      PlatformFee.find(query)
-        .populate('course_id', 'title category coursePrice thumbnail status')
-        .populate('instructor_id', 'firstName lastName email profilePhoto avatar role')
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
+    const [allFeesForMetrics, rawFees, totalCount] = await Promise.all([
+      PlatformFee.find({}, 'amount payment_status').lean(),
+      PlatformFee.find(query).sort({ created_at: -1 }).skip(skip).limit(limitNum).lean(),
       PlatformFee.countDocuments(query),
-      PlatformFee.aggregate([
-        {
-          $group: {
-            _id: '$payment_status',
-            totalAmount: { $sum: '$amount' },
-            count: { $sum: 1 },
-          },
-        },
-      ]),
     ]);
 
-    // Apply search filter in memory if populated fields need matching
-    if (search && search.trim()) {
-      const q = search.trim().toLowerCase();
-      fees = fees.filter((f) => {
-        const orderMatch = f.order_id?.toLowerCase().includes(q);
-        const cfPayMatch = f.cashfreePaymentId?.toLowerCase().includes(q);
-        const courseMatch = f.course_id?.title?.toLowerCase().includes(q);
-        const instMatch =
-          f.instructor_id?.email?.toLowerCase().includes(q) ||
-          f.instructor_id?.firstName?.toLowerCase().includes(q) ||
-          f.instructor_id?.lastName?.toLowerCase().includes(q);
-        return orderMatch || cfPayMatch || courseMatch || instMatch;
-      });
-    }
+    const courseIds = [...new Set(rawFees.map((f) => f.course_id).filter(Boolean))];
+    const instructorIds = [...new Set(rawFees.map((f) => f.instructor_id).filter(Boolean))];
 
-    const successData = successAggregate.find((a) => a._id === 'SUCCESS') || { totalAmount: 0, count: 0 };
-    const pendingData = successAggregate.find((a) => a._id === 'PENDING') || { totalAmount: 0, count: 0 };
-    const failedData = successAggregate.find((a) => a._id === 'FAILED') || { totalAmount: 0, count: 0 };
+    const [courses, users] = await Promise.all([
+      Course.find({ _id: { $in: courseIds } }, 'title category coursePrice thumbnail status').lean(),
+      User.find({ _id: { $in: instructorIds } }, 'firstName lastName email profilePhoto avatar role').lean(),
+    ]);
 
-    const metrics = {
-      totalCollected: Number(successData.totalAmount?.toFixed(2)) || 0,
-      successfulTransactions: successData.count || 0,
-      pendingTransactions: pendingData.count || 0,
-      failedTransactions: failedData.count || 0,
-      totalTransactions: totalCount,
-    };
+    const courseMap = new Map(courses.map((c) => [c._id.toString(), c]));
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
 
-    return {
-      fees: fees.map((f) => ({
+    let fees = rawFees.map((f) => {
+      const course = f.course_id ? courseMap.get(f.course_id.toString()) : null;
+      const instructor = f.instructor_id ? userMap.get(f.instructor_id.toString()) : null;
+      return {
         id: f._id.toString(),
         orderId: f.order_id,
-        courseId: f.course_id?._id?.toString() || f.course_id,
-        courseTitle: f.course_id?.title || 'Unknown Course',
-        coursePrice: f.coursePrice || f.course_id?.coursePrice || 0,
+        courseId: f.course_id?.toString() || '',
+        courseTitle: course?.title || 'Course',
+        coursePrice: f.coursePrice || course?.coursePrice || 0,
         amount: f.amount,
         currency: f.currency || 'INR',
         paymentStatus: f.payment_status,
         cashfreePaymentId: f.cashfreePaymentId || '—',
         paymentMethod: f.paymentMethod || 'Cashfree PG',
         instructor: {
-          id: f.instructor_id?._id?.toString() || f.instructor_id,
-          name: `${f.instructor_id?.firstName || ''} ${f.instructor_id?.lastName || ''}`.trim() || 'Instructor',
-          email: f.instructor_id?.email || '—',
-          avatar: f.instructor_id?.profilePhoto || f.instructor_id?.avatar,
+          id: f.instructor_id?.toString() || '',
+          name: instructor ? `${instructor.firstName || ''} ${instructor.lastName || ''}`.trim() : 'Instructor',
+          email: instructor?.email || '—',
+          avatar: instructor?.profilePhoto || instructor?.avatar,
         },
         createdAt: f.created_at,
         paidAt: f.paidAt,
         errorMessage: f.errorMessage,
-      })),
+      };
+    });
+
+    // Apply search filter in memory if needed
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      fees = fees.filter((f) => {
+        const orderMatch = f.orderId?.toLowerCase().includes(q);
+        const cfPayMatch = f.cashfreePaymentId?.toLowerCase().includes(q);
+        const courseMatch = f.courseTitle?.toLowerCase().includes(q);
+        const instMatch =
+          f.instructor?.email?.toLowerCase().includes(q) ||
+          f.instructor?.name?.toLowerCase().includes(q);
+        return orderMatch || cfPayMatch || courseMatch || instMatch;
+      });
+    }
+
+    const successFees = allFeesForMetrics.filter((f) => f.payment_status === 'SUCCESS');
+    const pendingFees = allFeesForMetrics.filter((f) => f.payment_status === 'PENDING');
+    const failedFees = allFeesForMetrics.filter((f) => ['FAILED', 'USER_DROPPED', 'EXPIRED'].includes(f.payment_status));
+
+    const totalCollected = successFees.reduce((sum, f) => sum + (f.amount || 0), 0);
+
+    const metrics = {
+      totalCollected: Number(totalCollected.toFixed(2)) || 0,
+      successfulTransactions: successFees.length,
+      pendingTransactions: pendingFees.length,
+      failedTransactions: failedFees.length,
+      totalTransactions: allFeesForMetrics.length,
+    };
+
+    return {
+      fees,
       metrics,
       pagination: {
         page: pageNum,
@@ -530,3 +501,4 @@ export class PaymentsService {
     };
   }
 }
+

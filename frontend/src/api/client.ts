@@ -67,6 +67,7 @@ apiClient.interceptors.response.use(
       error.response?.status === 401 &&
       !originalRequest._retry &&
       !originalRequest.url?.includes('/auth/login') &&
+      !originalRequest.url?.includes('/auth/register') &&
       !originalRequest.url?.includes('/auth/refresh')
     ) {
       if (isRefreshing) {
@@ -85,9 +86,13 @@ apiClient.interceptors.response.use(
 
       try {
         const storedRefreshToken = localStorage.getItem('refreshToken');
+        if (!storedRefreshToken) {
+          throw new Error('No refresh token available');
+        }
+
         const { data } = await axios.post(
           `${API_BASE_URL}/auth/refresh`,
-          storedRefreshToken ? { refreshToken: storedRefreshToken } : {},
+          { refreshToken: storedRefreshToken },
           { withCredentials: true }
         );
 
@@ -107,12 +112,30 @@ apiClient.interceptors.response.use(
         }
       } catch (refreshError: any) {
         processQueue(refreshError, null);
-        // Only clear credentials if the refresh endpoint explicitly returned 401 or 403 (invalid refresh token)
-        if (refreshError?.response?.status === 401 || refreshError?.response?.status === 403) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
+        // Cleanly remove invalid authentication credentials
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:session_expired'));
+          const currentPath = window.location.pathname;
+          const isPublic =
+            currentPath === '/' ||
+            currentPath === '/login' ||
+            currentPath === '/signup' ||
+            currentPath === '/choose-role' ||
+            currentPath.startsWith('/course') ||
+            currentPath.startsWith('/topics') ||
+            currentPath.startsWith('/learning-paths') ||
+            currentPath.startsWith('/instructors') ||
+            currentPath.startsWith('/webinars');
+
+          if (!isPublic && !currentPath.startsWith('/login')) {
+            window.location.href = `/login?session_expired=true&redirect=${encodeURIComponent(currentPath + window.location.search)}`;
+          }
         }
+
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

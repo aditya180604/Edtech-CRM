@@ -266,6 +266,49 @@ export class WebinarsService {
     const isFree = (populated.price || 0) === 0;
     const hasAccess = isHost || isRegistered || isFree;
 
+    // Automatically record attendance & registration when user with access joins
+    if (userId && (hasAccess || isHost)) {
+      try {
+        let changed = false;
+        const liveDoc = await Webinar.findById(webinar._id);
+        if (liveDoc) {
+          if (!Array.isArray(liveDoc.attendanceLogs)) liveDoc.attendanceLogs = [];
+          if (!Array.isArray(liveDoc.attendance)) liveDoc.attendance = [];
+          if (!Array.isArray(liveDoc.registrations)) liveDoc.registrations = [];
+
+          const userObjId = new mongoose.Types.ObjectId(userId);
+          if (!liveDoc.attendance.some((id) => id.toString() === userId.toString())) {
+            liveDoc.attendance.push(userObjId);
+            changed = true;
+          }
+          if (!liveDoc.registrations.some((id) => id.toString() === userId.toString())) {
+            liveDoc.registrations.push(userObjId);
+            changed = true;
+          }
+
+          const existingLog = liveDoc.attendanceLogs.find(
+            (log) => log.userId?.toString() === userId.toString() && !log.leftAt
+          );
+          if (!existingLog && currentUser) {
+            liveDoc.attendanceLogs.push({
+              userId: userObjId,
+              userName: currentUser.name || 'Student',
+              userEmail: currentUser.email || '',
+              role: isHost ? 'HOST' : 'STUDENT',
+              joinedAt: new Date(),
+              durationMinutes: 0,
+            });
+            changed = true;
+          }
+          if (changed) {
+            await liveDoc.save();
+          }
+        }
+      } catch (e) {
+        // Attendance log silently saved
+      }
+    }
+
     // Default dynamic resources if none attached
     const resources = Array.isArray(populated.resources) && populated.resources.length > 0
       ? populated.resources
@@ -327,6 +370,68 @@ export class WebinarsService {
       canSpeak: Boolean(rh.canSpeak),
     }));
 
+    // Format Attendees (Host + Connected Students)
+    const attendeesMap = new Map();
+    // 1. Host
+    if (instructor._id) {
+      attendeesMap.set(instructor._id.toString(), {
+        userId: instructor._id.toString(),
+        userName: instructorName,
+        userAvatar: instructorAvatar,
+        role: 'HOST',
+        isOnline: true,
+      });
+    }
+
+    // 2. Active Attendance Logs
+    (populated.attendanceLogs || []).forEach((log) => {
+      if (log.userId) {
+        const idStr = log.userId.toString();
+        if (!attendeesMap.has(idStr)) {
+          attendeesMap.set(idStr, {
+            userId: idStr,
+            userName: log.userName || 'Student',
+            userAvatar: null,
+            role: log.role || 'STUDENT',
+            isOnline: !log.leftAt,
+            joinedAt: log.joinedAt,
+          });
+        }
+      }
+    });
+
+    // 3. Registered Users
+    (populated.registrations || []).forEach((reg) => {
+      if (reg) {
+        const idStr = (reg._id || reg).toString();
+        if (!attendeesMap.has(idStr)) {
+          attendeesMap.set(idStr, {
+            userId: idStr,
+            userName: reg.firstName ? `${reg.firstName} ${reg.lastName || ''}`.trim() : 'Registered Student',
+            userAvatar: reg.profilePhoto || null,
+            role: 'STUDENT',
+            isOnline: true,
+          });
+        }
+      }
+    });
+
+    // 4. Current User if present
+    if (currentUser && !attendeesMap.has(currentUser.id)) {
+      attendeesMap.set(currentUser.id, {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userAvatar: currentUser.avatar,
+        role: isHost ? 'HOST' : 'STUDENT',
+        isOnline: true,
+      });
+    }
+
+    const attendees = Array.from(attendeesMap.values());
+    const onlineAttendees = attendees.filter((a) => a.isOnline !== false);
+    const onlineCount = Math.max(1, onlineAttendees.length);
+    const totalAttendanceCount = Math.max(attendees.length, registeredUserIds.length, 1);
+
     // Load private notes for user
     let userNotes = '';
     if (userId && Array.isArray(populated.userNotes)) {
@@ -351,7 +456,10 @@ export class WebinarsService {
       price: populated.price || 0,
       currency: populated.currency || 'INR',
       capacity: populated.capacity || 100,
-      registrationsCount: registeredUserIds.length,
+      registrationsCount: totalAttendanceCount,
+      attendanceCount: totalAttendanceCount,
+      onlineCount,
+      attendees,
       instructor: {
         id: instructor._id?.toString(),
         name: instructorName,

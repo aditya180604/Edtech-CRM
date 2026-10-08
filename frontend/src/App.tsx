@@ -26,6 +26,8 @@ import { StudentOnboardingPage } from './pages/StudentOnboardingPage';
 import { LiveWebinarRoomPage } from './pages/LiveWebinarRoomPage';
 import { SkillPassportPage } from './pages/SkillPassportPage';
 
+import { ProtectedRoute } from './components/ProtectedRoute';
+
 // Role Dashboards
 import { StudentDashboard } from './pages/dashboards/StudentDashboard';
 import { InstructorDashboard } from './pages/dashboards/InstructorDashboard';
@@ -66,36 +68,161 @@ export const App: React.FC = () => {
             <Route path="/course/:slug" element={<CourseDetailPage />} />
             <Route path="/courses/:slug" element={<CourseDetailPage />} />
 
-
-            {/* Student Dashboards & Profile */}
-            <Route path="/student/onboarding" element={<StudentOnboardingPage />} />
-            <Route path="/student/complete-profile" element={<StudentOnboardingPage />} />
-            <Route path="/profile" element={<StudentOnboardingPage />} />
-            <Route path="/dashboard/student/profile" element={<StudentOnboardingPage />} />
-            <Route path="/settings" element={<StudentOnboardingPage />} />
-            <Route path="/dashboard" element={<StudentDashboard />} />
-            <Route path="/dashboard/student" element={<StudentDashboard />} />
-            <Route path="/messages" element={<StudentDashboard />} />
-            <Route path="/notifications" element={<StudentDashboard />} />
+            {/* Student Dashboards & Profile (Protected) */}
+            <Route
+              path="/student/onboarding"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/student/complete-profile"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/student/profile"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/student"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/messages"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Verified Skill Passport */}
             <Route path="/passport/:identifier" element={<SkillPassportPage />} />
             <Route path="/passport" element={<SkillPassportPage />} />
 
-            {/* Instructor Dashboards & Verification Lobby */}
-            <Route path="/instructor/onboarding" element={<InstructorOnboardingPage />} />
-            <Route path="/instructor/pending-verification" element={<InstructorLobbyPage />} />
-            <Route path="/instructor/lobby" element={<InstructorLobbyPage />} />
-            <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
-            <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
+            {/* Instructor Dashboards & Verification Lobby (Protected) */}
+            <Route
+              path="/instructor/onboarding"
+              element={
+                <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <InstructorOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/instructor/pending-verification"
+              element={
+                <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <InstructorLobbyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/instructor/lobby"
+              element={
+                <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <InstructorLobbyPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/instructor"
+              element={
+                <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <InstructorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/instructor/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN']}>
+                  <InstructorDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Admin Dashboards */}
-            <Route path="/dashboard/admin" element={<AdminDashboard />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            {/* Admin Dashboards (Protected) */}
+            <Route
+              path="/dashboard/admin"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Super Admin Dashboards */}
-            <Route path="/super-admin" element={<SuperAdminDashboard />} />
-            <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+            {/* Super Admin Dashboards (Protected) */}
+            <Route
+              path="/super-admin"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/super-admin/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

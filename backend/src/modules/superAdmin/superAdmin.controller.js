@@ -117,6 +117,56 @@ export class SuperAdminController {
     return ApiResponse.success(res, data, 'Payouts overview retrieved.');
   });
 
+  static initiatePayout = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { paymentMethod } = req.body;
+    const data = await SuperAdminService.initiatePayout(id, {
+      paymentMethod,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Payout initiated and moved to PROCESSING status.');
+  });
+
+  static confirmManualPayout = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { paymentMethod, utrNumber, notes } = req.body;
+    const data = await SuperAdminService.confirmManualPayout(id, {
+      paymentMethod,
+      utrNumber,
+      notes,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Manual payout confirmed and marked COMPLETED with verified UTR.');
+  });
+
+  static processCashfreePayout = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const data = await SuperAdminService.processCashfreePayout(id, {
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Cashfree automated payout completed and verified.');
+  });
+
+  static initiateBatchPayout = asyncHandler(async (req, res) => {
+    const { paymentMethod } = req.body;
+    const data = await SuperAdminService.initiateBatchPayout({
+      paymentMethod,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Batch payout initiated. All pending earnings moved to PROCESSING.');
+  });
+
+  static confirmBatchPayout = asyncHandler(async (req, res) => {
+    const { paymentMethod, utrNumber, notes } = req.body;
+    const data = await SuperAdminService.confirmBatchPayout({
+      paymentMethod,
+      utrNumber,
+      notes,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Batch payout confirmed and marked COMPLETED with batch UTR reference.');
+  });
+
   // 7. Countries Management
   static getCountries = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getCountries();

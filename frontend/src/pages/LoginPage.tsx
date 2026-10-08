@@ -1,16 +1,60 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { GraduationCap, Eye, EyeOff, Lock, Mail, ArrowLeft, AlertCircle } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, Lock, Mail, ArrowLeft, AlertCircle, Info } from 'lucide-react';
+import { validateEmail } from '../utils/validators';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, loginWithGoogle, getRedirectPathForRole } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
+
+  // Field validation touched & error states
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string | null; password?: string | null }>({});
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('session_expired') === 'true') {
+      setSessionExpiredNotice(true);
+    }
+  }, [location.search]);
+
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    if (touched.email) {
+      setFieldErrors((prev) => ({ ...prev, email: validateEmail(val) }));
+    }
+  };
+
+  const handleEmailBlur = () => {
+    setTouched((prev) => ({ ...prev, email: true }));
+    setFieldErrors((prev) => ({ ...prev, email: validateEmail(email) }));
+  };
+
+  const handlePasswordChange = (val: string) => {
+    setPassword(val);
+    if (touched.password) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        password: val ? null : 'Password is required.',
+      }));
+    }
+  };
+
+  const handlePasswordBlur = () => {
+    setTouched((prev) => ({ ...prev, password: true }));
+    setFieldErrors((prev) => ({
+      ...prev,
+      password: password ? null : 'Password is required.',
+    }));
+  };
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
@@ -18,8 +62,14 @@ export const LoginPage: React.FC = () => {
     const result = await loginWithGoogle();
     setLoading(false);
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
-      navigate(redirectPath);
+      const params = new URLSearchParams(location.search);
+      const redirectParam = params.get('redirect');
+      if (redirectParam) {
+        navigate(decodeURIComponent(redirectParam));
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+        navigate(redirectPath);
+      }
     } else if (!result.success) {
       setErrorMessage(result.message || 'Google sign in failed.');
     }
@@ -28,14 +78,31 @@ export const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setLoading(true);
 
-    const result = await login({ email, password });
+    // Validate all fields
+    const emailErr = validateEmail(email);
+    const passErr = password ? null : 'Password is required.';
+
+    setFieldErrors({ email: emailErr, password: passErr });
+    setTouched({ email: true, password: true });
+
+    if (emailErr || passErr) {
+      return;
+    }
+
+    setLoading(true);
+    const result = await login({ email: email.trim(), password });
     setLoading(false);
 
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
-      navigate(redirectPath);
+      const params = new URLSearchParams(location.search);
+      const redirectParam = params.get('redirect');
+      if (redirectParam) {
+        navigate(decodeURIComponent(redirectParam));
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+        navigate(redirectPath);
+      }
     } else {
       setErrorMessage(result.message || 'Invalid email or password.');
     }
@@ -70,6 +137,14 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Session Expired Notice */}
+        {sessionExpiredNotice && (
+          <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2.5">
+            <Info className="w-4 h-4 shrink-0 text-amber-600" />
+            <span>Your session has expired. Please sign in again to access your dashboard.</span>
+          </div>
+        )}
+
         {/* Error Alert Message */}
         {errorMessage && (
           <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs flex items-center gap-2">
@@ -78,11 +153,11 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        {/* Unified Form - No Role Tabs */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Email address
+              Email address <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -91,20 +166,31 @@ export const LoginPage: React.FC = () => {
               <input
                 type="email"
                 required
+                maxLength={100}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="toppix851@gmail.com"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                onChange={(e) => handleEmailChange(e.target.value)}
+                onBlur={handleEmailBlur}
+                placeholder="name@example.com"
+                className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  touched.email && fieldErrors.email
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
             </div>
+            {touched.email && fieldErrors.email && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.email}</span>
+              </p>
+            )}
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Password</label>
-              <a href="#" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700">
-                Forgot password?
-              </a>
+              <label className="block text-xs font-semibold text-slate-700">
+                Password <span className="text-red-500">*</span>
+              </label>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -113,10 +199,16 @@ export const LoginPage: React.FC = () => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
+                maxLength={128}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => handlePasswordChange(e.target.value)}
+                onBlur={handlePasswordBlur}
                 placeholder="••••••••••••"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                  touched.password && fieldErrors.password
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                }`}
               />
               <button
                 type="button"
@@ -126,14 +218,27 @@ export const LoginPage: React.FC = () => {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {touched.password && fieldErrors.password && (
+              <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                <span>{fieldErrors.password}</span>
+              </p>
+            )}
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all mt-2 disabled:opacity-70 cursor-pointer"
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all mt-2 disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Signing in...</span>
+              </>
+            ) : (
+              'Sign In'
+            )}
           </button>
         </form>
 

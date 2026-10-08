@@ -120,11 +120,15 @@ export interface SuperAdminRefund {
 export interface SuperAdminPayout {
   id: string;
   payoutId: string;
+  instructorId?: string;
   instructor: string;
   instructorAvatar?: string | null;
   amount: number;
   paymentMethod: string;
-  status: 'COMPLETED' | 'PENDING' | 'FAILED';
+  status: 'AVAILABLE' | 'PROCESSING' | 'PENDING' | 'COMPLETED' | 'FAILED';
+  providerPayoutId?: string | null;
+  failureReason?: string | null;
+  isEarningOnly?: boolean;
   date: string;
 }
 
@@ -301,12 +305,44 @@ export const superAdminApi = {
     return res.data;
   },
 
-  // 6. Payouts Management
+  // 6. Payouts Management (Strict Settlement Lifecycle)
   async getPayouts(): Promise<{
     success: boolean;
     data: { metrics: { totalPayouts: string; pendingPayouts: string; completedPayouts: string; failedPayouts: string }; payouts: SuperAdminPayout[] };
   }> {
     const res = await apiClient.get('/super-admin/payouts');
+    return res.data;
+  },
+
+  async initiatePayout(id: string, payload?: { paymentMethod?: string }): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/payouts/${id}/initiate`, payload || {});
+    return res.data;
+  },
+
+  async confirmManualPayout(
+    id: string,
+    payload: { paymentMethod: string; utrNumber: string; notes?: string }
+  ): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/payouts/${id}/confirm-manual`, payload);
+    return res.data;
+  },
+
+  async processCashfreePayout(id: string): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/payouts/${id}/process-cashfree`);
+    return res.data;
+  },
+
+  async initiateBatchPayout(payload?: { paymentMethod?: string }): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post('/super-admin/payouts/batch/initiate', payload || {});
+    return res.data;
+  },
+
+  async confirmBatchPayout(payload: {
+    paymentMethod: string;
+    utrNumber: string;
+    notes?: string;
+  }): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post('/super-admin/payouts/batch/confirm', payload);
     return res.data;
   },
 

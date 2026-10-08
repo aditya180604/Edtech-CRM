@@ -107,20 +107,26 @@ export class StudentDashboardService {
       recommendationsData,
       enrolledPathsDocs,
     ] = await Promise.all([
-      this._computeProfile(user),
-      this._fetchLearningAndCourses(userObjectId, allEntitledCourseIds, allEntitledTopicIds, fullCourseEntitledIds),
-      this._fetchTopicCreditsAndUpgrades(userObjectId, allEntitledCourseIds, fullCourseEntitledIds),
-      this._computeTotalLearningHours(userObjectId),
-      this._fetchCertificates(userObjectId),
-      this._fetchWishlist(userObjectId),
-      this._fetchRecentOrders(userObjectId),
-      this._fetchNotifications(userObjectId),
-      this._calculateStreak(userObjectId, user.timezone),
-      this._fetchRankedLiveSessions(userObjectId, allEntitledCourseIds, allEntitledTopicIds, user),
-      this._fetchRecommendations(userObjectId, Array.from(entitledCourseIdsSet), user),
+      Promise.resolve(this._computeProfile(user)).catch(() => ({ completionPercentage: 0, missingFields: [] })),
+      this._fetchLearningAndCourses(userObjectId, allEntitledCourseIds, allEntitledTopicIds, fullCourseEntitledIds).catch((err) => {
+        console.error('Error fetching learning courses:', err);
+        return { activeCourses: [], completedCoursesCount: 0 };
+      }),
+      this._fetchTopicCreditsAndUpgrades(userObjectId, allEntitledCourseIds, fullCourseEntitledIds).catch((err) => {
+        console.error('Error fetching topic credits:', err);
+        return [];
+      }),
+      this._computeTotalLearningHours(userObjectId).catch(() => 0),
+      this._fetchCertificates(userObjectId).catch(() => []),
+      this._fetchWishlist(userObjectId).catch(() => []),
+      this._fetchRecentOrders(userObjectId).catch(() => []),
+      this._fetchNotifications(userObjectId).catch(() => ({ recent: [], unreadCount: 0 })),
+      this._calculateStreak(userObjectId, user.timezone).catch(() => ({ currentStreak: 0, longestStreak: 0 })),
+      this._fetchRankedLiveSessions(userObjectId, allEntitledCourseIds, allEntitledTopicIds, user).catch(() => []),
+      this._fetchRecommendations(userObjectId, Array.from(entitledCourseIdsSet), user).catch(() => []),
       entitledPathIds.length > 0
-        ? LearningPath.find({ _id: { $in: entitledPathIds } }).lean()
-        : [],
+        ? LearningPath.find({ _id: { $in: entitledPathIds } }).lean().catch(() => [])
+        : Promise.resolve([]),
     ]);
 
     const formattedEnrolledPaths = (enrolledPathsDocs || []).map((p) => ({

@@ -83,6 +83,16 @@ export interface LiveRoomState {
   currency: string;
   capacity: number;
   registrationsCount: number;
+  attendanceCount?: number;
+  onlineCount?: number;
+  attendees?: Array<{
+    userId: string;
+    userName: string;
+    userAvatar?: string | null;
+    role: string;
+    isOnline?: boolean;
+    joinedAt?: string;
+  }>;
   instructor: {
     id?: string;
     name: string;

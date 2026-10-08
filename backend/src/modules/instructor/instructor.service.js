@@ -15,6 +15,8 @@ import {
   Entitlement,
   LearningProgress,
   InstructorEarning,
+  OrderItem,
+  Order,
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
@@ -688,7 +690,9 @@ export class InstructorService {
 
       // 2-hour cutoff rule: timing can only be modified up until 2 hours before the event
       const canEditTiming = (startTime.getTime() - now.getTime()) > (2 * 60 * 60 * 1000);
-      const registrationsCount = Array.isArray(w.registrations) ? w.registrations.length : 0;
+      const regCount = Array.isArray(w.registrations) ? w.registrations.length : 0;
+      const attCount = Array.isArray(w.attendance) ? w.attendance.length : (Array.isArray(w.attendanceLogs) ? w.attendanceLogs.length : 0);
+      const registrationsCount = Math.max(regCount, attCount);
 
       return {
         ...w,
@@ -697,6 +701,7 @@ export class InstructorService {
         canEditTiming,
         isTimingLocked: !canEditTiming,
         registrationsCount,
+        attendanceCount: attCount,
       };
     });
 
@@ -724,7 +729,11 @@ export class InstructorService {
         live: activeLiveCount,
         past: activePastCount,
         drafts,
-        totalRegistrations: webinars.reduce((acc, w) => acc + (Array.isArray(w.registrations) ? w.registrations.length : 0), 0),
+        totalRegistrations: webinars.reduce((acc, w) => {
+          const rLen = Array.isArray(w.registrations) ? w.registrations.length : 0;
+          const aLen = Array.isArray(w.attendance) ? w.attendance.length : (Array.isArray(w.attendanceLogs) ? w.attendanceLogs.length : 0);
+          return acc + Math.max(rLen, aLen);
+        }, 0),
         averageRating,
       },
     };
@@ -1062,7 +1071,7 @@ export class InstructorService {
     const courseIds = courses.map((c) => c._id);
     const courseTitles = courses.map((c) => c.title);
 
-    const [entitlements, webinars, reviews, topics, earnings, legacyStudents] = await Promise.all([
+    const [entitlements, webinars, reviews, topics, earnings, orderItems, legacyStudents] = await Promise.all([
       Entitlement.find({ courseId: { $in: courseIds }, status: 'ACTIVE' }).lean(),
       Webinar.find({
         $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
@@ -1071,6 +1080,9 @@ export class InstructorService {
       Topic.find({ courseId: { $in: courseIds } }).lean(),
       InstructorEarning.find({
         $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+      }).lean(),
+      OrderItem.find({
+        $or: [{ courseId: { $in: courseIds } }, { productId: { $in: courseIds } }],
       }).lean(),
       mongoose.connection.db.collection('students').find({
         $or: [
@@ -1085,8 +1097,6 @@ export class InstructorService {
       studentUserIds.add(ls._id?.toString() || ls.email || ls.name);
     });
     const totalStudents = studentUserIds.size;
-
-    const recordedNetEarnings = earnings.reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
 
     const avgRating = reviews.length > 0
       ? Number((reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1))
@@ -1106,12 +1116,29 @@ export class InstructorService {
         ? Number((cReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / cReviews.length).toFixed(1))
         : 5.0;
 
-      const courseEarnings = earnings
-        .filter((e) => e.orderItemId && e.orderItemId.toString() === c._id.toString())
-        .reduce((sum, e) => sum + (e.netEarning || e.grossAmount || 0), 0);
+      // Find order items and earnings corresponding to this course
+      const courseOrderItemIds = orderItems
+        .filter((oi) => oi.courseId?.toString() === c._id.toString() || oi.productId?.toString() === c._id.toString())
+        .map((oi) => oi._id.toString());
+
+      const courseEarningsFromRecords = earnings
+        .filter((e) => {
+          const oiId = (e.orderItemId?._id || e.orderItemId)?.toString();
+          return courseOrderItemIds.includes(oiId) || oiId === c._id.toString();
+        })
+        .reduce((sum, e) => sum + (e.grossAmount || e.netEarning || 0), 0);
+
+      const courseOrderItemRevenue = orderItems
+        .filter((oi) => oi.courseId?.toString() === c._id.toString() || oi.productId?.toString() === c._id.toString())
+        .reduce((sum, oi) => sum + (oi.finalPrice || oi.unitPrice || 0), 0);
 
       const cPrice = c.coursePrice || 1499;
-      const revenue = courseEarnings > 0 ? courseEarnings : (cPrice * enrolled);
+      const revenue = courseEarningsFromRecords > 0
+        ? courseEarningsFromRecords
+        : courseOrderItemRevenue > 0
+        ? courseOrderItemRevenue
+        : (cPrice * enrolled);
+
       totalGrossRevenue += revenue;
 
       return {
@@ -1130,11 +1157,15 @@ export class InstructorService {
       };
     });
 
-    const finalRevenue = recordedNetEarnings > 0 ? recordedNetEarnings : totalGrossRevenue;
+    const recordedNetEarnings = earnings.reduce((sum, e) => sum + (e.netEarning ?? e.grossAmount ?? 0), 0);
+    const netEarnings = recordedNetEarnings > 0 ? recordedNetEarnings : Math.round(totalGrossRevenue * 0.8);
+
+    const finalRevenue = totalGrossRevenue;
     const activeCoursesCount = courses.filter((c) => c.status === 'PUBLISHED' || !c.status).length || courses.length;
 
     return {
       totalRevenue: finalRevenue,
+      netEarnings,
       activeStudents: totalStudents,
       totalStudents,
       totalCourses: courses.length,
@@ -1148,6 +1179,7 @@ export class InstructorService {
       coursePerformance,
       metrics: {
         totalRevenue: finalRevenue,
+        netEarnings,
         activeStudents: totalStudents,
         totalStudents,
         totalCourses: courses.length,

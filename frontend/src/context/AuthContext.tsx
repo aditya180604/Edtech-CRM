@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Restore authenticated session on mount
+  // Restore authenticated session on mount and listen to session expiration
   useEffect(() => {
     const restoreSession = async () => {
       const token = localStorage.getItem('accessToken');
@@ -94,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           // Token expired or invalid
           localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
           localStorage.removeItem('user');
           setUser(null);
           setAccessToken(null);
@@ -101,7 +102,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setIsLoading(false);
     };
+
+    const handleSessionExpired = () => {
+      setUser(null);
+      setAccessToken(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    };
+
+    window.addEventListener('auth:session_expired', handleSessionExpired);
     restoreSession();
+
+    return () => {
+      window.removeEventListener('auth:session_expired', handleSessionExpired);
+    };
   }, []);
 
   // 1. Existing Traditional Email/Password Login
@@ -156,10 +171,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const idToken = await result.user.getIdToken();
       const res = await authApi.firebaseLogin(idToken);
       if (res.success && res.data) {
-        const { user: authUser, accessToken: token } = res.data;
+        const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
         return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
@@ -182,10 +198,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const idToken = await userCredential.user.getIdToken();
       const res = await authApi.firebaseLogin(idToken);
       if (res.success && res.data) {
-        const { user: authUser, accessToken: token } = res.data;
+        const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
         return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }
@@ -213,10 +230,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const idToken = await userCredential.user.getIdToken();
       const res = await authApi.firebaseLogin(idToken);
       if (res.success && res.data) {
-        const { user: authUser, accessToken: token } = res.data;
+        const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
         setAccessToken(token);
         localStorage.setItem('accessToken', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
         return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
       }

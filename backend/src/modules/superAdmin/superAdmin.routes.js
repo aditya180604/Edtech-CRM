@@ -40,8 +40,13 @@ router.get('/orders', SuperAdminController.getOrders);
 router.get('/refunds', SuperAdminController.getRefunds);
 router.post('/refunds/:id/process', SuperAdminController.processRefund);
 
-// 6. Payouts Management
+// 6. Payouts Management (Strict Settlement Lifecycle)
 router.get('/payouts', SuperAdminController.getPayouts);
+router.post('/payouts/:id/initiate', SuperAdminController.initiatePayout);
+router.post('/payouts/:id/confirm-manual', SuperAdminController.confirmManualPayout);
+router.post('/payouts/:id/process-cashfree', SuperAdminController.processCashfreePayout);
+router.post('/payouts/batch/initiate', SuperAdminController.initiateBatchPayout);
+router.post('/payouts/batch/confirm', SuperAdminController.confirmBatchPayout);
 
 // 7. Countries Configuration
 router.get('/countries', SuperAdminController.getCountries);

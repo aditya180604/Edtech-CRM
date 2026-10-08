@@ -71,6 +71,7 @@ export interface UpcomingLiveSession {
   sessionId: string;
   webinarId?: string;
   title: string;
+  description?: string | null;
   type: 'WEBINAR' | 'LIVE_CLASS';
   status?: string;
   isLive?: boolean;
