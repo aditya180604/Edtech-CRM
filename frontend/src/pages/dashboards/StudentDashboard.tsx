@@ -763,7 +763,7 @@ export const StudentDashboard: React.FC = () => {
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search for courses, topics, or instructors..."
+                placeholder="Search courses..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -771,7 +771,7 @@ export const StudentDashboard: React.FC = () => {
                     navigate(`/courses?search=${encodeURIComponent(searchQuery.trim())}`);
                   }
                 }}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition-all"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition-all"
               />
             </div>
 
@@ -1440,10 +1440,10 @@ export const StudentDashboard: React.FC = () => {
                       <p className="text-xs text-slate-500">Access your enrolled courses, purchased modules, and completed milestones.</p>
                     </div>
 
-                    <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-200/80 text-xs font-bold">
+                    <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-200/80 text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
                       <button
                         onClick={() => setMyLearningTab('COURSES')}
-                        className={`py-1.5 px-3 rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-lg transition ${
                           myLearningTab === 'COURSES' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -1451,7 +1451,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setMyLearningTab('TOPICS')}
-                        className={`py-1.5 px-3 rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-lg transition ${
                           myLearningTab === 'TOPICS' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -1459,7 +1459,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setMyLearningTab('COMPLETED')}
-                        className={`py-1.5 px-3 rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-lg transition ${
                           myLearningTab === 'COMPLETED' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -1543,18 +1543,18 @@ export const StudentDashboard: React.FC = () => {
                   TAB 3: LIVE CLASSES & 1-ON-1 CONSULTATIONS VIEW
                  ======================================================== */}
               {activeTab === 'live-classes' && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-5">
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-4">
                     <div>
                       <h2 className="text-base font-black text-slate-900">Live Classes & 1-on-1 Mentorship</h2>
                       <p className="text-xs text-slate-500">Join interactive live webinar sessions and private 1-on-1 consultations with mentors.</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1 -mx-1 px-1">
                       <button
                         type="button"
                         onClick={() => setLiveSubTab('webinars')}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                           liveSubTab === 'webinars'
                             ? 'bg-[#FA5A36] text-white shadow-2xs'
                             : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -1565,7 +1565,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setLiveSubTab('consultations')}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                        className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                           liveSubTab === 'consultations'
                             ? 'bg-[#FA5A36] text-white shadow-2xs'
                             : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -1581,7 +1581,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => navigate('/mentorship')}
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                        className="shrink-0 whitespace-nowrap px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
                       >
                         <Sparkles className="w-3 h-3 text-orange-400" />
                         <span>Find Mentor</span>
@@ -2170,24 +2170,24 @@ export const StudentDashboard: React.FC = () => {
                   TAB 9: OVERHAULED COURSE Q&A & DOUBTS STUDIO (IMAGE 2)
                  ======================================================== */}
               {activeTab === 'messages' && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-6">
                   {/* Header & New Doubt Button */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                    <div>
-                      <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-base font-black text-slate-900">Course Q&A & Doubts Messenger</h2>
-                        <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
+                        <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full shrink-0">
                           Live Instructor Connect
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500">
                         Ask questions about your enrolled modules and receive fast guidance from course instructors.
                       </p>
                     </div>
 
                     <button
                       onClick={() => setIsAskModalOpen(true)}
-                      className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                      className="w-full sm:w-auto px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Ask New Question</span>
@@ -2207,11 +2207,11 @@ export const StudentDashboard: React.FC = () => {
                       />
                     </div>
 
-                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                      <Filter className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto no-scrollbar pb-0.5 max-w-full">
+                      <Filter className="w-3.5 h-3.5 text-slate-400 hidden sm:block shrink-0" />
                       <button
                         onClick={() => setQnaFilter('ALL')}
-                        className={`px-3 py-1 text-[11px] font-bold rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap px-3 py-1 text-[11px] font-bold rounded-lg transition ${
                           qnaFilter === 'ALL' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'
                         }`}
                       >
@@ -2219,7 +2219,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setQnaFilter('ANSWERED')}
-                        className={`px-3 py-1 text-[11px] font-bold rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap px-3 py-1 text-[11px] font-bold rounded-lg transition ${
                           qnaFilter === 'ANSWERED' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'
                         }`}
                       >
@@ -2227,7 +2227,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setQnaFilter('PENDING')}
-                        className={`px-3 py-1 text-[11px] font-bold rounded-lg transition ${
+                        className={`shrink-0 whitespace-nowrap px-3 py-1 text-[11px] font-bold rounded-lg transition ${
                           qnaFilter === 'PENDING' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'
                         }`}
                       >
@@ -2426,7 +2426,7 @@ export const StudentDashboard: React.FC = () => {
                   TAB 10: CONSOLIDATED PROFILE & SETTINGS (IMAGE 3)
                  ======================================================== */}
               {activeTab === 'settings' && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-6">
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-6">
                   {/* Consolidated Header & Tabs */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div>
@@ -2436,10 +2436,10 @@ export const StudentDashboard: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs font-bold">
+                    <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
                       <button
                         onClick={() => setProfileSubTab('profile')}
-                        className={`py-1.5 px-3 rounded-xl transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-xl transition ${
                           profileSubTab === 'profile' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -2447,7 +2447,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setProfileSubTab('academic')}
-                        className={`py-1.5 px-3 rounded-xl transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-xl transition ${
                           profileSubTab === 'academic' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -2455,7 +2455,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setProfileSubTab('preferences')}
-                        className={`py-1.5 px-3 rounded-xl transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-xl transition ${
                           profileSubTab === 'preferences' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -2463,7 +2463,7 @@ export const StudentDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setProfileSubTab('security')}
-                        className={`py-1.5 px-3 rounded-xl transition ${
+                        className={`shrink-0 whitespace-nowrap py-1.5 px-3 rounded-xl transition ${
                           profileSubTab === 'security' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
@@ -3117,11 +3117,16 @@ export const StudentDashboard: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => setMobileMenuOpen(true)}
-          className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer transition"
+          onClick={() => {
+            setActiveTab('settings');
+            setProfileSubTab('profile');
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+            activeTab === 'settings' && profileSubTab === 'profile' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+          }`}
         >
-          <Menu className="w-5 h-5" />
-          <span>More</span>
+          <UserIcon className="w-5 h-5" />
+          <span>Profile</span>
         </button>
       </div>
 

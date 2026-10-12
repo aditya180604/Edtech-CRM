@@ -182,6 +182,8 @@ export class AuthService {
       email: user.email,
       role: user.role,
       status: user.status,
+      adminPermissions: user.adminPermissions || [],
+      department: user.department || 'Operations',
       profilePhoto: user.profilePhoto || instructorProfile?.profilePhoto || null,
       isProfileCompleted,
       instructorProfile: instructorProfile || undefined,

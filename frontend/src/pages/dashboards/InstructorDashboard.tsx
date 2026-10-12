@@ -1567,14 +1567,6 @@ export const InstructorDashboard: React.FC = () => {
         {/* Mobile Top Header Bar (<= 500px) */}
         <div className="flex min-[501px]:hidden items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(true)}
-              className="p-1.5 text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
-              aria-label="Open menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
             <EduLogo size="sm" to="/dashboard/instructor" />
           </div>
           <div className="flex items-center gap-2">
@@ -4498,13 +4490,13 @@ export const InstructorDashboard: React.FC = () => {
             VIEW 4: WEBINARS (Image 2)
            ========================================================================= */}
         {activeNav === 'webinars' && (
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-100 p-4 sm:p-8 shadow-xs space-y-6">
             {/* Live Sub-Section Switcher */}
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-4 overflow-x-auto no-scrollbar max-w-full -mx-1 px-1">
               <button
                 type="button"
                 onClick={() => setLiveSectionTab('webinars')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   liveSectionTab === 'webinars'
                     ? 'bg-[#FA5A36] text-white shadow-2xs'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -4515,7 +4507,7 @@ export const InstructorDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setLiveSectionTab('slots')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   liveSectionTab === 'slots'
                     ? 'bg-[#FA5A36] text-white shadow-2xs'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -4527,7 +4519,7 @@ export const InstructorDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setLiveSectionTab('consultations')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                   liveSectionTab === 'consultations'
                     ? 'bg-[#FA5A36] text-white shadow-2xs'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
@@ -4582,12 +4574,12 @@ export const InstructorDashboard: React.FC = () => {
 
             {/* Status Filter Tabs & Search */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div className="flex flex-wrap gap-1">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full pb-0.5">
                 {['ALL', 'UPCOMING', 'COMPLETED', 'CANCELLED'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setWebinarsTab(tab)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       webinarsTab === tab
                         ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'

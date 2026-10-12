@@ -64,6 +64,9 @@ const userSchema = new mongoose.Schema(
     registrationFeeOrderId: { type: String },
     registrationFeePaymentId: { type: String },
     registrationFeeAmount: { type: Number, default: 0 },
+    adminPermissions: { type: [String], default: [] }, // Granular operational permissions assigned by Super Admin
+    department: { type: String, default: 'Operations' },
+    createdByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     instructorId: {
       type: String,
       unique: true,

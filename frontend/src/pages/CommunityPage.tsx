@@ -344,7 +344,7 @@ export const CommunityPage: React.FC = () => {
                     <div className="mt-6 pt-4 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-600">
                       <div>
                         <div className="font-semibold text-slate-800">{event.date || 'Upcoming'}</div>
-                        <div className="text-[11px] text-slate-500">{event.time || event.duration || '60 mins'}</div>
+                        <div className="text-[11px] text-slate-500">{event.time || (event as any).duration || '60 mins'}</div>
                       </div>
                       <Link
                         to={event.roomCode ? `/webinars/live/${event.roomCode}` : '/webinars'}

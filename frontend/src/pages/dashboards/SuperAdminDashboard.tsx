@@ -68,6 +68,8 @@ import {
   type SuperAdminInstructorVerification,
 } from '../../api/superAdmin';
 import { SuperAdminCouponsTab } from '../../components/superAdmin/SuperAdminCouponsTab';
+import { SuperAdminAdminsTab } from '../../components/superAdmin/SuperAdminAdminsTab';
+import { SuperAdminAnalyticsTab } from '../../components/superAdmin/SuperAdminAnalyticsTab';
 import { EduLogo } from '../../components/ui/EduLogo';
 
 export const SuperAdminDashboard: React.FC = () => {
@@ -81,6 +83,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [activeNav, setActiveNav] = useState<
     | 'dashboard'
     | 'users'
+    | 'admins'
     | 'creators'
     | 'instructor-verifications'
     | 'courses'
@@ -898,6 +901,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'users', label: 'Users', icon: Users },
+    { id: 'admins', label: 'Admin Accounts', icon: ShieldCheck },
     { id: 'creators', label: 'Creators', icon: GraduationCap },
     { id: 'instructor-verifications', label: 'Instructor Verification', icon: UserCheck, badge: verificationCounts.pending },
     { id: 'courses', label: 'Courses', icon: BookOpen },
@@ -3191,47 +3195,20 @@ export const SuperAdminDashboard: React.FC = () => {
           )}
 
           {/* =========================================================================
-              VIEW 11: PLATFORM ANALYTICS
+              VIEW 11: PLATFORM ANALYTICS (Real-Time Telemetry & Trajectory)
              ========================================================================= */}
           {activeNav === 'analytics' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Platform Analytics & Growth</h2>
-                <p className="text-xs text-slate-500">Perform growth and performance analytics across traffic, revenue, and learners.</p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-8 p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="font-semibold text-slate-900 text-sm">Platform Trajectory</h4>
-                  <div className="h-56 flex items-end justify-between gap-3 pt-6 border-b border-slate-200 px-4">
-                    {[10, 25, 45, 60, 75, 90, 100].map((h, i) => (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div style={{ height: `${h}%` }} className="w-full max-w-[28px] bg-[#FA5A36] rounded-t-lg"></div>
-                        <span className="text-[10px] text-slate-500 font-bold">W{i + 1}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-4 p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-                  <h4 className="font-semibold text-slate-900 text-sm">User Engagement</h4>
-                  <div className="py-4 flex items-center justify-center">
-                    <div className="w-32 h-32 rounded-full border-8 border-[#FA5A36] border-t-[#0B1120] border-r-emerald-500 flex items-center justify-center text-center font-semibold text-slate-900">
-                      100%
-                    </div>
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Live Health</span> <strong className="text-emerald-600">Optimal</strong>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Server Response</span> <strong className="text-slate-900">&lt; 45ms</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SuperAdminAnalyticsTab
+              overview={overview}
+              usersList={usersList}
+              coursesList={coursesList}
+              ordersList={ordersList}
+              platformFeesMetrics={platformFeesMetrics}
+            />
           )}
+
+          {/* ADMIN ACCOUNTS & PERMISSIONS MANAGEMENT TAB (Super Admin Exclusive) */}
+          {activeNav === 'admins' && <SuperAdminAdminsTab />}
         </main>
       </div>
 

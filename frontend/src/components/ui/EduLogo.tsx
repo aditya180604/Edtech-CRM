@@ -6,9 +6,10 @@ interface EduLogoProps {
   size?: 'sm' | 'md' | 'lg';
   to?: string;
   showText?: boolean;
+  variant?: 'light' | 'dark';
 }
 
-export const EduLogo: React.FC<EduLogoProps> = ({ className = '', size = 'md', to = '/', showText = true }) => {
+export const EduLogo: React.FC<EduLogoProps> = ({ className = '', size = 'md', to = '/', showText = true, variant = 'light' }) => {
   const iconSizes = {
     sm: 'w-7 h-7 text-xs',
     md: 'w-9 h-9 text-sm',
@@ -40,7 +41,7 @@ export const EduLogo: React.FC<EduLogoProps> = ({ className = '', size = 'md', t
         </svg>
       </div>
       {showText && (
-        <span className={`${textSizes[size]} font-semibold tracking-tight text-slate-900`}>
+        <span className={`${textSizes[size]} font-semibold tracking-tight ${variant === 'dark' ? 'text-white' : 'text-slate-900'}`}>
           Edu<span className="text-[#FA5A36]">Tech</span>
         </span>
       )}

@@ -642,5 +642,65 @@ export const superAdminApi = {
     });
     return res.data;
   },
+
+  // 14. Admin Accounts & Permissions Management
+  async getAdmins(params?: { search?: string; status?: string; page?: number; limit?: number }): Promise<{
+    success: boolean;
+    data: {
+      admins: Array<{
+        id: string;
+        name: string;
+        email: string;
+        phone: string;
+        department: string;
+        status: string;
+        permissions: string[];
+        lastLoginAt: string | null;
+        createdAt: string;
+        createdBy: string;
+      }>;
+      pagination: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+      };
+    };
+  }> {
+    const res = await apiClient.get('/super-admin/admins', { params });
+    return res.data;
+  },
+
+  async createAdmin(data: {
+    firstName: string;
+    lastName?: string;
+    email: string;
+    password: string;
+    department?: string;
+    permissions?: string[];
+  }): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post('/super-admin/admins', data);
+    return res.data;
+  },
+
+  async getAdminById(id: string): Promise<{ success: boolean; data: any }> {
+    const res = await apiClient.get(`/super-admin/admins/${id}`);
+    return res.data;
+  },
+
+  async updateAdminPermissions(id: string, permissions: string[]): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.patch(`/super-admin/admins/${id}/permissions`, { permissions });
+    return res.data;
+  },
+
+  async updateAdminStatus(id: string, status: string, reason?: string): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.patch(`/super-admin/admins/${id}/status`, { status, reason });
+    return res.data;
+  },
+
+  async getAdminActivity(id: string, params?: { page?: number; limit?: number }): Promise<{ success: boolean; data: any }> {
+    const res = await apiClient.get(`/super-admin/admins/${id}/activity`, { params });
+    return res.data;
+  },
 };
 

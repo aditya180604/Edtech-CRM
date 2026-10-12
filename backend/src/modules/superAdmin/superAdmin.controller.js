@@ -316,4 +316,35 @@ export class SuperAdminController {
     const data = await SuperAdminService.verifyRegistrationFeeOrder(orderId, forceMarkPaid);
     return ApiResponse.success(res, data, data.message || 'Registration fee verified successfully.');
   });
+
+  // 12. Admin Management (Super Admin Exclusive)
+  static getAdmins = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getAdmins(req.query);
+    return ApiResponse.success(res, data, 'Admin accounts retrieved successfully.');
+  });
+
+  static createAdmin = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.createAdmin(req.body, req.user);
+    return ApiResponse.success(res, data, 'Admin account created successfully.', 201);
+  });
+
+  static getAdminById = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getAdminById(req.params.id);
+    return ApiResponse.success(res, data, 'Admin details retrieved successfully.');
+  });
+
+  static updateAdminPermissions = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.updateAdminPermissions(req.params.id, req.body, req.user);
+    return ApiResponse.success(res, data, 'Admin permissions updated successfully.');
+  });
+
+  static updateAdminStatus = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.updateAdminStatus(req.params.id, req.body, req.user);
+    return ApiResponse.success(res, data, data.message || 'Admin status updated successfully.');
+  });
+
+  static getAdminActivity = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getAdminActivity(req.params.id, req.query);
+    return ApiResponse.success(res, data, 'Admin activity history retrieved successfully.');
+  });
 }

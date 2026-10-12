@@ -107,6 +107,51 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+export const isPublicPath = (pathname: string): boolean => {
+  const path = pathname.toLowerCase();
+  if (
+    path === '/' ||
+    path === '/login' ||
+    path === '/signup' ||
+    path === '/register' ||
+    path === '/choose-role' ||
+    path === '/reset-password' ||
+    path.startsWith('/course') ||
+    path.startsWith('/topics') ||
+    path.startsWith('/learning-paths') ||
+    path.startsWith('/offerings') ||
+    path.startsWith('/instructors') ||
+    path.startsWith('/mentorship') ||
+    path.startsWith('/webinar') ||
+    path.startsWith('/cart') ||
+    path.startsWith('/checkout') ||
+    path.startsWith('/blog') ||
+    path.startsWith('/help') ||
+    path.startsWith('/community') ||
+    path.startsWith('/career-support') ||
+    path.startsWith('/about') ||
+    path.startsWith('/contact') ||
+    path.startsWith('/privacy') ||
+    path.startsWith('/terms')
+  ) {
+    return true;
+  }
+
+  const isProtected =
+    path.startsWith('/dashboard') ||
+    path.startsWith('/admin') ||
+    path.startsWith('/super-admin') ||
+    path.startsWith('/student') ||
+    (path.startsWith('/instructor') && !path.startsWith('/instructors')) ||
+    path.startsWith('/profile') ||
+    path.startsWith('/settings') ||
+    path.startsWith('/messages') ||
+    path.startsWith('/notifications') ||
+    path.startsWith('/skill-passport');
+
+  return !isProtected;
+};
+
 // Response Interceptor: Handle Token Refresh on 401
 apiClient.interceptors.response.use(
   (response) => response,
@@ -169,16 +214,7 @@ apiClient.interceptors.response.use(
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:session_expired'));
           const currentPath = window.location.pathname;
-          const isPublic =
-            currentPath === '/' ||
-            currentPath === '/login' ||
-            currentPath === '/signup' ||
-            currentPath === '/choose-role' ||
-            currentPath.startsWith('/course') ||
-            currentPath.startsWith('/topics') ||
-            currentPath.startsWith('/learning-paths') ||
-            currentPath.startsWith('/instructors') ||
-            currentPath.startsWith('/webinars');
+          const isPublic = isPublicPath(currentPath);
 
           if (!isPublic && !currentPath.startsWith('/login')) {
             window.location.href = `/login?session_expired=true&redirect=${encodeURIComponent(currentPath + window.location.search)}`;

@@ -76,7 +76,12 @@ router.put('/registration-fee/settings', SuperAdminController.updateRegistration
 router.get('/registration-fees', SuperAdminController.getRegistrationFees);
 router.post('/registration-fees/:orderId/verify', SuperAdminController.verifyRegistrationFeeOrder);
 
-// Backward compatibility alias for platform fees
-router.get('/platform-fees', SuperAdminController.getPlatformFees);
+// 12. Admin Accounts & Permissions Management (Super Admin Exclusive)
+router.get('/admins', SuperAdminController.getAdmins);
+router.post('/admins', SuperAdminController.createAdmin);
+router.get('/admins/:id', SuperAdminController.getAdminById);
+router.patch('/admins/:id/permissions', SuperAdminController.updateAdminPermissions);
+router.patch('/admins/:id/status', SuperAdminController.updateAdminStatus);
+router.get('/admins/:id/activity', SuperAdminController.getAdminActivity);
 
 export const superAdminRoutes = router;

@@ -29,7 +29,7 @@ export async function authenticate(req, res, next) {
     }
 
     if (isLocalJwt && decoded?.userId) {
-      const user = await User.findById(decoded.userId).select('status role email firebaseUid');
+      const user = await User.findById(decoded.userId).select('status role email firebaseUid adminPermissions department');
       if (!user) {
         return next(new AppError('User account not found.', 401));
       }
@@ -43,6 +43,8 @@ export async function authenticate(req, res, next) {
         email: user.email,
         role: user.role,
         status: user.status,
+        adminPermissions: user.adminPermissions || [],
+        department: user.department || 'Operations',
       };
       return next();
     }
@@ -82,6 +84,8 @@ export async function authenticate(req, res, next) {
         role: user.role,
         status: user.status,
         firebaseUid: user.firebaseUid,
+        adminPermissions: user.adminPermissions || [],
+        department: user.department || 'Operations',
       };
 
       return next();

@@ -25,7 +25,7 @@ import {
   PlatformSetting,
   InstructorRegistrationFee,
 } from '../../models/index.js';
-import { ROLES } from '../../config/constants.js';
+import { ROLES, USER_STATUS } from '../../config/constants.js';
 import fs from 'fs';
 import path from 'path';
 import { InstructorService } from '../instructor/instructor.service.js';
@@ -36,6 +36,7 @@ import {
   sendInstructorChangesRequestedEmail,
 } from '../../services/email.service.js';
 import { AppError } from '../../utils/apiResponse.js';
+import { AuditLogger } from '../../utils/auditLogger.js';
 
 export class SuperAdminService {
   /**
@@ -2447,6 +2448,245 @@ export class SuperAdminService {
       orderId,
       amount: feeRecord.amount,
       message: `Registration fee ${orderId} successfully verified and settled.`,
+    };
+  }
+
+  // ==========================================
+  // 17. Admin Accounts & Permissions Management (Super Admin Exclusive)
+  // ==========================================
+  static async getAdmins({ search, status, page = 1, limit = 10 } = {}) {
+    const filter = { role: ROLES.ADMIN };
+    if (status && status !== 'ALL') {
+      filter.status = status;
+    }
+    if (search && search.trim()) {
+      filter.$or = [
+        { firstName: new RegExp(search.trim(), 'i') },
+        { lastName: new RegExp(search.trim(), 'i') },
+        { email: new RegExp(search.trim(), 'i') },
+      ];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [admins, total] = await Promise.all([
+      User.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .select('-passwordHash -refreshTokenHash')
+        .populate('createdByAdminId', 'firstName lastName email')
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    const formatted = admins.map((a) => ({
+      id: a._id.toString(),
+      name: `${a.firstName || ''} ${a.lastName || ''}`.trim() || 'Admin User',
+      email: a.email,
+      phone: a.phone || '',
+      department: a.department || 'Operations',
+      status: a.status,
+      permissions: a.adminPermissions || [],
+      lastLoginAt: a.lastLoginAt || null,
+      createdAt: a.createdAt,
+      createdBy: a.createdByAdminId
+        ? `${a.createdByAdminId.firstName || ''} ${a.createdByAdminId.lastName || ''}`.trim()
+        : 'Super Admin',
+    }));
+
+    return {
+      admins: formatted,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)) || 1,
+      },
+    };
+  }
+
+  static async createAdmin(payload, superAdminUser) {
+    const { firstName, lastName, email, password, department = 'Operations', permissions = [] } = payload;
+
+    if (!email || !password || !firstName) {
+      throw new AppError('First name, email, and initial password are required.', 400);
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      throw new AppError(`User with email ${normalizedEmail} already exists.`, 409);
+    }
+
+    // Hash password using authoritative model helper
+    const passwordHash = await User.hashPassword(password);
+
+    // Create Admin account with least-privilege defaults (only permissions explicitly passed)
+    const newAdmin = await User.create({
+      firstName: firstName.trim(),
+      lastName: (lastName || '').trim(),
+      email: normalizedEmail,
+      passwordHash,
+      role: ROLES.ADMIN,
+      status: USER_STATUS.ACTIVE,
+      department: department.trim(),
+      adminPermissions: Array.isArray(permissions) ? permissions : [],
+      createdByAdminId: superAdminUser.userId,
+      emailVerified: true,
+      isProfileCompleted: true,
+    });
+
+    await AuditLogger.log({
+      actorId: superAdminUser.userId,
+      action: 'ADMIN_ACCOUNT_CREATED',
+      resourceType: 'USER',
+      resourceId: newAdmin._id.toString(),
+      newValue: {
+        email: normalizedEmail,
+        department: newAdmin.department,
+        permissions: newAdmin.adminPermissions,
+      },
+    });
+
+    return {
+      id: newAdmin._id.toString(),
+      name: `${newAdmin.firstName} ${newAdmin.lastName}`.trim(),
+      email: newAdmin.email,
+      department: newAdmin.department,
+      status: newAdmin.status,
+      permissions: newAdmin.adminPermissions,
+      createdAt: newAdmin.createdAt,
+    };
+  }
+
+  static async getAdminById(id) {
+    const admin = await User.findOne({ _id: id, role: ROLES.ADMIN })
+      .select('-passwordHash -refreshTokenHash')
+      .populate('createdByAdminId', 'firstName lastName email')
+      .lean();
+
+    if (!admin) throw new AppError('Admin account not found.', 404);
+
+    const recentLogs = await AuditLog.find({ actorId: id })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .lean();
+
+    return {
+      admin: {
+        id: admin._id.toString(),
+        name: `${admin.firstName || ''} ${admin.lastName || ''}`.trim(),
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        email: admin.email,
+        phone: admin.phone || '',
+        department: admin.department || 'Operations',
+        status: admin.status,
+        permissions: admin.adminPermissions || [],
+        createdAt: admin.createdAt,
+        lastLoginAt: admin.lastLoginAt,
+      },
+      activity: recentLogs,
+    };
+  }
+
+  static async updateAdminPermissions(id, { permissions }, superAdminUser) {
+    if (!Array.isArray(permissions)) {
+      throw new AppError('Permissions must be an array of permission keys.', 400);
+    }
+
+    const admin = await User.findOne({ _id: id, role: ROLES.ADMIN });
+    if (!admin) throw new AppError('Admin account not found.', 404);
+
+    const oldPermissions = admin.adminPermissions || [];
+    admin.adminPermissions = permissions;
+    await admin.save();
+
+    await AuditLogger.log({
+      actorId: superAdminUser.userId,
+      action: 'ADMIN_PERMISSIONS_UPDATED',
+      resourceType: 'USER',
+      resourceId: admin._id.toString(),
+      oldValue: { permissions: oldPermissions },
+      newValue: { permissions },
+    });
+
+    return {
+      id: admin._id.toString(),
+      permissions: admin.adminPermissions,
+      message: 'Admin permissions updated successfully.',
+    };
+  }
+
+  static async updateAdminStatus(id, { status, reason }, superAdminUser) {
+    if (![USER_STATUS.ACTIVE, USER_STATUS.SUSPENDED, USER_STATUS.INACTIVE].includes(status)) {
+      throw new AppError('Invalid account status.', 400);
+    }
+
+    const admin = await User.findOne({ _id: id, role: ROLES.ADMIN });
+    if (!admin) throw new AppError('Admin account not found.', 404);
+
+    // Safeguard: Cannot suspend own account
+    if (admin._id.toString() === superAdminUser.userId.toString()) {
+      throw new AppError('Cannot alter status of your own account.', 400);
+    }
+
+    const oldStatus = admin.status;
+    admin.status = status;
+
+    // Strict session invalidation on deactivation/suspension:
+    if (status !== USER_STATUS.ACTIVE) {
+      admin.refreshTokenHash = undefined;
+      admin.previousRefreshTokenHash = undefined;
+      admin.refreshTokenRotatedAt = undefined;
+      admin.previousRefreshTokenExpiresAt = undefined;
+    }
+
+    await admin.save();
+
+    await AuditLogger.log({
+      actorId: superAdminUser.userId,
+      action: status === USER_STATUS.ACTIVE ? 'ADMIN_REACTIVATED' : 'ADMIN_DEACTIVATED',
+      resourceType: 'USER',
+      resourceId: admin._id.toString(),
+      oldValue: { status: oldStatus },
+      newValue: { status, reason },
+    });
+
+    return {
+      id: admin._id.toString(),
+      status: admin.status,
+      message: `Admin account successfully ${status.toLowerCase()}.`,
+    };
+  }
+
+  static async getAdminActivity(id, { page = 1, limit = 20 } = {}) {
+    const skip = (Number(page) - 1) * Number(limit);
+    const [logs, total] = await Promise.all([
+      AuditLog.find({ actorId: id })
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      AuditLog.countDocuments({ actorId: id }),
+    ]);
+
+    return {
+      activity: logs.map((l) => ({
+        id: l._id.toString(),
+        action: l.action,
+        resourceType: l.resourceType,
+        resourceId: l.resourceId,
+        timestamp: l.timestamp || l.createdAt,
+        oldValue: l.oldValue,
+        newValue: l.newValue,
+      })),
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)) || 1,
+      },
     };
   }
 }
