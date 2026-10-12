@@ -213,4 +213,16 @@ export class SuperAdminController {
     const data = await PaymentsService.getPlatformFeesOverview(req.query);
     return ApiResponse.success(res, data, 'Platform fees overview retrieved successfully.');
   });
+
+  // 13. System Status & Audit Logs
+  static getStatus = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getSystemStatus(req.user.userId);
+    return ApiResponse.success(res, data, 'System status retrieved.');
+  });
+
+  static getAuditLogs = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getAuditLogs(req.query);
+    return ApiResponse.success(res, data, 'Audit logs retrieved.');
+  });
 }
+

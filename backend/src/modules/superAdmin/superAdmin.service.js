@@ -1360,14 +1360,52 @@ export class SuperAdminService {
     };
   }
 
-  static async getFraudReports() {
-    const frauds = await FraudRecord.find().sort({ createdAt: -1 }).lean();
-    if (frauds.length === 0) {
-      return [
-        { id: 'f1', eventId: 'FRD-9921', type: 'Velocity Anomaly', riskScore: 88, status: 'FLAGGED', reason: 'Multiple rapid purchases from proxy IP', date: 'Today, 2:30 PM' },
-        { id: 'f2', eventId: 'FRD-9918', type: 'Payment Discrepancy', riskScore: 65, status: 'INVESTIGATING', reason: 'Billing address mismatch with bank response', date: 'Yesterday' },
-      ];
-    }
-    return frauds;
+  static async getSystemStatus(actorId) {
+    const userCount = await User.countDocuments();
+    const courseCount = await Course.countDocuments();
+    const orderCount = await Order.countDocuments();
+    const recentActivity = await AuditLog.find().sort({ timestamp: -1 }).limit(10).lean();
+
+    return {
+      governanceStatus: 'ACTIVE',
+      database: {
+        status: mongoose.connection.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED',
+        name: mongoose.connection.name || 'edutech_db',
+      },
+      counts: {
+        users: userCount,
+        courses: courseCount,
+        orders: orderCount,
+      },
+      recentActivity: recentActivity || [],
+    };
+  }
+
+  static async getAuditLogs({ page = 1, limit = 50, action, resourceType } = {}) {
+    const filter = {};
+    if (action) filter.action = action;
+    if (resourceType) filter.resourceType = resourceType;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [logs, total] = await Promise.all([
+      AuditLog.find(filter)
+        .populate('actorId', 'firstName lastName email role')
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      AuditLog.countDocuments(filter),
+    ]);
+
+    return {
+      logs: logs.map((l) => ({ ...l, actor: l.actorId })),
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)) || 1,
+      },
+    };
   }
 }
+

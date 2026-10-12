@@ -65,4 +65,9 @@ router.get('/fraud', SuperAdminController.getFraud);
 // 11. Platform Fees Management (Image & Real Cashfree Fees Oversight)
 router.get('/platform-fees', SuperAdminController.getPlatformFees);
 
+// 12. System Status & Audit Logs
+router.get('/status', SuperAdminController.getStatus);
+router.get('/audit-logs', SuperAdminController.getAuditLogs);
+
 export const superAdminRoutes = router;
+
