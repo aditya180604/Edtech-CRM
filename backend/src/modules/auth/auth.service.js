@@ -292,22 +292,17 @@ export class AuthService {
         throw new AppError('User not found or inactive.', 401);
       }
 
-      // Check against stored token hash or recent grace-window rotated hash (30s)
       const incomingHash = this.hashToken(incomingRefreshToken);
       const isCurrentMatch = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
-      const isGracePeriodMatch =
-        user.previousRefreshTokenHash &&
-        user.previousRefreshTokenHash === incomingHash &&
-        ((user.refreshTokenRotatedAt && Date.now() - new Date(user.refreshTokenRotatedAt).getTime() < 30000) ||
-          (user.previousRefreshTokenExpiresAt && new Date(user.previousRefreshTokenExpiresAt) > new Date()));
 
-      if (!isCurrentMatch && !isGracePeriodMatch) {
+      if (!isCurrentMatch) {
         // Token reuse or revoked session detected: revoke session completely
         user.refreshTokenHash = undefined;
         user.previousRefreshTokenHash = undefined;
         user.refreshTokenRotatedAt = undefined;
         user.previousRefreshTokenExpiresAt = undefined;
         await user.save();
+
 
         await AuditLogger.log({
           actorId: user._id,

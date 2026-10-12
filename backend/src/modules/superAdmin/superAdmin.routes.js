@@ -79,4 +79,9 @@ router.post('/registration-fees/:orderId/verify', SuperAdminController.verifyReg
 // Backward compatibility alias for platform fees
 router.get('/platform-fees', SuperAdminController.getPlatformFees);
 
+// 12. System Status & Audit Logs
+router.get('/status', SuperAdminController.getStatus);
+router.get('/audit-logs', SuperAdminController.getAuditLogs);
+
 export const superAdminRoutes = router;
+
