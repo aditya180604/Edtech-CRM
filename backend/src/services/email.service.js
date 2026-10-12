@@ -37,15 +37,68 @@ export async function verifyEmailConnection() {
   return true;
 }
 
+async function sendViaResend({ to, subject, html, text, attachments }) {
+  const apiKey = (process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) return null;
+
+  const rawFrom = process.env.RESEND_FROM || 'EduTechCRM <onboarding@resend.dev>';
+  // Resend API expects: { from, to: [to], subject, html, text, attachments: [{ filename, content }] }
+  const payload = {
+    from: rawFrom,
+    to: Array.isArray(to) ? to : [to],
+    subject,
+    html: html || undefined,
+    text: text || (html ? html.replace(/<[^>]+>/g, ' ') : undefined),
+  };
+
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    payload.attachments = attachments.map((att) => ({
+      filename: att.filename,
+      content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : att.content,
+    }));
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const errorMsg = data?.message || response.statusText || 'Resend API error';
+    throw new Error(`[Resend] ${errorMsg}`);
+  }
+
+  return { messageId: data.id, provider: 'resend' };
+}
+
 export async function sendEmail({ to, subject, html, text, attachments }) {
   if (!to || !subject || (!html && !text)) {
     throw new Error('Recipient, subject, and email content are required.');
   }
 
+  // 1. Try Resend if RESEND_API_KEY is configured
+  if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
+    try {
+      const resendResult = await sendViaResend({ to, subject, html, text, attachments });
+      if (resendResult) {
+        console.log(`[EmailService] Delivered email to ${to} via Resend (ID: ${resendResult.messageId})`);
+        return resendResult;
+      }
+    } catch (resendErr) {
+      console.warn(`[EmailService] Resend failed (${resendErr.message}). Falling back to SMTP...`);
+    }
+  }
+
+  // 2. Fallback to SMTP (e.g. Gmail)
   const transporter = getTransporter();
   if (!transporter) {
     console.warn(`[EmailService] Simulated send to ${to}: ${subject}`);
-    return { messageId: `mock_${Date.now()}` };
+    return { messageId: `mock_${Date.now()}`, provider: 'simulated' };
   }
 
   const fromName = process.env.EMAIL_FROM_NAME || 'EduTechCRM';
@@ -66,7 +119,9 @@ export async function sendEmail({ to, subject, html, text, attachments }) {
     mailOptions.attachments = attachments;
   }
 
-  return transporter.sendMail(mailOptions);
+  const smtpResult = await transporter.sendMail(mailOptions);
+  console.log(`[EmailService] Delivered email to ${to} via SMTP (MessageId: ${smtpResult.messageId})`);
+  return { ...smtpResult, provider: 'smtp' };
 }
 
 /**

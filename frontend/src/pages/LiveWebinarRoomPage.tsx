@@ -98,8 +98,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   const [cameraEnabled, setCameraEnabled] = useState(!isMentorship || isHost);
   const [remoteCameraEnabled, setRemoteCameraEnabled] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
-  const [localCameraEnabled, setLocalCameraEnabled] = useState(true);
-  const [localMicEnabled, setLocalMicEnabled] = useState(true);
+  const [localCameraEnabled, setLocalCameraEnabled] = useState(!isMentorship);
+  const [localMicEnabled, setLocalMicEnabled] = useState(!isMentorship);
+  const [localMicLevel, setLocalMicLevel] = useState(0);
+  const [localTrackVersion, setLocalTrackVersion] = useState(0);
   const [localScreenShareActive, setLocalScreenShareActive] = useState(false);
   const [screenShareActive, setScreenShareActive] = useState(false);
   const [liveKitConnected, setLiveKitConnected] = useState(false);
@@ -126,6 +128,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const liveKitRoomRef = useRef<LiveKitRoom | null>(null);
+  const localMicMeterContextRef = useRef<AudioContext | null>(null);
   const mutedIncomingRef = useRef(mutedIncoming);
   mutedIncomingRef.current = mutedIncoming;
   const localScreenShareActiveRef = useRef(localScreenShareActive);
@@ -522,10 +525,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
     const syncLocalCamera = () => {
       const cameraTrack = [...(room?.localParticipant.trackPublications.values() || [])]
         .find((publication) => publication.source === 'camera')?.track;
-      const localStream = cameraTrack ? new MediaStream([cameraTrack.mediaStreamTrack]) : null;
+      const track = cameraTrack?.mediaStreamTrack;
+      const enabled = Boolean(cameraTrack && !cameraTrack.isMuted && track?.readyState === 'live');
+      const localStream = enabled && track ? new MediaStream([track]) : null;
       mediaStreamRef.current = localStream;
-      playVideo(localVideoRef.current, localStream);
-      playVideo(localPipVideoRef.current, localStream);
+      setLocalCameraEnabled(enabled);
+      if (isHost) setCameraEnabled(enabled);
+      setLocalTrackVersion((version) => version + 1);
     };
 
     const attachRemoteVideo = () => {
@@ -608,9 +614,12 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
         connectedRoom.on('localTrackPublished', (publication) => {
           if (publication.source === 'camera') {
-            setLocalCameraEnabled(true);
-            if (isHost) setCameraEnabled(true);
             syncLocalCamera();
+          }
+          if (publication.source === 'microphone') {
+            setLocalMicEnabled(true);
+            if (isHost) setMicEnabled(true);
+            setLocalTrackVersion((version) => version + 1);
           }
           if (publication.source === 'screen_share') {
             setLocalScreenShareActive(true);
@@ -625,9 +634,12 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
         connectedRoom.on('localTrackUnpublished', (publication) => {
           if (publication.source === 'camera') {
-            setLocalCameraEnabled(false);
-            if (isHost) setCameraEnabled(false);
             syncLocalCamera();
+          }
+          if (publication.source === 'microphone') {
+            setLocalMicEnabled(false);
+            if (isHost) setMicEnabled(false);
+            setLocalTrackVersion((version) => version + 1);
           }
           if (publication.source === 'screen_share') {
             setLocalScreenShareActive(false);
@@ -645,9 +657,27 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         });
 
         connectedRoom.on('trackUnmuted', (publication, participant) => {
-          if (participant.isLocal) return;
+          if (participant.isLocal) {
+            if (publication.source === 'camera') syncLocalCamera();
+            if (publication.source === 'microphone') {
+              setLocalMicEnabled(true);
+              if (isHost) setMicEnabled(true);
+              setLocalTrackVersion((version) => version + 1);
+            }
+            return;
+          }
           if (publication.source === 'camera') setRemoteCameraEnabled(true);
           if (publication.source === 'screen_share') setScreenShareActive(true);
+        });
+
+        connectedRoom.on('trackMuted', (publication, participant) => {
+          if (!participant.isLocal) return;
+          if (publication.source === 'camera') syncLocalCamera();
+          if (publication.source === 'microphone') {
+            setLocalMicEnabled(false);
+            if (isHost) setMicEnabled(false);
+            setLocalTrackVersion((version) => version + 1);
+          }
         });
 
         connectedRoom.on('disconnected', () => {
@@ -669,9 +699,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
         try {
           const publication = await connectedRoom.localParticipant.setMicrophoneEnabled(true);
-          const enabled = Boolean(publication);
+          const enabled = Boolean(publication?.track);
           setLocalMicEnabled(enabled);
           if (isHost) setMicEnabled(enabled);
+          setLocalTrackVersion((version) => version + 1);
         } catch (error) {
           setLocalMicEnabled(false);
           if (isHost) setMicEnabled(false);
@@ -685,9 +716,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           const publication = await connectedRoom.localParticipant.setCameraEnabled(true, {
             resolution: { width: 1280, height: 720 },
           });
-          const enabled = Boolean(publication);
+          const enabled = Boolean(publication?.track?.mediaStreamTrack.readyState === 'live');
           setLocalCameraEnabled(enabled);
           if (isHost) setCameraEnabled(enabled);
+          syncLocalCamera();
         } catch (error) {
           setLocalCameraEnabled(false);
           if (isHost) setCameraEnabled(false);
@@ -734,6 +766,94 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
       remoteScreenStreamRef.current = null;
     };
   }, [isHost, isMentorship, roomState.roomCode, toastError]);
+
+  useEffect(() => {
+    if (!isMentorship || !liveKitConnected || !localMicEnabled) {
+      setLocalMicLevel(0);
+      return;
+    }
+
+    const microphoneTrack = [...(liveKitRoomRef.current?.localParticipant.trackPublications.values() || [])]
+      .find((publication) => publication.source === 'microphone')?.track?.mediaStreamTrack;
+    if (!microphoneTrack) {
+      setLocalMicLevel(0);
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+    localMicMeterContextRef.current = audioContext;
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const source = audioContext.createMediaStreamSource(new MediaStream([microphoneTrack]));
+    source.connect(analyser);
+
+    const samples = new Uint8Array(analyser.fftSize);
+    let frameId = 0;
+    let lastUpdate = 0;
+    const updateLevel = (timestamp: number) => {
+      analyser.getByteTimeDomainData(samples);
+      let sumSquares = 0;
+      for (const sample of samples) {
+        const amplitude = (sample - 128) / 128;
+        sumSquares += amplitude * amplitude;
+      }
+      const rms = Math.sqrt(sumSquares / samples.length);
+      if (timestamp - lastUpdate >= 100) {
+        setLocalMicLevel(Math.min(100, Math.round(rms * 250)));
+        lastUpdate = timestamp;
+      }
+      frameId = requestAnimationFrame(updateLevel);
+    };
+
+    void audioContext.resume().catch((error) => {
+      console.warn('Could not start microphone level meter:', error);
+    });
+    frameId = requestAnimationFrame(updateLevel);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      source.disconnect();
+      analyser.disconnect();
+      if (localMicMeterContextRef.current === audioContext) {
+        localMicMeterContextRef.current = null;
+      }
+      void audioContext.close();
+    };
+  }, [isMentorship, liveKitConnected, localMicEnabled, localTrackVersion]);
+
+  useEffect(() => {
+    if (!isMentorship || !liveKitConnected) return;
+
+    const cameraTrack = [...(liveKitRoomRef.current?.localParticipant.trackPublications.values() || [])]
+      .find((publication) => publication.source === 'camera')?.track;
+    const mediaTrack = cameraTrack?.mediaStreamTrack;
+    const cameraIsLive = Boolean(
+      cameraTrack &&
+      !cameraTrack.isMuted &&
+      mediaTrack?.readyState === 'live' &&
+      mediaTrack.enabled
+    );
+    const videoElements = [localVideoRef.current, localPipVideoRef.current];
+
+    videoElements.forEach((element) => {
+      if (!element) return;
+      if (cameraIsLive && cameraTrack) {
+        cameraTrack.attach(element);
+      } else {
+        cameraTrack?.detach(element);
+        element.srcObject = null;
+      }
+    });
+
+    return () => {
+      videoElements.forEach((element) => {
+        if (element) cameraTrack?.detach(element);
+      });
+    };
+  }, [isMentorship, liveKitConnected, localCameraEnabled, localTrackVersion]);
 
   // Auto-attach video and audio streams whenever screen share or camera state changes
   useEffect(() => {
@@ -799,7 +919,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
       remoteAudioRef.current.srcObject = remoteStreamRef.current;
       remoteAudioRef.current.play().catch((e) => console.warn('Remote audio play:', e));
     }
-  }, [screenShareActive, cameraEnabled, isHost, isMentorship, localScreenShareActive, mutedIncoming, remoteMediaVersion, roomState.roomCode]);
+  }, [screenShareActive, cameraEnabled, isHost, isMentorship, localCameraEnabled, localScreenShareActive, mutedIncoming, remoteMediaVersion, roomState.roomCode]);
 
   // Ensure remote audio playback after user interaction if browser autoplay is blocked.
   useEffect(() => {
@@ -1125,10 +1245,12 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         const publication = await room.localParticipant.setCameraEnabled(nextState, {
           resolution: { width: 1280, height: 720 },
         });
-        if (nextState && !publication) throw new Error('Camera could not be published.');
-        const enabled = Boolean(publication);
-        setLocalCameraEnabled(enabled);
-        if (isHost) setCameraEnabled(enabled);
+        if (nextState && !publication?.track?.mediaStreamTrack) {
+          throw new Error('Camera was enabled but no live camera track was published.');
+        }
+        setLocalCameraEnabled(nextState);
+        if (isHost) setCameraEnabled(nextState);
+        setLocalTrackVersion((version) => version + 1);
       } catch (error) {
         toastError('Camera Error', error instanceof Error ? error.message : 'Could not change camera state.');
       }
@@ -1248,10 +1370,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
       const nextState = !localMicEnabled;
       try {
         const publication = await room.localParticipant.setMicrophoneEnabled(nextState);
-        if (nextState && !publication) throw new Error('Microphone could not be published.');
-        const enabled = nextState;
-        setLocalMicEnabled(enabled);
-        if (isHost) setMicEnabled(enabled);
+        if (nextState && !publication?.track) {
+          throw new Error('Microphone was enabled but no microphone track was published.');
+        }
+        setLocalMicEnabled(nextState);
+        if (isHost) setMicEnabled(nextState);
+        setLocalTrackVersion((version) => version + 1);
+        if (nextState) void localMicMeterContextRef.current?.resume();
       } catch (error) {
         toastError('Microphone Error', error instanceof Error ? error.message : 'Could not change microphone state.');
       }
@@ -1721,9 +1846,9 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     <span>Live Screen Share</span>
                   </div>
                 </div>
-              ) : !isHost && !isHostOnline ? (
+              ) : !isHost && !isHostOnline && !remoteCameraEnabled ? (
                 /* Student waiting for Mentor to connect */
-                <div className="text-center p-8 max-w-md space-y-4 animate-in fade-in">
+                <div className="relative w-full h-full flex items-center justify-center text-center p-8 max-w-md space-y-4 animate-in fade-in">
                   <div className="relative inline-block">
                     {roomState.instructor.avatar ? (
                       <img
@@ -1752,6 +1877,20 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                     <span>Live video & audio will start automatically once mentor connects</span>
                   </div>
+                  {localCameraEnabled && (
+                    <div className="absolute bottom-4 right-4 w-32 h-24 sm:w-40 sm:h-28 rounded-2xl overflow-hidden border-2 border-slate-600 shadow-2xl bg-slate-900">
+                      <video
+                        ref={localPipVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover scale-x-[-1]"
+                      />
+                      <div className="absolute bottom-1 left-2 text-[10px] font-bold text-white bg-black/70 px-2 py-0.5 rounded">
+                        You
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : stageCameraEnabled ? (
                 /* Live Camera Stream (Host Preview or Student Remote Stream) */
@@ -2052,6 +2191,21 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     {controlScreenShareActive ? 'Stop Sharing' : 'Share Screen'}
                   </span>
                 </button>
+                {isMentorship && (
+                  <div
+                    className="flex items-center gap-1 px-1.5 min-[501px]:gap-1.5 min-[501px]:px-2 py-2 rounded-xl bg-slate-950 border border-slate-800"
+                    title={localMicEnabled ? `Microphone input level: ${localMicLevel}%` : 'Microphone muted'}
+                    aria-label={localMicEnabled ? `Microphone input level ${localMicLevel}%` : 'Microphone muted'}
+                  >
+                    <Volume2 className={`w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4 ${localMicEnabled && localMicLevel > 3 ? 'text-emerald-400' : 'text-slate-500'}`} />
+                    <div className="w-6 min-[501px]:w-10 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 transition-[width] duration-100"
+                        style={{ width: `${localMicEnabled ? localMicLevel : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* Student Mic if granted permission */

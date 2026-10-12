@@ -47,7 +47,148 @@ import {
   Send,
   HelpCircle,
   Download,
+  ExternalLink,
 } from 'lucide-react';
+
+export interface UniversalVideoSource {
+  type: 'embed' | 'direct' | 'invalid_service' | 'external_link';
+  embedUrl?: string;
+  directUrl?: string;
+  serviceName?: string;
+  originalUrl: string;
+  errorMessage?: string;
+}
+
+export const resolveUniversalVideoSource = (rawUrl?: string): UniversalVideoSource | null => {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  // 1. YouTube
+  if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+    const embedMatch = trimmed.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/i);
+    if (embedMatch && embedMatch[1]) {
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${embedMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+    }
+    const vParamMatch = trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/i);
+    if (vParamMatch && vParamMatch[1]) {
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${vParamMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+    }
+    const shortMatch = trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/i);
+    if (shortMatch && shortMatch[1]) {
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${shortMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+    }
+    const specialMatch = trimmed.match(/youtube\.com\/(?:shorts|live)\/([a-zA-Z0-9_-]{11})/i);
+    if (specialMatch && specialMatch[1]) {
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${specialMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+    }
+    return {
+      type: 'invalid_service',
+      serviceName: 'YouTube',
+      originalUrl: trimmed,
+      errorMessage: 'The instructor provided a generic YouTube URL without a specific 11-character video ID.',
+    };
+  }
+
+  // 2. Vimeo
+  if (trimmed.includes('vimeo.com')) {
+    const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?([0-9]+)/i);
+    if (vimeoMatch && vimeoMatch[1]) {
+      return {
+        type: 'embed',
+        embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?title=0&byline=0&portrait=0`,
+        serviceName: 'Vimeo',
+        originalUrl: trimmed,
+      };
+    }
+    return {
+      type: 'invalid_service',
+      serviceName: 'Vimeo',
+      originalUrl: trimmed,
+      errorMessage: 'The instructor provided a Vimeo link without a valid numeric video ID.',
+    };
+  }
+
+  // 3. Loom (Very popular in dev tutorials)
+  if (trimmed.includes('loom.com')) {
+    const loomMatch = trimmed.match(/loom\.com\/(?:share|embed)\/([a-zA-Z0-9]+)/i);
+    if (loomMatch && loomMatch[1]) {
+      return {
+        type: 'embed',
+        embedUrl: `https://www.loom.com/embed/${loomMatch[1]}`,
+        serviceName: 'Loom',
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 4. Google Drive
+  if (trimmed.includes('drive.google.com')) {
+    const gdriveMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/i);
+    if (gdriveMatch && gdriveMatch[1]) {
+      return {
+        type: 'embed',
+        embedUrl: `https://drive.google.com/file/d/${gdriveMatch[1]}/preview`,
+        serviceName: 'Google Drive',
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 5. Wistia
+  if (trimmed.includes('wistia.com') || trimmed.includes('wi.st')) {
+    const wistiaMatch = trimmed.match(/(?:wistia\.com\/medias|wi\.st)\/([a-zA-Z0-9]+)/i);
+    if (wistiaMatch && wistiaMatch[1]) {
+      return {
+        type: 'embed',
+        embedUrl: `https://fast.wistia.net/embed/iframe/${wistiaMatch[1]}`,
+        serviceName: 'Wistia',
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 6. Dailymotion
+  if (trimmed.includes('dailymotion.com') || trimmed.includes('dai.ly')) {
+    const dmMatch = trimmed.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/i);
+    if (dmMatch && dmMatch[1]) {
+      return {
+        type: 'embed',
+        embedUrl: `https://www.dailymotion.com/embed/video/${dmMatch[1]}`,
+        serviceName: 'Dailymotion',
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 7. Direct video files (MP4, WebM, OGG, MOV, Cloudinary, AWS S3 / CloudFront, Firebase Storage)
+  const isDirectVideo =
+    /\.(mp4|webm|ogg|m4v|mov)(\?.*)?$/i.test(trimmed) ||
+    trimmed.includes('res.cloudinary.com') ||
+    trimmed.includes('firebasestorage.googleapis.com') ||
+    trimmed.includes('s3.amazonaws.com');
+
+  if (isDirectVideo) {
+    return {
+      type: 'direct',
+      directUrl: trimmed,
+      serviceName: 'Native Video Stream',
+      originalUrl: trimmed,
+    };
+  }
+
+  // 8. Any other custom embed or HTTPS link (Custom CDN, private player, Notion video, Bunny.net, etc.)
+  if (/^https?:\/\//i.test(trimmed)) {
+    return {
+      type: 'embed',
+      embedUrl: trimmed,
+      serviceName: 'External Video Host',
+      originalUrl: trimmed,
+    };
+  }
+
+  return null;
+};
 
 export const CourseDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -614,39 +755,104 @@ export const CourseDetailPage: React.FC = () => {
             <div className="lg:col-span-8 space-y-4 sm:space-y-5">
               {/* Active Video Player Screen */}
               <div className="relative aspect-video w-full rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 shadow-md flex flex-col justify-center items-center">
-                {activeLesson?.videoUrl ? (
-                  activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be') ? (
-                    <iframe
-                      src={
-                        activeLesson.videoUrl.includes('embed')
-                          ? activeLesson.videoUrl
-                          : `https://www.youtube.com/embed/${activeLesson.videoUrl.split('v=')[1] || activeLesson.videoUrl.split('/').pop()}`
-                      }
-                      title={activeLesson.title}
-                      className="w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <video
-                      controls
-                      autoPlay={false}
-                      className="w-full h-full object-contain"
-                      src={activeLesson.videoUrl}
-                      key={activeLesson.id}
-                    />
-                  )
-                ) : (
-                  <div className="text-center p-6 sm:p-8 space-y-3">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
-                      <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                {(() => {
+                  const rawUrl = activeLesson?.videoUrl?.trim();
+                  if (!rawUrl) {
+                    return (
+                      <div className="text-center p-6 sm:p-8 space-y-3">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
+                          <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                        </div>
+                        <h3 className="text-sm sm:text-base font-extrabold text-white">{activeLesson?.title || 'Interactive Lesson'}</h3>
+                        <p className="text-xs text-slate-300 max-w-md mx-auto">
+                          No video file or stream has been attached to this lesson yet by the instructor.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const resolved = resolveUniversalVideoSource(rawUrl);
+
+                  // 1. Valid embedded iframe (YouTube, Vimeo, Loom, Google Drive, Wistia, Dailymotion, or custom embed)
+                  if (resolved?.type === 'embed' && resolved.embedUrl) {
+                    return (
+                      <iframe
+                        src={resolved.embedUrl}
+                        title={activeLesson?.title || `${resolved.serviceName || 'Video'} Lecture`}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        allowFullScreen
+                      />
+                    );
+                  }
+
+                  // 2. Direct video file stream (MP4, WebM, Cloudinary, S3, Firebase)
+                  if (resolved?.type === 'direct' && resolved.directUrl) {
+                    return (
+                      <video
+                        controls
+                        autoPlay={false}
+                        className="w-full h-full object-contain"
+                        src={resolved.directUrl}
+                        key={activeLesson?.id || resolved.directUrl}
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    );
+                  }
+
+                  // 3. Known service but incomplete or missing video ID
+                  if (resolved?.type === 'invalid_service') {
+                    return (
+                      <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-xs">
+                          <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                        </div>
+                        <h3 className="text-sm sm:text-base font-extrabold text-white">
+                          {resolved.serviceName} Link Missing Video ID
+                        </h3>
+                        <p className="text-xs text-slate-300">
+                          {resolved.errorMessage || 'The instructor link is missing a specific video identifier.'}
+                        </p>
+                        <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2 text-left">
+                          <p className="text-[11px] text-slate-400">Provided Link:</p>
+                          <p className="text-xs text-amber-300 font-mono break-all">{resolved.originalUrl}</p>
+                        </div>
+                        <a
+                          href={resolved.originalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Open Link in New Tab
+                        </a>
+                      </div>
+                    );
+                  }
+
+                  // 4. Default fallback: attempt to embed, or offer direct external launch
+                  return (
+                    <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FA5A36]/10 border border-[#FA5A36]/30 flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
+                        <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                      </div>
+                      <h3 className="text-sm sm:text-base font-extrabold text-white">External Lesson Resource</h3>
+                      <p className="text-xs text-slate-300">
+                        This lecture points to an external link provided by the instructor.
+                      </p>
+                      <a
+                        href={rawUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FA5A36] hover:bg-[#E04824] text-white text-xs font-bold transition shadow-md"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open Video in External Player
+                      </a>
                     </div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-white">{activeLesson?.title || 'Interactive Lesson'}</h3>
-                    <p className="text-xs text-slate-300 max-w-md mx-auto">
-                      Stream authorized for enrolled student. Watch the lecture, follow along with the code, and mark as complete when done.
-                    </p>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Player Control Bar */}
@@ -1942,27 +2148,68 @@ export const CourseDetailPage: React.FC = () => {
               </button>
             </div>
             <div className="aspect-video w-full bg-black flex items-center justify-center">
-              {activeVideoModal.url.includes('youtube.com') || activeVideoModal.url.includes('youtu.be') ? (
-                <iframe
-                  src={
-                    activeVideoModal.url.includes('embed')
-                      ? activeVideoModal.url
-                      : `https://www.youtube.com/embed/${activeVideoModal.url.split('v=')[1] || activeVideoModal.url.split('/').pop()}`
-                  }
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : (
-                <video
-                  src={activeVideoModal.url}
-                  controls
-                  autoPlay
-                  className="w-full h-full object-contain"
-                >
-                  Your browser does not support video playback.
-                </video>
-              )}
+              {(() => {
+                const modalUrl = activeVideoModal.url.trim();
+                const resolved = resolveUniversalVideoSource(modalUrl);
+
+                if (resolved?.type === 'embed' && resolved.embedUrl) {
+                  return (
+                    <iframe
+                      src={resolved.embedUrl}
+                      title={activeVideoModal.title}
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                      allowFullScreen
+                    />
+                  );
+                }
+
+                if (resolved?.type === 'direct' && resolved.directUrl) {
+                  return (
+                    <video
+                      src={resolved.directUrl}
+                      controls
+                      autoPlay
+                      className="w-full h-full object-contain"
+                    >
+                      Your browser does not support video playback.
+                    </video>
+                  );
+                }
+
+                if (resolved?.type === 'invalid_service') {
+                  return (
+                    <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
+                      <p className="font-semibold text-white">{resolved.serviceName} Link Missing Video ID</p>
+                      <p className="text-xs text-slate-400">{resolved.errorMessage}</p>
+                      <a
+                        href={resolved.originalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open Link in New Tab
+                      </a>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
+                    <p className="font-semibold text-white">External Lesson Video</p>
+                    <a
+                      href={modalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FA5A36] text-white text-xs font-bold"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open Video in External Player
+                    </a>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
