@@ -84,4 +84,9 @@ router.patch('/admins/:id/permissions', SuperAdminController.updateAdminPermissi
 router.patch('/admins/:id/status', SuperAdminController.updateAdminStatus);
 router.get('/admins/:id/activity', SuperAdminController.getAdminActivity);
 
+// 12. System Status & Audit Logs
+router.get('/status', SuperAdminController.getStatus);
+router.get('/audit-logs', SuperAdminController.getAuditLogs);
+
 export const superAdminRoutes = router;
+

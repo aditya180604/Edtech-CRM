@@ -12,3 +12,6 @@ declare module '@cashfreepayments/cashfree-js' {
 
   export function load(options: { mode: 'sandbox' | 'production' }): Promise<CashfreeInstance>;
 }
+
+declare module 'firebase/app';
+declare module 'firebase/auth';

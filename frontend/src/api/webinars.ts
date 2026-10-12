@@ -27,6 +27,7 @@ export interface WebinarItem {
   meetingType?: 'IN_PLATFORM' | 'EXTERNAL';
   date: string;
   time: string;
+  duration?: string;
 }
 
 export interface LiveChatMessage {
