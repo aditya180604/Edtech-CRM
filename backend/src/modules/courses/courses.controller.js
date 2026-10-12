@@ -50,6 +50,13 @@ export class CoursesController {
     return ApiResponse.success(res, result, 'Course review retrieved successfully.');
   });
 
+  static getCourseReviews = asyncHandler(async (req, res) => {
+    const { slug } = req.params;
+    const { rating, page, limit } = req.query;
+    const result = await CoursesService.getCourseReviews({ slug, rating, page, limit });
+    return ApiResponse.success(res, result, 'Course reviews retrieved successfully.');
+  });
+
   static submitReview = asyncHandler(async (req, res) => {
     const { slug } = req.params;
     const userId = req.user?.userId || req.user?._id || req.user?.id;
@@ -62,6 +69,21 @@ export class CoursesController {
       title,
     });
     return ApiResponse.success(res, result, 'Course review submitted successfully.');
+  });
+
+  static voteHelpfulReview = asyncHandler(async (req, res) => {
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { reviewId } = req.params;
+    const result = await CoursesService.voteHelpfulReview({ userId, reviewId });
+    return ApiResponse.success(res, result, 'Helpful vote recorded successfully.');
+  });
+
+  static flagReview = asyncHandler(async (req, res) => {
+    const userId = req.user?.userId || req.user?._id || req.user?.id;
+    const { reviewId } = req.params;
+    const { reason } = req.body;
+    const result = await CoursesService.flagReview({ userId, reviewId, reason });
+    return ApiResponse.success(res, result, 'Review reported successfully.');
   });
 
   static getQuestions = asyncHandler(async (req, res) => {

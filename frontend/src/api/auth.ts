@@ -49,5 +49,24 @@ export const authApi = {
     const response = await apiClient.get(`/passport/${encodeURIComponent(identifier)}`);
     return response.data;
   },
+
+  // 9. Request Password Reset Link / Token
+  async forgotPassword(email: string): Promise<{ statusCode: number; success: boolean; message: string; data?: { resetToken?: string } }> {
+    const response = await apiClient.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  // 10. Reset Password with Token
+  async resetPassword(payload: { token: string; newPassword?: string; password?: string }): Promise<{ statusCode: number; success: boolean; message: string }> {
+    const response = await apiClient.post('/auth/reset-password', payload);
+    return response.data;
+  },
+
+  // 11. Check Authentication Authority for Account
+  async checkAuthMethod(email: string): Promise<{ statusCode: number; success: boolean; data: { exists: boolean; isFirebaseEnrolled: boolean } }> {
+    const response = await apiClient.get('/auth/auth-method', { params: { email } });
+    return response.data;
+  },
 };
+
 

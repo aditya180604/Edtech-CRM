@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +17,7 @@ import {
   Plus,
   Search,
   X,
+  Menu,
   RefreshCw,
   LogOut,
   Trash2,
@@ -43,8 +45,13 @@ import {
   Calendar,
   ArrowRight,
   PlusCircle,
+  ExternalLink,
+  FileCheck,
+  Award,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { apiClient } from '../../api/client';
+import { LinkedinIcon, GithubIcon } from '../../components/ui/SocialIcons';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { CreateCourseOnBehalfView } from '../../components/dashboard/CreateCourseOnBehalfView';
 import {
@@ -61,11 +68,14 @@ import {
   type SuperAdminInstructorVerification,
 } from '../../api/superAdmin';
 import { SuperAdminCouponsTab } from '../../components/superAdmin/SuperAdminCouponsTab';
+import { EduLogo } from '../../components/ui/EduLogo';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const { success, error: toastError } = useToast();
   const navigate = useNavigate();
+  const isMobile = useIsMobile(500);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Active Navigation View Tab
   const [activeNav, setActiveNav] = useState<
@@ -91,7 +101,10 @@ export const SuperAdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Platform Fees Management State (Image & Real Cashfree Fees)
+  // Platform / Instructor Registration Fees Management State (Dynamic Setting & Real Cashfree Fees)
+  const [feeAmountInput, setFeeAmountInput] = useState<number>(1499);
+  const [feeEnabledInput, setFeeEnabledInput] = useState<boolean>(true);
+  const [feeSaving, setFeeSaving] = useState<boolean>(false);
   const [platformFeesList, setPlatformFeesList] = useState<any[]>([]);
   const [platformFeesMetrics, setPlatformFeesMetrics] = useState<{
     totalCollected: number;
@@ -196,7 +209,7 @@ export const SuperAdminDashboard: React.FC = () => {
     approved: 0,
     rejected: 0,
   });
-  const [verificationStatusFilter, setVerificationStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
+  const [verificationStatusFilter, setVerificationStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'ALL'>('PENDING');
   const [verificationSearch, setVerificationSearch] = useState('');
 
   // Payout Disbursal State (Strict Settlement Lifecycle)
@@ -213,7 +226,10 @@ export const SuperAdminDashboard: React.FC = () => {
   const [selectedVerification, setSelectedVerification] = useState<SuperAdminInstructorVerification | null>(null);
   const [showInspectVerificationModal, setShowInspectVerificationModal] = useState(false);
   const [showRejectVerificationModal, setShowRejectVerificationModal] = useState(false);
+  const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
   const [verificationRejectReason, setVerificationRejectReason] = useState('');
+  const [verificationChangesFeedback, setVerificationChangesFeedback] = useState('');
+  const [previewingDocId, setPreviewingDocId] = useState<string | null>(null);
   const [processingVerification, setProcessingVerification] = useState(false);
 
   // Super Admin Registered Instructors List (For On Behalf Creation)
@@ -333,7 +349,18 @@ export const SuperAdminDashboard: React.FC = () => {
           setPlatformFeesLoading(true);
           promises.push(
             superAdminApi
-              .getPlatformFees({
+              .getRegistrationFeeSettings()
+              .then((res) => {
+                if (res?.success && res.data) {
+                  setFeeAmountInput(res.data.instructorRegistrationFee ?? 1499);
+                  setFeeEnabledInput(res.data.isEnabled ?? true);
+                }
+              })
+              .catch(() => null)
+          );
+          promises.push(
+            superAdminApi
+              .getRegistrationFees({
                 status: platformFeesStatusFilter === 'ALL' ? undefined : platformFeesStatusFilter,
                 search: platformFeesSearch.trim() || undefined,
                 limit: 100,
@@ -448,8 +475,7 @@ export const SuperAdminDashboard: React.FC = () => {
   }, [loadData]);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/');
+    await logout('/');
   };
 
   // User Provisioning (Student, Instructor, Admin)
@@ -609,6 +635,50 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  const handleRequestChangesInstructor = async () => {
+    if (!selectedVerification) return;
+    if (!verificationChangesFeedback.trim()) {
+      toastError('Feedback Required', 'Please specify what adjustments or documents are requested.');
+      return;
+    }
+    try {
+      setProcessingVerification(true);
+      const targetId = selectedVerification.id || selectedVerification._id || selectedVerification.profileId || selectedVerification.userId;
+      const res = await superAdminApi.requestChangesInstructorVerification(
+        targetId,
+        verificationChangesFeedback.trim()
+      );
+      if (res.success) {
+        success('Revisions Requested', 'Instructor has been notified by email and in-app alert.');
+        setShowRequestChangesModal(false);
+        setShowInspectVerificationModal(false);
+        setSelectedVerification(null);
+        setVerificationChangesFeedback('');
+        await loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Request Changes Failed', err.response?.data?.message || err.message || 'Could not request changes.');
+    } finally {
+      setProcessingVerification(false);
+    }
+  };
+
+  const handlePreviewDocument = async (instructorId: string, docId: string, docTitle?: string) => {
+    try {
+      setPreviewingDocId(docId);
+      const res = await apiClient.get(`/super-admin/instructor-verifications/${instructorId}/documents/${docId}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: (res.headers['content-type'] as string) || 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err: any) {
+      toastError('Preview Failed', err.response?.data?.message || err.message || 'Could not open document preview.');
+    } finally {
+      setPreviewingDocId(null);
+    }
+  };
+
   // Payout Disbursal Handlers (Strict Settlement Lifecycle)
   const handleInitiateSinglePayout = async (payout: SuperAdminPayout) => {
     try {
@@ -759,49 +829,195 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  const handleSaveRegistrationFeeSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    try {
+      setFeeSaving(true);
+      const res = await superAdminApi.updateRegistrationFeeSettings({
+        instructorRegistrationFee: Number(feeAmountInput) || 0,
+        isEnabled: feeEnabledInput,
+      });
+      if (res.success) {
+        success(
+          'Registration Fee Updated',
+          `Instructor registration fee set to ₹${Number(feeAmountInput).toLocaleString('en-IN')} (${feeEnabledInput ? 'ACTIVE' : 'DISABLED'})`
+        );
+        loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Failed to Update Fee', err.message || 'Could not update registration fee settings');
+    } finally {
+      setFeeSaving(false);
+    }
+  };
+
+  const handleRefreshRegistrationFees = async () => {
+    try {
+      setPlatformFeesLoading(true);
+      const res = await superAdminApi.getRegistrationFees({
+        status: platformFeesStatusFilter === 'ALL' ? undefined : platformFeesStatusFilter,
+        search: platformFeesSearch.trim() || undefined,
+        limit: 100,
+      });
+      if (res?.success && res.data) {
+        setPlatformFeesList(res.data.fees || []);
+        setPlatformFeesMetrics(
+          res.data.metrics || {
+            totalCollected: 0,
+            successfulTransactions: 0,
+            pendingTransactions: 0,
+            failedTransactions: 0,
+            totalTransactions: 0,
+          }
+        );
+        success('Ledger Refreshed', 'Registration fee records are up to date.');
+      }
+    } catch (err: any) {
+      toastError('Refresh Failed', err.message || 'Could not fetch registration fees.');
+    } finally {
+      setPlatformFeesLoading(false);
+    }
+  };
+
+  const handleVerifyRegistrationOrder = async (orderId: string, forceMarkPaid = false) => {
+    try {
+      const res = await superAdminApi.verifyRegistrationFeeOrder(orderId, forceMarkPaid);
+      if (res.success && res.data?.paymentStatus === 'SUCCESS') {
+        success('Transaction Settled', `Registration fee for order ${orderId} verified and instructor activated.`);
+        handleRefreshRegistrationFees();
+      } else {
+        toastError('Pending', res.data?.message || 'Payment has not been completed on Cashfree yet.');
+      }
+    } catch (err: any) {
+      toastError('Verification Error', err.response?.data?.message || err.message || 'Failed to verify transaction.');
+    }
+  };
+
   const adminName = `${user?.firstName || 'Super'} ${user?.lastName || 'Admin'}`.trim();
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'creators', label: 'Creators', icon: GraduationCap },
+    { id: 'instructor-verifications', label: 'Instructor Verification', icon: UserCheck, badge: verificationCounts.pending },
+    { id: 'courses', label: 'Courses', icon: BookOpen },
+    { id: 'create-on-behalf', label: 'Add on Behalf', icon: PlusCircle },
+    { id: 'approvals', label: 'Course Approvals', icon: ShieldCheck, badge: approvalsList.length },
+    { id: 'coupons', label: 'Coupons', icon: Tag },
+    { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'platform-fees', label: 'Registration Fees', icon: DollarSign, badge: platformFeesMetrics?.successfulTransactions },
+    { id: 'refunds', label: 'Refunds', icon: RotateCcw },
+    { id: 'payouts', label: 'Payouts', icon: CreditCard },
+    { id: 'countries', label: 'Countries', icon: Globe },
+    { id: 'currencies', label: 'Currencies', icon: Coins },
+    { id: 'taxes', label: 'Taxes', icon: Receipt },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-slate-900 font-sans">
+      {/* Mobile Navigation Drawer Backdrop & Sheet (<= 500px) */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 min-[501px]:hidden flex">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileDrawerOpen(false)}
+          />
+          <div className="relative w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
+            <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-80px)]">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex flex-col gap-1">
+                  <EduLogo size="sm" to="/super-admin" />
+                  <span className="self-start px-2 py-0.5 rounded-md bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-semibold uppercase tracking-wider border border-[#FFCCC2]">
+                    Super Admin
+                  </span>
+                </div>
+                <button
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Nav Items Menu in Drawer */}
+              <nav className="space-y-1 text-xs font-bold">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveNav(item.id as any);
+                        setMobileDrawerOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all cursor-pointer select-none text-left ${
+                        isActive
+                          ? 'bg-[#FA5A36] text-white font-semibold shadow-xs shadow-[#FA5A36]/20'
+                          : 'text-slate-600 hover:text-[#FA5A36] hover:bg-[#FFF5F2] font-semibold'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            isActive ? 'bg-white text-[#FA5A36]' : 'bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            {/* Mobile Footer Profile & Sign Out */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50/80">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 text-white font-semibold text-xs flex items-center justify-center shrink-0">
+                    {adminName[0] || 'S'}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs text-slate-900 truncate">{adminName}</p>
+                    <p className="text-[10px] text-[#FA5A36] font-semibold truncate">Root Administrator</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================================
-          LEFT SIDEBAR NAVIGATION (Clean White Modern Design)
+          LEFT SIDEBAR NAVIGATION (Desktop & Tablet: >500px)
          ========================================================================= */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 hidden md:flex">
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 hidden min-[501px]:flex">
         <div className="p-5 space-y-6">
           {/* Brand Logo & Super Admin Badge */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-black text-white text-base shadow-sm">
-              ED
-            </div>
-            <div>
-              <h1 className="font-extrabold text-base text-slate-900 tracking-tight leading-none">EdTech</h1>
-              
-              <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider border border-indigo-200">
-                Super Admin
-              </span>
-            </div>
+          <div className="flex flex-col gap-2">
+            <EduLogo size="md" to="/super-admin" />
+            <span className="self-start px-2 py-0.5 rounded-md bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-semibold uppercase tracking-wider border border-[#FFCCC2]">
+              Super Admin
+            </span>
           </div>
 
           {/* Nav Items Menu */}
           <nav className="space-y-1 text-xs font-bold">
-            {[
-              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-              { id: 'users', label: 'Users', icon: Users },
-              { id: 'creators', label: 'Creators', icon: GraduationCap },
-              { id: 'instructor-verifications', label: 'Instructor Verification', icon: UserCheck, badge: verificationCounts.pending },
-              { id: 'courses', label: 'Courses', icon: BookOpen },
-              { id: 'create-on-behalf', label: 'Add on Behalf', icon: PlusCircle },
-              { id: 'approvals', label: 'Course Approvals', icon: ShieldCheck, badge: approvalsList.length },
-              { id: 'coupons', label: 'Coupons', icon: Tag },
-              { id: 'orders', label: 'Orders', icon: ShoppingBag },
-              { id: 'platform-fees', label: 'Platform Fees (10%)', icon: DollarSign, badge: platformFeesMetrics?.successfulTransactions },
-              { id: 'refunds', label: 'Refunds', icon: RotateCcw },
-              { id: 'payouts', label: 'Payouts', icon: CreditCard },
-              { id: 'countries', label: 'Countries', icon: Globe },
-              { id: 'currencies', label: 'Currencies', icon: Coins },
-              { id: 'taxes', label: 'Taxes', icon: Receipt },
-              { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            ].map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeNav === item.id;
               return (
@@ -810,8 +1026,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   onClick={() => setActiveNav(item.id as any)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all cursor-pointer select-none text-left ${
                     isActive
-                      ? 'bg-indigo-600 text-white font-black shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
+                      ? 'bg-[#FA5A36] text-white font-semibold shadow-xs shadow-[#FA5A36]/20'
+                      : 'text-slate-600 hover:text-[#FA5A36] hover:bg-[#FFF5F2] font-semibold'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -820,8 +1036,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   </div>
                   {item.badge !== undefined && item.badge > 0 && (
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        isActive ? 'bg-white text-indigo-700' : 'bg-amber-100 text-amber-800'
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        isActive ? 'bg-white text-[#FA5A36]' : 'bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]'
                       }`}
                     >
                       {item.badge}
@@ -837,12 +1053,12 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="p-4 border-t border-slate-200 bg-slate-50/80">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 text-white font-black text-xs flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 text-white font-semibold text-xs flex items-center justify-center shrink-0">
                 {adminName[0] || 'S'}
               </div>
               <div className="min-w-0">
                 <p className="font-bold text-xs text-slate-900 truncate">{adminName}</p>
-                <p className="text-[10px] text-indigo-600 font-semibold truncate">Root Administrator</p>
+                <p className="text-[10px] text-[#FA5A36] font-semibold truncate">Root Administrator</p>
               </div>
             </div>
             <button
@@ -861,33 +1077,39 @@ export const SuperAdminDashboard: React.FC = () => {
          ========================================================================= */}
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
         {/* Topbar Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between gap-4 sticky top-0 z-30 shadow-xs">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
+        <header className="h-14 min-[501px]:h-16 bg-white border-b border-slate-200 px-3 min-[501px]:px-8 flex items-center justify-between gap-3 sticky top-0 z-30 shadow-xs">
+          <div className="flex items-center gap-2 min-[501px]:gap-3 flex-1 max-w-md">
+            <button
+              onClick={() => setMobileDrawerOpen(true)}
+              className="min-[501px]:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg shrink-0 cursor-pointer"
+              title="Open Navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             <div className="relative w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <Search className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4 text-slate-400 absolute left-3 top-2.5 min-[501px]:top-3" />
               <input
                 type="text"
                 placeholder="Search anything across platform..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-100/70 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full pl-8 min-[501px]:pl-9 pr-3 py-1.5 min-[501px]:py-2 bg-slate-100/70 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => loadData(false)}
-              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="p-1.5 min-[501px]:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               title="Refresh Data"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#FA5A36]' : ''}`} />
             </button>
 
             <NotificationBell />
 
-            <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
-              <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center justify-center">
+            <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200">
+              <div className="w-7 h-7 rounded-full bg-[#FA5A36] text-white font-semibold text-xs flex items-center justify-center">
                 SA
-
               </div>
               <span className="text-xs font-bold text-slate-800 hidden sm:inline">{adminName}</span>
             </div>
@@ -895,7 +1117,7 @@ export const SuperAdminDashboard: React.FC = () => {
         </header>
 
         {/* Content Views Body */}
-        <main className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-6">
+        <main className="flex-1 p-3 min-[501px]:p-8 pb-20 min-[501px]:pb-8 overflow-y-auto space-y-6">
           {/* =========================================================================
               VIEW 1: PLATFORM OVERVIEW (100% Dynamic from DB)
              ========================================================================= */}
@@ -904,7 +1126,7 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Header Title & Date Range */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Platform Overview</h2>
+                  <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">Platform Overview</h2>
                   <p className="text-xs text-slate-500 font-medium">Key metrics and real-time insights across your entire ecosystem.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -915,93 +1137,92 @@ export const SuperAdminDashboard: React.FC = () => {
               </div>
 
               {/* 8 Metric KPI Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {/* 1. GMV */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{overview?.kpi?.gmvFormatted || '₹0'}</p>
-                    <p className="text-xs font-bold text-slate-500">GMV</p>
-
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{overview?.kpi?.gmvFormatted || '₹0'}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">GMV</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
-                    <BookOpen className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 2. Platform Revenue */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{overview?.kpi?.revenueFormatted || '₹0'}</p>
-                    <p className="text-xs font-bold text-slate-500">Platform Revenue</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{overview?.kpi?.revenueFormatted || '₹0'}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Platform Revenue</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-                    <DollarSign className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                    <DollarSign className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 3. Take Rate */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{overview?.kpi?.takeRate || '17.2%'}</p>
-                    <p className="text-xs font-bold text-slate-500">Take Rate</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{overview?.kpi?.takeRate || '17.2%'}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Take Rate</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
-                    <PieChart className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <PieChart className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 4. Students */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{(overview?.kpi?.students ?? 0).toLocaleString()}</p>
-                    <p className="text-xs font-bold text-slate-500">Students</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{(overview?.kpi?.students ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Students</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center">
-                    <Users className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                    <Users className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 5. Creators */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{(overview?.kpi?.creators ?? 0).toLocaleString()}</p>
-                    <p className="text-xs font-bold text-slate-500">Creators</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{(overview?.kpi?.creators ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Creators</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-                    <GraduationCap className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                    <GraduationCap className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 6. Courses */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{(overview?.kpi?.courses ?? 0).toLocaleString()}</p>
-                    <p className="text-xs font-bold text-slate-500">Courses</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{(overview?.kpi?.courses ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Courses</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center">
-                    <BookOpen className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] flex items-center justify-center shrink-0">
+                    <BookOpen className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 7. Topics */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{(overview?.kpi?.topics ?? 0).toLocaleString()}</p>
-                    <p className="text-xs font-bold text-slate-500">Topics</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{(overview?.kpi?.topics ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Topics</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-cyan-50 border border-cyan-100 text-cyan-600 flex items-center justify-center">
-                    <Layers className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-cyan-50 border border-cyan-100 text-cyan-600 flex items-center justify-center shrink-0">
+                    <Layers className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* 8. Orders */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-black text-slate-900">{(overview?.kpi?.orders ?? 0).toLocaleString()}</p>
-                    <p className="text-xs font-bold text-slate-500">Orders</p>
+                <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 sm:space-y-1 min-w-0">
+                    <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{(overview?.kpi?.orders ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] sm:text-xs font-bold text-slate-500 truncate">Orders</p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
-                    <ShoppingBag className="w-6 h-6" />
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <ShoppingBag className="w-4.5 h-4.5 sm:w-6 sm:h-6" />
                   </div>
                 </div>
               </div>
@@ -1015,10 +1236,10 @@ export const SuperAdminDashboard: React.FC = () => {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h4 className="font-extrabold text-sm text-slate-900">
+                        <h4 className="font-semibold text-sm text-slate-900">
                           {verificationCounts.pending} Instructor Profile{verificationCounts.pending === 1 ? '' : 's'} Awaiting Verification
                         </h4>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-900">
                           Action Required
                         </span>
                       </div>
@@ -1043,12 +1264,12 @@ export const SuperAdminDashboard: React.FC = () => {
                 <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-extrabold text-slate-900 text-sm">GMV & Revenue Trend</h3>
+                      <h3 className="font-semibold text-slate-900 text-sm">GMV & Revenue Trend</h3>
                       <p className="text-xs text-slate-500">Gross transaction volume vs net platform revenue</p>
                     </div>
                     <div className="flex items-center gap-4 text-xs font-bold">
-                      <span className="flex items-center gap-1.5 text-indigo-600">
-                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span> GMV
+                      <span className="flex items-center gap-1.5 text-[#FA5A36]">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#FA5A36]"></span> GMV
                       </span>
                       <span className="flex items-center gap-1.5 text-emerald-600">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Platform Revenue
@@ -1071,7 +1292,7 @@ export const SuperAdminDashboard: React.FC = () => {
                         <div key={bIdx} className="flex-1 flex items-end justify-center gap-1.5 h-full">
                           <div
                             style={{ height: `${bar.gmv}%` }}
-                            className="w-3 sm:w-4 bg-indigo-600 rounded-t-lg transition-all hover:bg-indigo-700"
+                            className="w-3 sm:w-4 bg-[#FA5A36] rounded-t-lg transition-all hover:bg-[#E04322]"
                             title={`GMV: ${bar.gmv}%`}
                           ></div>
                           <div
@@ -1097,13 +1318,13 @@ export const SuperAdminDashboard: React.FC = () => {
                 {/* Users by Role Breakdown (4 Cols) - Fully Dynamic */}
                 <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-extrabold text-slate-900 text-sm">Users by Role</h3>
+                    <h3 className="font-semibold text-slate-900 text-sm">Users by Role</h3>
                     <p className="text-xs text-slate-500">Total {overview?.charts?.usersByRole?.total ?? 0} Registered Users</p>
                   </div>
 
                   <div className="py-4 flex items-center justify-center">
-                    <div className="w-36 h-36 rounded-full border-8 border-indigo-600 border-t-purple-500 border-r-emerald-500 border-l-cyan-400 flex flex-col items-center justify-center text-center shadow-xs">
-                      <span className="text-xl font-black text-slate-900">{overview?.charts?.usersByRole?.total ?? 0}</span>
+                    <div className="w-36 h-36 rounded-full border-8 border-[#FA5A36] border-t-[#0B1120] border-r-emerald-500 border-l-cyan-400 flex flex-col items-center justify-center text-center shadow-xs">
+                      <span className="text-xl font-semibold text-slate-900">{overview?.charts?.usersByRole?.total ?? 0}</span>
                       <span className="text-[10px] text-slate-500 uppercase font-bold">Total Users</span>
                     </div>
                   </div>
@@ -1111,7 +1332,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between text-slate-600">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-600"></span> Students
+                        <span className="w-2 h-2 rounded-full bg-[#FA5A36]"></span> Students
                       </span>
                       <strong className="text-slate-900">
                         {overview?.charts?.usersByRole?.students ?? 0} ({overview?.charts?.usersByRole?.studentsPercent ?? '0%'})
@@ -1119,7 +1340,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-purple-500"></span> Instructors
+                        <span className="w-2 h-2 rounded-full bg-[#FFF5F2]0"></span> Instructors
                       </span>
                       <strong className="text-slate-900">
                         {overview?.charts?.usersByRole?.instructors ?? 0} ({overview?.charts?.usersByRole?.instructorsPercent ?? '0%'})
@@ -1150,10 +1371,10 @@ export const SuperAdminDashboard: React.FC = () => {
                 {/* Top Performing Categories (6 Cols) */}
                 <div className="lg:col-span-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-extrabold text-slate-900 text-sm">Course Categories</h3>
+                    <h3 className="font-semibold text-slate-900 text-sm">Course Categories</h3>
                     <button
                       onClick={() => setActiveNav('courses')}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                      className="text-xs font-bold text-[#FA5A36] hover:text-[#FA5A36] cursor-pointer"
                     >
                       View All
                     </button>
@@ -1172,7 +1393,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                             <div
                               style={{ width: `${Math.max(15, cat.percentage)}%` }}
-                              className="h-full bg-indigo-600 rounded-full"
+                              className="h-full bg-[#FA5A36] rounded-full"
                             ></div>
                           </div>
                         </div>
@@ -1184,7 +1405,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 {/* Recent Activities (6 Cols) */}
                 <div className="lg:col-span-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-extrabold text-slate-900 text-sm">Recent Activities</h3>
+                    <h3 className="font-semibold text-slate-900 text-sm">Recent Activities</h3>
                     <span className="text-xs text-slate-400">Live Audit Stream</span>
                   </div>
 
@@ -1197,7 +1418,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           key={aIdx}
                           className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3 text-xs"
                         >
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                          <div className="w-8 h-8 rounded-lg bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                             <FileText className="w-4 h-4" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1222,14 +1443,14 @@ export const SuperAdminDashboard: React.FC = () => {
               {/* Header & Add User Action */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Users Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Users Management</h2>
                   <p className="text-xs text-slate-500">
                     Manage all students, instructors, and platform administrators with complete lifecycle governance.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowAddUserModal(true)}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all self-start sm:self-auto"
+                  className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all self-start sm:self-auto"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>+ Add User</span>
@@ -1250,7 +1471,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       onClick={() => setUserRoleFilter(tab.id as any)}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         userRoleFilter === tab.id
-                          ? 'bg-indigo-600 text-white shadow-xs'
+                          ? 'bg-[#FA5A36] text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                       }`}
                     >
@@ -1264,7 +1485,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     value={userStatusFilter}
                     onChange={(e) => setUserStatusFilter(e.target.value)}
                     aria-label="Filter users by status"
-                    className="p-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                    className="p-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="ALL">All Status</option>
                     <option value="ACTIVE">Active</option>
@@ -1279,7 +1500,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       placeholder="Search by name or email..."
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
-                      className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500"
+                      className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                     />
                   </div>
                 </div>
@@ -1312,11 +1533,11 @@ export const SuperAdminDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-slate-600">{u.email}</td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                               u.role === 'ADMIN'
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                ? 'bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]'
                                 : u.role === 'INSTRUCTOR'
-                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                ? 'bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]'
                                 : u.role === 'SUPER_ADMIN'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -1327,7 +1548,7 @@ export const SuperAdminDashboard: React.FC = () => {
                         </td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                               u.status === 'ACTIVE'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : u.status === 'TERMINATED'
@@ -1341,6 +1562,16 @@ export const SuperAdminDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-slate-500">{u.joinedDate}</td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {u.role === 'INSTRUCTOR' && (
+                              <button
+                                onClick={() => navigate(`/super-admin/instructor/${u.instructorId || u.id || u._id}`)}
+                                className="px-2.5 py-1 bg-[#FFF5F2] hover:bg-[#FFE6E0] text-[#FA5A36] font-bold rounded-lg text-[11px] cursor-pointer transition-colors border border-[#FFCCC2] flex items-center gap-1"
+                                title="View Instructor Dashboard"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Dashboard</span>
+                              </button>
+                            )}
                             {u.status === 'ACTIVE' ? (
                               <button
                                 onClick={() => setTerminateTarget(u)}
@@ -1379,7 +1610,7 @@ export const SuperAdminDashboard: React.FC = () => {
           {activeNav === 'creators' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Creators & Instructors</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Creators & Instructors</h2>
                 <p className="text-xs text-slate-500">Monitor instructor profiles, courses created, and payouts.</p>
               </div>
 
@@ -1399,32 +1630,49 @@ export const SuperAdminDashboard: React.FC = () => {
                       <tr key={u.id || u._id} className="hover:bg-slate-50/80">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
+                            <div className="w-8 h-8 rounded-full bg-[#FFE6E0] text-[#FA5A36] flex items-center justify-center font-bold text-xs">
                               {u.name?.[0] || 'I'}
                             </div>
-                            <div>
-                              <span className="font-bold text-slate-900 block">{u.name}</span>
-                              {u.headline && <span className="text-[10px] text-slate-400 font-medium">{u.headline}</span>}
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 block">{u.name}</span>
+                                  {u.instructorId && (
+                                    <span className="px-1.5 py-0.2 bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] text-[10px] font-mono font-bold rounded">
+                                      {u.instructorId}
+                                    </span>
+                                  )}
+                                </div>
+                                {u.headline && <span className="text-[10px] text-slate-400 font-medium">{u.headline}</span>}
+                              </div>
                             </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600">{u.email}</td>
+                          <td className="py-3 px-4">
+                            <span
+                              className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-max"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Verified Creator
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-500">{u.joinedDate}</td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => navigate(`/super-admin/instructor/${u.instructorId || u.id || u._id}`)}
+                                className="px-2.5 py-1 bg-[#FFF5F2] hover:bg-[#FFE6E0] text-[#FA5A36] font-bold rounded-lg text-[11px] cursor-pointer transition-colors border border-[#FFCCC2] flex items-center gap-1"
+                              title="View Instructor Dashboard"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View Dashboard</span>
+                            </button>
+                            <button
+                              onClick={() => setTerminateTarget(u)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-[11px] cursor-pointer border border-rose-200"
+                            >
+                              Manage
+                            </button>
                           </div>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">{u.email}</td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 w-max"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            Verified Creator
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-500">{u.joinedDate}</td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => setTerminateTarget(u)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-[11px] cursor-pointer border border-rose-200"
-                          >
-                            Manage
-                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1443,9 +1691,9 @@ export const SuperAdminDashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                   <div className="flex items-center gap-2.5">
-                    <h2 className="text-xl font-extrabold text-slate-900">Instructor Verification Queue</h2>
+                    <h2 className="text-xl font-semibold text-slate-900">Instructor Verification Queue</h2>
                     {verificationCounts.pending > 0 && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                         {verificationCounts.pending} Pending Review
                       </span>
                     )}
@@ -1459,7 +1707,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   onClick={() => loadData(false)}
                   className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto font-bold"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#FA5A36]' : ''}`} />
                   <span>Refresh Queue</span>
                 </button>
               </div>
@@ -1486,7 +1734,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       >
                         <span>{tab.label}</span>
                         <span
-                          className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                          className={`px-1.5 py-0.2 rounded-md text-[10px] font-semibold ${
                             isSelected
                               ? tab.id === 'PENDING'
                                 ? 'bg-amber-100 text-amber-800'
@@ -1510,7 +1758,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="Search by instructor, email, skill, company..."
                     value={verificationSearch}
                     onChange={(e) => setVerificationSearch(e.target.value)}
-                    className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500 w-full sm:w-64"
+                    className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36] w-full sm:w-64"
                   />
                 </div>
               </div>
@@ -1556,7 +1804,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             {/* Instructor Info */}
                             <td className="py-3.5 px-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs overflow-hidden">
+                                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#FA5A36] to-[#E04322] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs overflow-hidden">
                                   {inst.avatar ? (
                                     <img src={inst.avatar} alt={inst.name} className="w-full h-full object-cover" />
                                   ) : (
@@ -1564,7 +1812,14 @@ export const SuperAdminDashboard: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <span className="font-bold text-slate-900 block truncate max-w-[160px]">{inst.name}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-slate-900 block truncate max-w-[160px]">{inst.name}</span>
+                                    {inst.instructorId && (
+                                      <span className="px-1.5 py-0.2 bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] text-[10px] font-mono font-bold rounded">
+                                        {inst.instructorId}
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className="text-[11px] text-slate-500 block truncate max-w-[160px]">{inst.email}</span>
                                 </div>
                               </div>
@@ -1579,6 +1834,17 @@ export const SuperAdminDashboard: React.FC = () => {
                                 <p className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[180px]">
                                   {inst.workExperience || 'Educator'} • {inst.yearsOfExperience || inst.experience || '3+'} Yrs Exp
                                 </p>
+                                <div className="mt-1">
+                                  {inst.registrationFeePaid ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                      ✓ Fee Paid (₹{inst.registrationFeeAmount || 1000})
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                      Fee Unpaid
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
 
@@ -1589,7 +1855,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                   inst.expertise.slice(0, 3).map((tag) => (
                                     <span
                                       key={tag}
-                                      className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px] border border-indigo-100"
+                                      className="px-2 py-0.5 rounded-md bg-[#FFF5F2] text-[#FA5A36] font-bold text-[10px] border border-[#FFCCC2]"
                                     >
                                       {tag}
                                     </span>
@@ -1613,8 +1879,10 @@ export const SuperAdminDashboard: React.FC = () => {
                             {/* Status */}
                             <td className="py-3.5 px-4">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1.5 ${
-                                  isPending
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold inline-flex items-center gap-1.5 ${
+                                  status === 'CHANGES_REQUESTED'
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                    : isPending
                                     ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                     : isApproved
                                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
@@ -1623,11 +1891,23 @@ export const SuperAdminDashboard: React.FC = () => {
                               >
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
-                                    isPending ? 'bg-amber-500 animate-pulse' : isApproved ? 'bg-emerald-600' : 'bg-rose-600'
+                                    status === 'CHANGES_REQUESTED'
+                                      ? 'bg-amber-600'
+                                      : isPending
+                                      ? 'bg-amber-500 animate-pulse'
+                                      : isApproved
+                                      ? 'bg-emerald-600'
+                                      : 'bg-rose-600'
                                   }`}
                                 />
                                 <span>
-                                  {isPending ? 'Pending Review' : isApproved ? 'Verified & Unlocked' : 'Rejected'}
+                                  {status === 'CHANGES_REQUESTED'
+                                    ? 'Revisions Requested'
+                                    : isPending
+                                    ? 'Pending Review'
+                                    : isApproved
+                                    ? 'Verified & Unlocked'
+                                    : 'Rejected'}
                                 </span>
                               </span>
                             </td>
@@ -1637,15 +1917,25 @@ export const SuperAdminDashboard: React.FC = () => {
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
+                                  onClick={() => navigate(`/super-admin/instructor/${inst.instructorId || inst.userId || inst.id || inst._id}`)}
+                                  className="px-2.5 py-1.5 bg-[#FFF5F2] hover:bg-[#FFE6E0] text-[#FA5A36] font-bold rounded-lg text-xs inline-flex items-center gap-1 cursor-pointer transition border border-[#FFCCC2]"
+                                  title="View Instructor Dashboard"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Dashboard</span>
+                                </button>
+
+                                <button
+                                  type="button"
                                   onClick={() => handleOpenInspectVerification(inst)}
                                   className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-xs inline-flex items-center gap-1 cursor-pointer transition"
                                   title="Inspect full profile and credentials"
                                 >
-                                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                  <FileText className="w-3.5 h-3.5 text-slate-500" />
                                   <span>Inspect</span>
                                 </button>
 
-                                {isPending && (
+                                {(isPending || status === 'CHANGES_REQUESTED') && (
                                   <>
                                     <button
                                       type="button"
@@ -1656,6 +1946,18 @@ export const SuperAdminDashboard: React.FC = () => {
                                     >
                                       <CheckCircle2 className="w-3.5 h-3.5" />
                                       <span>Approve</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVerification(inst);
+                                        setShowRequestChangesModal(true);
+                                      }}
+                                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-xs border border-amber-200 cursor-pointer transition"
+                                      title="Request changes or additional documents"
+                                    >
+                                      <span>Changes</span>
                                     </button>
 
                                     <button
@@ -1690,7 +1992,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Courses Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Courses Management</h2>
                   <p className="text-xs text-slate-500">Manage all published, draft, and under-review courses across the platform.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -1701,14 +2003,14 @@ export const SuperAdminDashboard: React.FC = () => {
                       placeholder="Search courses..."
                       value={courseSearch}
                       onChange={(e) => setCourseSearch(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500"
+                      className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                     />
                   </div>
                   <select
                     value={courseStatusFilter}
                     onChange={(e) => setCourseStatusFilter(e.target.value)}
                     aria-label="Filter courses by status"
-                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="ALL">All Status</option>
                     <option value="PUBLISHED">Published</option>
@@ -1718,7 +2020,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
                   <button
                     onClick={() => setActiveNav('create-on-behalf')}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-[#FA5A36] to-[#E04322] hover:hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
                     title="Go to dedicated management section to create and publish a course on behalf of an instructor (Fee Waived)"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
@@ -1751,12 +2053,12 @@ export const SuperAdminDashboard: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-slate-700">{c.instructor}</td>
-                        <td className="py-3 px-4 text-indigo-600 font-bold">{c.category}</td>
-                        <td className="py-3 px-4 font-black text-slate-900">₹{c.price.toLocaleString('en-IN')}</td>
+                        <td className="py-3 px-4 text-[#FA5A36] font-bold">{c.category}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">₹{c.price.toLocaleString('en-IN')}</td>
                         <td className="py-3 px-4 font-bold text-slate-600">{c.enrolled}</td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                               c.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                             }`}
                           >
@@ -1767,7 +2069,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenReview(c.id || c._id)}
-                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[11px] cursor-pointer transition-colors"
+                              className="px-2.5 py-1 bg-[#FFF5F2] hover:bg-[#FFE6E0] text-[#FA5A36] font-bold rounded-lg text-[11px] cursor-pointer transition-colors"
                               title="Inspect curriculum, modules, topics and videos"
                             >
                               Inspect
@@ -1815,9 +2117,9 @@ export const SuperAdminDashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-extrabold text-slate-900">Course Approvals Queue</h2>
+                    <h2 className="text-xl font-semibold text-slate-900">Course Approvals Queue</h2>
                     {approvalsList.length > 0 && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                         {approvalsList.length} Pending
                       </span>
                     )}
@@ -1832,7 +2134,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     onClick={() => loadData(false)}
                     className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#FA5A36]' : ''}`} />
                     <span className="font-bold">Refresh Queue</span>
                   </button>
                 </div>
@@ -1880,7 +2182,7 @@ export const SuperAdminDashboard: React.FC = () => {
                               <div className="min-w-0">
                                 <span className="font-bold text-slate-900 block truncate max-w-xs">{c.title}</span>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                                  <span className="text-[10px] font-semibold text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md">
                                     {c.category}
                                   </span>
                                   <span className="text-[10px] font-medium text-slate-500">
@@ -1893,7 +2195,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-[#FFE6E0] text-[#FA5A36] font-bold text-xs flex items-center justify-center shrink-0">
                                 {c.instructor?.name?.[0] || 'I'}
                               </div>
                               <div className="min-w-0">
@@ -1916,7 +2218,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                   href={c.syllabusUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-[10px] text-indigo-600 font-bold hover:underline inline-flex items-center gap-1"
+                                  className="text-[10px] text-[#FA5A36] font-bold hover:underline inline-flex items-center gap-1"
                                 >
                                   <FileText className="w-3 h-3" />
                                   <span>View Syllabus Document</span>
@@ -1925,7 +2227,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 font-black text-slate-900">
+                          <td className="py-3.5 px-4 font-semibold text-slate-900">
                             ₹{(c.price ?? 0).toLocaleString('en-IN')}
                           </td>
 
@@ -1983,7 +2285,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Orders Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Orders Management</h2>
                   <p className="text-xs text-slate-500">View and audit all course and topic purchase transactions.</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1994,14 +2296,14 @@ export const SuperAdminDashboard: React.FC = () => {
                       placeholder="Search orders..."
                       value={orderSearch}
                       onChange={(e) => setOrderSearch(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500"
+                      className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                     />
                   </div>
                   <select
                     value={orderStatusFilter}
                     onChange={(e) => setOrderStatusFilter(e.target.value)}
                     aria-label="Filter orders by status"
-                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="ALL">All Status</option>
                     <option value="COMPLETED">Completed</option>
@@ -2034,12 +2336,12 @@ export const SuperAdminDashboard: React.FC = () => {
                     ) : (
                       ordersList.map((ord) => (
                         <tr key={ord.id} className="hover:bg-slate-50/80">
-                          <td className="py-3 px-4 font-bold text-indigo-600">{ord.orderId}</td>
+                          <td className="py-3 px-4 font-bold text-[#FA5A36]">{ord.orderId}</td>
                           <td className="py-3 px-4 font-bold text-slate-900">{ord.user}</td>
                           <td className="py-3 px-4 text-slate-600">{ord.courseTopic}</td>
-                          <td className="py-3 px-4 font-black text-slate-900">₹{ord.amount.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">₹{ord.amount.toLocaleString('en-IN')}</td>
                           <td className="py-3 px-4">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               {ord.status}
                             </span>
                           </td>
@@ -2054,26 +2356,26 @@ export const SuperAdminDashboard: React.FC = () => {
           )}
 
           {/* =========================================================================
-              VIEW: PLATFORM FEES (10% CASHFREE GATEWAY CHARGES & REVENUE LEDGER)
+              VIEW: INSTRUCTOR REGISTRATION FEES (DYNAMIC RATE SETTING & CASHFREE AUDIT LEDGER)
              ========================================================================= */}
           {activeNav === 'platform-fees' && (
             <div className="space-y-6 animate-in fade-in">
               {/* Header Banner */}
-              <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xl shadow-indigo-950/20">
+              <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xl shadow-slate-950/20">
                 <div className="space-y-2 max-w-xl">
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                      Live Cashfree PG Gateway
+                    <span className="px-3 py-1 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-[#FA5A36]/20 text-[#FA5A36] border border-[#FA5A36]/30">
+                      Dynamic Business Model
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-white border border-white/20">
-                      10% Take Rate Policy
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      Cashfree PG Verified
                     </span>
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-                    Platform Fees Collection & Gateway Ledger
+                  <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
+                    Instructor Registration Fee & Onboarding Gateway
                   </h2>
-                  <p className="text-xs text-indigo-200 leading-relaxed font-medium">
-                    Audit, track, and reconcile all 10% platform publishing fees charged to instructors upon course creation via Cashfree Payment Gateway.
+                  <p className="text-xs text-[#FFE6E0] leading-relaxed font-medium">
+                    Configure the dynamic one-time onboarding setup fee for new instructors. All signup checkouts pull this rate dynamically from the database.
                   </p>
                 </div>
 
@@ -2085,80 +2387,221 @@ export const SuperAdminDashboard: React.FC = () => {
                     className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/20 flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${platformFeesLoading ? 'animate-spin' : ''}`} />
-                    <span>Sync Gateway</span>
+                    <span>Sync Ledger</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Dynamic Rate Setting & Configuration Card (Super Admin Editable Control) */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-[#FA5A36]" />
+                      <span>Registration Fee Configuration (Super Admin Editable)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Change the one-time onboarding fee amount charged during instructor account setup. Updated rates apply instantly to all subsequent checkouts.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                        feeEnabledInput
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      {feeEnabledInput ? `Active Rate: ₹${Number(feeAmountInput).toLocaleString('en-IN')}` : 'Fee Disabled (₹0 Free Setup)'}
+                    </span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveRegistrationFeeSettings} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
+                    {/* Input Field: Fee Amount in INR */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Registration Fee Amount (INR ₹) <span className="text-[#FA5A36]">*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="e.g. 1499"
+                          value={feeAmountInput}
+                          onChange={(e) => setFeeAmountInput(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-base font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36] shadow-2xs"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Set to <strong>0</strong> to allow free zero-cost instructor registration.
+                      </p>
+                    </div>
+
+                    {/* Toggle Switch: Enable / Disable Fee Requirement */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Fee Enforcement Status
+                      </label>
+                      <div
+                        onClick={() => setFeeEnabledInput(!feeEnabledInput)}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer select-none transition-colors ${
+                          feeEnabledInput
+                            ? 'bg-emerald-50/60 border-emerald-200'
+                            : 'bg-slate-100 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              feeEnabledInput ? 'bg-emerald-600 text-white' : 'bg-slate-400 text-white'
+                            }`}
+                          >
+                            {feeEnabledInput ? '✓' : '×'}
+                          </div>
+                          <span className="text-xs font-bold text-slate-800">
+                            {feeEnabledInput ? 'Mandatory Fee Enabled' : 'Registration Fee Disabled'}
+                          </span>
+                        </div>
+                        <div
+                          className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors ${
+                            feeEnabledInput ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                              feeEnabledInput ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        When disabled, instructors are automatically activated with ₹0 fee waiver.
+                      </p>
+                    </div>
+
+                    {/* Save Button */}
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={feeSaving}
+                        className="w-full py-2.5 px-5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                      >
+                        {feeSaving ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4" />
+                        )}
+                        <span>{feeSaving ? 'Saving Rate...' : 'Save & Publish Rate'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Preset Quick Select Pills */}
+                  <div className="flex items-center gap-2 pt-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-slate-400">Quick Presets:</span>
+                    {[
+                      { label: 'Free (₹0)', value: 0 },
+                      { label: '₹499', value: 499 },
+                      { label: '₹999', value: 999 },
+                      { label: '₹1,499 (Default)', value: 1499 },
+                      { label: '₹2,499', value: 2499 },
+                      { label: '₹4,999', value: 4999 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => {
+                          setFeeAmountInput(preset.value);
+                          if (preset.value === 0) setFeeEnabledInput(false);
+                          else setFeeEnabledInput(true);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                          feeAmountInput === preset.value
+                            ? 'bg-[#FA5A36] text-white border-[#FA5A36]'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </form>
               </div>
 
               {/* 4 Summary KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
                   <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-                    <span>Total Fees Collected</span>
+                    <span>Total Registration Revenue</span>
                     <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                       <DollarSign className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-slate-900 tracking-tight">
+                  <p className="text-2xl font-semibold text-slate-900 tracking-tight">
                     ₹{platformFeesMetrics.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                    <span>✓ Realized platform revenue</span>
+                    <span>✓ Realized account setup revenue</span>
                   </p>
                 </div>
 
                 <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
                   <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-                    <span>Verified Transactions</span>
+                    <span>Paid & Active Instructors</span>
                     <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                       <CheckCircle2 className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-blue-700 tracking-tight">
+                  <p className="text-2xl font-semibold text-blue-700 tracking-tight">
                     {platformFeesMetrics.successfulTransactions}
                   </p>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    100% Cashfree verified payments
+                    Cashfree verified registrations
                   </p>
                 </div>
 
                 <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
                   <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-                    <span>Pending Processing</span>
+                    <span>Pending Checkouts</span>
                     <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                       <Clock className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-amber-600 tracking-tight">
+                  <p className="text-2xl font-semibold text-amber-600 tracking-tight">
                     {platformFeesMetrics.pendingTransactions}
                   </p>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Awaiting webhook / payment completion
+                    Awaiting payment completion
                   </p>
                 </div>
 
                 <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2">
                   <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-                    <span>Exited / Failed</span>
+                    <span>Dropped / Failed</span>
                     <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
                       <AlertTriangle className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-rose-600 tracking-tight">
+                  <p className="text-2xl font-semibold text-rose-600 tracking-tight">
                     {platformFeesMetrics.failedTransactions}
                   </p>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    User dropped or failed attempts
+                    Incomplete or expired attempts
                   </p>
                 </div>
               </div>
 
-              {/* Transactions Table & Filter Container */}
+              {/* Registration Fees Transactions Table & Filter Container */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900">Platform Fee Transactions</h3>
-                    <p className="text-xs text-slate-500">Every 10% platform fee transaction recorded with cryptographic audit parameters.</p>
+                    <h3 className="text-base font-semibold text-slate-900">Registration Fee Audit Ledger</h3>
+                    <p className="text-xs text-slate-500">Every instructor setup and registration fee transaction recorded with cryptographic audit parameters.</p>
                   </div>
 
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -2166,18 +2609,18 @@ export const SuperAdminDashboard: React.FC = () => {
                       <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Search by Order ID, Course, Instructor..."
+                        placeholder="Search by Order ID, Instructor Name, Email..."
                         value={platformFeesSearch}
                         onChange={(e) => setPlatformFeesSearch(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-indigo-500 w-full sm:w-64"
+                        className="bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-[#FA5A36] w-full sm:w-64"
                       />
                     </div>
 
                     <select
                       value={platformFeesStatusFilter}
                       onChange={(e) => setPlatformFeesStatusFilter(e.target.value)}
-                      aria-label="Filter platform fees by status"
-                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-indigo-500"
+                      aria-label="Filter registration fees by status"
+                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#FA5A36]"
                     >
                       <option value="ALL">All Status</option>
                       <option value="SUCCESS">Verified (SUCCESS)</option>
@@ -2186,6 +2629,17 @@ export const SuperAdminDashboard: React.FC = () => {
                       <option value="FAILED">Failed</option>
                       <option value="EXPIRED">Expired</option>
                     </select>
+
+                    <button
+                      type="button"
+                      onClick={handleRefreshRegistrationFees}
+                      disabled={platformFeesLoading}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-[#FA5A36] text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-colors shrink-0 disabled:opacity-50"
+                      title="Refresh Ledger Transactions"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${platformFeesLoading ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2194,13 +2648,13 @@ export const SuperAdminDashboard: React.FC = () => {
                     <thead>
                       <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
                         <th className="py-3 px-4">Order ID</th>
-                        <th className="py-3 px-4">Course</th>
                         <th className="py-3 px-4">Instructor</th>
-                        <th className="py-3 px-4">Course Price</th>
-                        <th className="py-3 px-4">Platform Fee (10%)</th>
+                        <th className="py-3 px-4">Fee Amount</th>
+                        <th className="py-3 px-4">Payment Method</th>
                         <th className="py-3 px-4">Cashfree Payment ID</th>
                         <th className="py-3 px-4">Status</th>
                         <th className="py-3 px-4">Date & Time</th>
+                        <th className="py-3 px-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2209,33 +2663,39 @@ export const SuperAdminDashboard: React.FC = () => {
                           <td colSpan={8} className="py-10 text-center text-slate-400 font-medium">
                             <div className="flex flex-col items-center justify-center gap-2">
                               <DollarSign className="w-8 h-8 text-slate-300" />
-                              <p className="text-slate-500 font-bold text-sm">No platform fee records found</p>
-                              <p className="text-xs text-slate-400">Transactions will automatically appear here as instructors pay fees via Cashfree.</p>
+                              <p className="text-slate-500 font-bold text-sm">No registration fee transactions found</p>
+                              <p className="text-xs text-slate-400">Transactions will automatically appear here as instructors pay their registration fee via Cashfree.</p>
                             </div>
                           </td>
                         </tr>
                       ) : (
                         platformFeesList.map((fee) => (
                           <tr key={fee.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-indigo-700">
-                              <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                            <td className="py-3 px-4 font-mono font-bold text-[#FA5A36]">
+                              <span className="bg-[#FFF5F2] px-2 py-0.5 rounded border border-[#FFCCC2] text-[11px]">
                                 {fee.orderId}
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <p className="font-bold text-slate-900 max-w-[200px] truncate" title={fee.courseTitle}>
-                                {fee.courseTitle}
-                              </p>
+                              <div className="flex items-center gap-2">
+                                {fee.instructor?.avatar ? (
+                                  <img src={fee.instructor.avatar} alt="Avatar" className="w-6 h-6 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center">
+                                    {(fee.instructor?.name || 'I')[0]}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="font-bold text-slate-800">{fee.instructor?.name || 'Instructor'}</p>
+                                  <p className="text-[10px] text-slate-400 truncate max-w-[160px]">{fee.instructor?.email || '—'}</p>
+                                </div>
+                              </div>
                             </td>
-                            <td className="py-3 px-4">
-                              <p className="font-bold text-slate-800">{fee.instructor?.name || 'Instructor'}</p>
-                              <p className="text-[10px] text-slate-400 truncate max-w-[150px]">{fee.instructor?.email || '—'}</p>
-                            </td>
-                            <td className="py-3 px-4 text-slate-700 font-medium">
-                              {fee.coursePrice > 0 ? `₹${fee.coursePrice.toLocaleString('en-IN')}` : 'FREE (₹0)'}
-                            </td>
-                            <td className="py-3 px-4 font-black text-emerald-700">
+                            <td className="py-3 px-4 font-semibold text-emerald-700 text-sm">
                               ₹{fee.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">
+                              {fee.paymentMethod || 'Cashfree PG'}
                             </td>
                             <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
                               {fee.cashfreePaymentId && fee.cashfreePaymentId !== '—' ? (
@@ -2248,7 +2708,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             </td>
                             <td className="py-3 px-4">
                               <span
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 ${
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold inline-flex items-center gap-1 ${
                                   fee.paymentStatus === 'SUCCESS'
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
                                     : fee.paymentStatus === 'PENDING'
@@ -2271,6 +2731,32 @@ export const SuperAdminDashboard: React.FC = () => {
                                 timeStyle: 'short',
                               }) : '—'}
                             </td>
+                            <td className="py-3 px-4">
+                              {fee.paymentStatus === 'PENDING' ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVerifyRegistrationOrder(fee.orderId, false)}
+                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-[10px] transition cursor-pointer whitespace-nowrap"
+                                    title="Check Cashfree PG status"
+                                  >
+                                    Verify PG
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVerifyRegistrationOrder(fee.orderId, true)}
+                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-[10px] transition cursor-pointer whitespace-nowrap"
+                                    title="Admin override: Settle and mark fee as paid"
+                                  >
+                                    Settle
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Settled
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -2287,7 +2773,7 @@ export const SuperAdminDashboard: React.FC = () => {
           {activeNav === 'refunds' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Refunds Management</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Refunds Management</h2>
                 <p className="text-xs text-slate-500">Process and review student refund requests with financial ledger reconciliation.</p>
               </div>
 
@@ -2314,14 +2800,14 @@ export const SuperAdminDashboard: React.FC = () => {
                     ) : (
                       refundsList.map((ref) => (
                         <tr key={ref.id} className="hover:bg-slate-50/80">
-                          <td className="py-3 px-4 font-bold text-indigo-600">{ref.refundId}</td>
+                          <td className="py-3 px-4 font-bold text-[#FA5A36]">{ref.refundId}</td>
                           <td className="py-3 px-4 text-slate-500">{ref.orderId}</td>
                           <td className="py-3 px-4 font-bold text-slate-900">{ref.user}</td>
-                          <td className="py-3 px-4 font-black text-slate-900">₹{ref.amount}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">₹{ref.amount}</td>
                           <td className="py-3 px-4 text-slate-600">{ref.reason}</td>
                           <td className="py-3 px-4">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
                                 ref.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                               }`}
                             >
@@ -2358,7 +2844,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Payouts Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Payouts Management</h2>
                   <p className="text-xs text-slate-500">Lifecycle: Available Earnings &rarr; Initiated / Processing &rarr; Verified Settlement (Completed)</p>
                 </div>
                 {payoutsData.payouts.some((p) => p.status === 'AVAILABLE' || p.status === 'PROCESSING' || p.status === 'PENDING') && (
@@ -2369,7 +2855,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       setBatchNotes('');
                       setShowBulkDisburseModal(true);
                     }}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20 transition active:scale-95"
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold text-xs rounded-xl flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20 transition active:scale-95"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Batch Settlement ({payoutsData.metrics.pendingPayouts})</span>
@@ -2379,20 +2865,20 @@ export const SuperAdminDashboard: React.FC = () => {
 
               {/* 4 Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
-                  <p className="text-2xl font-black text-indigo-700">{payoutsData.metrics.totalPayouts}</p>
+                <div className="p-4 rounded-2xl bg-[#FFF5F2] border border-[#FFCCC2]">
+                  <p className="text-2xl font-semibold text-[#FA5A36]">{payoutsData.metrics.totalPayouts}</p>
                   <p className="text-xs font-bold text-slate-500">Total Payouts</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100">
-                  <p className="text-2xl font-black text-amber-700">{payoutsData.metrics.pendingPayouts}</p>
+                  <p className="text-2xl font-semibold text-amber-700">{payoutsData.metrics.pendingPayouts}</p>
                   <p className="text-xs font-bold text-slate-500">Pending / Processing</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
-                  <p className="text-2xl font-black text-emerald-700">{payoutsData.metrics.completedPayouts}</p>
+                  <p className="text-2xl font-semibold text-emerald-700">{payoutsData.metrics.completedPayouts}</p>
                   <p className="text-xs font-bold text-slate-500">Completed (Settled)</p>
                 </div>
                 <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100">
-                  <p className="text-2xl font-black text-rose-700">{payoutsData.metrics.failedPayouts}</p>
+                  <p className="text-2xl font-semibold text-rose-700">{payoutsData.metrics.failedPayouts}</p>
                   <p className="text-xs font-bold text-slate-500">Failed / Rejected</p>
                 </div>
               </div>
@@ -2421,7 +2907,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     ) : (
                       payoutsData.payouts.map((p) => (
                         <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-4 font-bold text-indigo-600 font-mono">{p.payoutId}</td>
+                          <td className="py-3 px-4 font-bold text-[#FA5A36] font-mono">{p.payoutId}</td>
                           <td className="py-3 px-4 font-bold text-slate-900">
                             <div className="flex items-center gap-2">
                               {p.instructorAvatar ? (
@@ -2434,11 +2920,11 @@ export const SuperAdminDashboard: React.FC = () => {
                               <span>{p.instructor}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4 font-black text-slate-900">₹{p.amount.toLocaleString('en-IN')}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">₹{p.amount.toLocaleString('en-IN')}</td>
                           <td className="py-3 px-4 text-slate-600">{p.paymentMethod}</td>
                           <td className="py-3 px-4">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 ${
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase inline-flex items-center gap-1 ${
                                 p.status === 'COMPLETED'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   : p.status === 'PROCESSING' || p.status === 'PENDING'
@@ -2522,12 +3008,12 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Countries Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Countries Management</h2>
                   <p className="text-xs text-slate-500">Manage supported countries, regional compliance, and currency mappings.</p>
                 </div>
                 <button
                   onClick={() => setShowAddCountryModal(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Add Country</span>
@@ -2550,11 +3036,11 @@ export const SuperAdminDashboard: React.FC = () => {
                     {countriesList.map((c) => (
                       <tr key={c.id} className="hover:bg-slate-50/80">
                         <td className="py-3 px-4 font-bold text-slate-900">{c.name}</td>
-                        <td className="py-3 px-4 font-mono text-indigo-600 font-bold">{c.countryCode}</td>
+                        <td className="py-3 px-4 font-mono text-[#FA5A36] font-bold">{c.countryCode}</td>
                         <td className="py-3 px-4 font-bold text-slate-700">{c.currencyCode}</td>
                         <td className="py-3 px-4 text-slate-500">{c.timezone}</td>
                         <td className="py-3 px-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {c.status}
                           </span>
                         </td>
@@ -2585,12 +3071,12 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Currencies Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Currencies Management</h2>
                   <p className="text-xs text-slate-500">Manage supported currencies, symbols, and live exchange conversion rates.</p>
                 </div>
                 <button
                   onClick={() => setShowAddCurrencyModal(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Add Currency</span>
@@ -2613,11 +3099,11 @@ export const SuperAdminDashboard: React.FC = () => {
                     {currenciesList.map((curr) => (
                       <tr key={curr.id} className="hover:bg-slate-50/80">
                         <td className="py-3 px-4 font-bold text-slate-900">{curr.name}</td>
-                        <td className="py-3 px-4 font-mono text-indigo-600 font-bold">{curr.currencyCode}</td>
-                        <td className="py-3 px-4 font-black text-lg text-slate-800">{curr.symbol}</td>
+                        <td className="py-3 px-4 font-mono text-[#FA5A36] font-bold">{curr.currencyCode}</td>
+                        <td className="py-3 px-4 font-semibold text-lg text-slate-800">{curr.symbol}</td>
                         <td className="py-3 px-4 font-bold text-slate-900">{curr.exchangeRate}</td>
                         <td className="py-3 px-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {curr.status}
                           </span>
                         </td>
@@ -2648,12 +3134,12 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Taxes Management</h2>
+                  <h2 className="text-xl font-semibold text-slate-900">Taxes Management</h2>
                   <p className="text-xs text-slate-500">Configure regional tax rules, GST rates, VAT, and fiscal classifications.</p>
                 </div>
                 <button
                   onClick={() => setShowAddTaxModal(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Add Tax</span>
@@ -2676,11 +3162,11 @@ export const SuperAdminDashboard: React.FC = () => {
                     {taxesList.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-50/80">
                         <td className="py-3 px-4 font-bold text-slate-900">{t.countryCode}</td>
-                        <td className="py-3 px-4 font-bold text-indigo-600">{t.taxName}</td>
+                        <td className="py-3 px-4 font-bold text-[#FA5A36]">{t.taxName}</td>
                         <td className="py-3 px-4 text-slate-600">{t.taxType}</td>
-                        <td className="py-3 px-4 font-black text-slate-900">{t.taxRate}%</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">{t.taxRate}%</td>
                         <td className="py-3 px-4">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {t.status}
                           </span>
                         </td>
@@ -2710,17 +3196,17 @@ export const SuperAdminDashboard: React.FC = () => {
           {activeNav === 'analytics' && (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Platform Analytics & Growth</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Platform Analytics & Growth</h2>
                 <p className="text-xs text-slate-500">Perform growth and performance analytics across traffic, revenue, and learners.</p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <h4 className="font-extrabold text-slate-900 text-sm">Platform Trajectory</h4>
+                  <h4 className="font-semibold text-slate-900 text-sm">Platform Trajectory</h4>
                   <div className="h-56 flex items-end justify-between gap-3 pt-6 border-b border-slate-200 px-4">
                     {[10, 25, 45, 60, 75, 90, 100].map((h, i) => (
                       <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                        <div style={{ height: `${h}%` }} className="w-full max-w-[28px] bg-indigo-600 rounded-t-lg"></div>
+                        <div style={{ height: `${h}%` }} className="w-full max-w-[28px] bg-[#FA5A36] rounded-t-lg"></div>
                         <span className="text-[10px] text-slate-500 font-bold">W{i + 1}</span>
                       </div>
                     ))}
@@ -2728,9 +3214,9 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
 
                 <div className="lg:col-span-4 p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 flex flex-col justify-between">
-                  <h4 className="font-extrabold text-slate-900 text-sm">User Engagement</h4>
+                  <h4 className="font-semibold text-slate-900 text-sm">User Engagement</h4>
                   <div className="py-4 flex items-center justify-center">
-                    <div className="w-32 h-32 rounded-full border-8 border-indigo-600 border-t-purple-500 border-r-emerald-500 flex items-center justify-center text-center font-black text-slate-900">
+                    <div className="w-32 h-32 rounded-full border-8 border-[#FA5A36] border-t-[#0B1120] border-r-emerald-500 flex items-center justify-center text-center font-semibold text-slate-900">
                       100%
                     </div>
                   </div>
@@ -2756,7 +3242,7 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 border border-slate-200 shadow-2xl space-y-5 text-slate-900">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <h3 className="font-extrabold text-slate-900 text-base">Provision New User Account</h3>
+              <h3 className="font-semibold text-slate-900 text-base">Provision New User Account</h3>
               <button
                 onClick={() => setShowAddUserModal(false)}
                 className="text-slate-400 hover:text-slate-700 font-bold cursor-pointer"
@@ -2775,7 +3261,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. Suresh"
                     value={newUserForm.firstName}
                     onChange={(e) => setNewUserForm({ ...newUserForm, firstName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
                 <div>
@@ -2785,7 +3271,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. Sharma"
                     value={newUserForm.lastName}
                     onChange={(e) => setNewUserForm({ ...newUserForm, lastName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -2798,7 +3284,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   placeholder="user@platform.com"
                   value={newUserForm.email}
                   onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
 
@@ -2809,7 +3295,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   placeholder="Leave blank for TemporaryPass123!"
                   value={newUserForm.password}
                   onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
 
@@ -2819,7 +3305,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   <select
                     value={newUserForm.role}
                     onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as any })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="STUDENT">Student</option>
                     <option value="INSTRUCTOR">Instructor</option>
@@ -2851,7 +3337,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl shadow-xs cursor-pointer"
                 >
                   Provision Account
                 </button>
@@ -2872,7 +3358,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 <Ban className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Terminate {terminateTarget.role} Access</h3>
+                <h3 className="font-semibold text-slate-900 text-base">Terminate {terminateTarget.role} Access</h3>
                 <p className="text-xs text-slate-500">Target: {terminateTarget.name} ({terminateTarget.email})</p>
               </div>
             </div>
@@ -2887,7 +3373,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 rows={2}
                 value={terminateReason}
                 onChange={(e) => setTerminateReason(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
               />
             </div>
 
@@ -2917,7 +3403,7 @@ export const SuperAdminDashboard: React.FC = () => {
       {showAddCountryModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4 text-slate-900">
-            <h3 className="font-extrabold text-slate-900 text-base">Add Supported Country</h3>
+            <h3 className="font-semibold text-slate-900 text-base">Add Supported Country</h3>
             <form onSubmit={handleCreateCountry} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Country Name *</label>
@@ -2927,7 +3413,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   placeholder="e.g. Australia"
                   value={newCountryForm.name}
                   onChange={(e) => setNewCountryForm({ ...newCountryForm, name: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2939,7 +3425,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. AU"
                     value={newCountryForm.countryCode}
                     onChange={(e) => setNewCountryForm({ ...newCountryForm, countryCode: e.target.value.toUpperCase() })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
                 <div>
@@ -2950,7 +3436,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. AUD"
                     value={newCountryForm.currencyCode}
                     onChange={(e) => setNewCountryForm({ ...newCountryForm, currencyCode: e.target.value.toUpperCase() })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -2962,7 +3448,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-xs">
+                <button type="submit" className="px-5 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-xs">
                   Save Country
                 </button>
               </div>
@@ -2977,7 +3463,7 @@ export const SuperAdminDashboard: React.FC = () => {
       {showAddCurrencyModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4 text-slate-900">
-            <h3 className="font-extrabold text-slate-900 text-base">Add Currency</h3>
+            <h3 className="font-semibold text-slate-900 text-base">Add Currency</h3>
             <form onSubmit={handleCreateCurrency} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Currency Name *</label>
@@ -2987,7 +3473,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   placeholder="e.g. Australian Dollar"
                   value={newCurrencyForm.name}
                   onChange={(e) => setNewCurrencyForm({ ...newCurrencyForm, name: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2999,7 +3485,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. AUD"
                     value={newCurrencyForm.currencyCode}
                     onChange={(e) => setNewCurrencyForm({ ...newCurrencyForm, currencyCode: e.target.value.toUpperCase() })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
                 <div>
@@ -3010,7 +3496,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. A$"
                     value={newCurrencyForm.symbol}
                     onChange={(e) => setNewCurrencyForm({ ...newCurrencyForm, symbol: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -3022,7 +3508,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   required
                   value={newCurrencyForm.exchangeRate}
                   onChange={(e) => setNewCurrencyForm({ ...newCurrencyForm, exchangeRate: Number(e.target.value) })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
@@ -3033,7 +3519,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-xs">
+                <button type="submit" className="px-5 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-xs">
                   Save Currency
                 </button>
               </div>
@@ -3048,7 +3534,7 @@ export const SuperAdminDashboard: React.FC = () => {
       {showAddTaxModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-2xl space-y-4 text-slate-900">
-            <h3 className="font-extrabold text-slate-900 text-base">Add Tax Rule</h3>
+            <h3 className="font-semibold text-slate-900 text-base">Add Tax Rule</h3>
             <form onSubmit={handleCreateTax} className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Country Name *</label>
@@ -3058,7 +3544,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   placeholder="e.g. Germany"
                   value={newTaxForm.countryCode}
                   onChange={(e) => setNewTaxForm({ ...newTaxForm, countryCode: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -3070,7 +3556,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="e.g. MwSt / VAT"
                     value={newTaxForm.taxName}
                     onChange={(e) => setNewTaxForm({ ...newTaxForm, taxName: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
                 <div>
@@ -3081,7 +3567,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     placeholder="19"
                     value={newTaxForm.taxRate}
                     onChange={(e) => setNewTaxForm({ ...newTaxForm, taxRate: Number(e.target.value) })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-indigo-500"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -3093,7 +3579,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-xs">
+                <button type="submit" className="px-5 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-xs">
                   Save Tax
                 </button>
               </div>
@@ -3111,11 +3597,11 @@ export const SuperAdminDashboard: React.FC = () => {
             {/* Header */}
             <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
+                <div className="w-10 h-10 rounded-xl bg-[#FA5A36] text-white flex items-center justify-center shadow-md">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">Course Verification & Review</h3>
+                  <h3 className="font-semibold text-slate-900 text-base">Course Verification & Review</h3>
                   <p className="text-xs text-slate-500 font-medium">
                     Inspect full course content, curriculum hierarchy, and instructor credentials.
                   </p>
@@ -3137,20 +3623,20 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="p-6 overflow-y-auto space-y-6 text-xs flex-1">
               {loadingReview ? (
                 <div className="py-20 text-center text-slate-400 space-y-2">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-600" />
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#FA5A36]" />
                   <p className="font-bold">Loading full course curriculum & telemetry...</p>
                 </div>
               ) : selectedReviewCourse ? (
                 <div className="space-y-6">
                   {/* Instructor Snapshot */}
-                  <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex items-center justify-between">
+                  <div className="p-4 rounded-2xl bg-[#FFF5F2]/50 border border-[#FFCCC2] flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-sm">
+                      <div className="w-11 h-11 rounded-xl bg-[#FA5A36] text-white font-semibold text-sm flex items-center justify-center shadow-sm">
                         {selectedReviewCourse.instructor?.firstName?.[0] || 'I'}
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Instructor</span>
-                        <h4 className="font-black text-sm text-slate-900">
+                        <span className="text-[10px] font-bold text-[#FA5A36] uppercase tracking-wider">Instructor</span>
+                        <h4 className="font-semibold text-sm text-slate-900">
                           {selectedReviewCourse.instructor?.firstName} {selectedReviewCourse.instructor?.lastName}
                         </h4>
                         <p className="text-slate-500 font-medium">{selectedReviewCourse.instructor?.email}</p>
@@ -3159,7 +3645,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
                     <div className="text-right">
                       <span className="text-[10px] font-bold text-slate-400 block uppercase">Course Pricing</span>
-                      <span className="text-lg font-black text-slate-900">
+                      <span className="text-lg font-semibold text-slate-900">
                         ₹{(selectedReviewCourse.course?.coursePrice ?? 0).toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -3167,7 +3653,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
                   {/* Course Details Card */}
                   <div className="space-y-3">
-                    <h4 className="font-extrabold text-sm text-slate-900">Course Overview</h4>
+                    <h4 className="font-semibold text-sm text-slate-900">Course Overview</h4>
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
                       <div>
                         <span className="font-bold text-slate-400 uppercase text-[10px] block">Title</span>
@@ -3212,7 +3698,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             href={selectedReviewCourse.course.syllabusUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-bold text-indigo-600 hover:bg-slate-50 transition-colors shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-bold text-[#FA5A36] hover:bg-slate-50 transition-colors shadow-2xs"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             <span>Download / Preview Uploaded Syllabus</span>
@@ -3225,7 +3711,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   {/* Modules & Topics Hierarchy */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-extrabold text-sm text-slate-900">
+                      <h4 className="font-semibold text-sm text-slate-900">
                         Curriculum Breakdown ({selectedReviewCourse.modules?.length || 0} Modules)
                       </h4>
                     </div>
@@ -3246,14 +3732,14 @@ export const SuperAdminDashboard: React.FC = () => {
                             </div>
 
                             {mod.topics && mod.topics.length > 0 && (
-                              <div className="pl-3 border-l-2 border-indigo-200 space-y-2 mt-2">
+                              <div className="pl-3 border-l-2 border-[#FFCCC2] space-y-2 mt-2">
                                 {mod.topics.map((top: any, tIdx: number) => (
                                   <div key={top._id || tIdx} className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
                                     <div className="flex items-center justify-between">
                                       <p className="font-bold text-slate-800 text-[11px]">
                                         Topic {mIdx + 1}.{tIdx + 1}: {top.title}
                                       </p>
-                                      <span className="text-[10px] font-bold text-indigo-600">
+                                      <span className="text-[10px] font-bold text-[#FA5A36]">
                                         {top.isFree ? 'Free Preview' : `₹${(top.price ?? 0).toLocaleString()}`}
                                       </span>
                                     </div>
@@ -3263,7 +3749,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                         {top.lessons.map((les: any, lIdx: number) => (
                                           <div key={les._id || lIdx} className="flex items-center justify-between text-[10px] text-slate-600 pl-2">
                                             <span className="flex items-center gap-1.5">
-                                              <Video className="w-3 h-3 text-indigo-500" />
+                                              <Video className="w-3 h-3 text-[#FA5A36]" />
                                               <span>{les.title}</span>
                                             </span>
                                             <span className="text-slate-400">{les.duration} mins</span>
@@ -3336,7 +3822,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-slate-900 text-base">Reject Course Submission</h3>
+                <h3 className="font-semibold text-slate-900 text-base">Reject Course Submission</h3>
                 <p className="text-xs text-slate-500 font-medium">Provide constructive feedback for the instructor.</p>
               </div>
             </div>
@@ -3388,7 +3874,7 @@ export const SuperAdminDashboard: React.FC = () => {
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-md overflow-hidden">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#FA5A36] to-[#E04322] text-white flex items-center justify-center font-semibold text-xl shrink-0 shadow-md overflow-hidden">
                   {selectedVerification.avatar ? (
                     <img src={selectedVerification.avatar} alt={selectedVerification.name} className="w-full h-full object-cover" />
                   ) : (
@@ -3397,9 +3883,9 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-slate-900 text-lg">{selectedVerification.name}</h3>
+                    <h3 className="font-semibold text-slate-900 text-lg">{selectedVerification.name}</h3>
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
                         (selectedVerification.verificationStatus || '').toUpperCase() === 'VERIFIED' || (selectedVerification.verificationStatus || '').toUpperCase() === 'APPROVED'
                           ? 'bg-emerald-100 text-emerald-800'
                           : (selectedVerification.verificationStatus || '').toUpperCase() === 'REJECTED'
@@ -3433,14 +3919,14 @@ export const SuperAdminDashboard: React.FC = () => {
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current Organization / Employer</span>
                   <p className="font-bold text-slate-900 text-sm">
-                    {selectedVerification.currentOrganization || 'Independent / Freelance'}
+                    {selectedVerification.currentOrganization || 'Independent Practitioner / Freelance'}
                   </p>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Job Title / Work Experience</span>
                   <p className="font-bold text-slate-900 text-sm">
-                    {selectedVerification.workExperience || 'Educator / Specialist'}
+                    {selectedVerification.currentJobTitle || selectedVerification.workExperience || 'Educator / Specialist'}
                   </p>
                 </div>
 
@@ -3459,7 +3945,182 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Field Group 2: Declared Expertise & Skills */}
+              {/* Field Group 2: Cashfree Registration Fee & Readiness Score */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Setup Fee</span>
+                  {selectedVerification.registrationFeePaid ? (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Paid ₹{selectedVerification.registrationFeeAmount || 1000} (Cashfree)
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold text-xs">
+                      Fee Unpaid
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Application Readiness Score</span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-extrabold text-xs flex items-center gap-1">
+                      <Award className="w-3.5 h-3.5 text-indigo-600" />
+                      {selectedVerification.readinessReport?.score ?? (selectedVerification.registrationFeePaid ? 92 : 'Locked')} / 100
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">Evaluation Criteria v1.0</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Readiness Breakdown (if available) */}
+              {selectedVerification.readinessReport?.breakdown && (
+                <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-2">
+                  <span className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">Readiness Breakdown:</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Core Profile: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.coreProfile?.score}/{selectedVerification.readinessReport.breakdown.coreProfile?.maxScore}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Skills: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.skillsAndSubjects?.score}/{selectedVerification.readinessReport.breakdown.skillsAndSubjects?.maxScore}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Experience: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.experienceAndBio?.score}/{selectedVerification.readinessReport.breakdown.experienceAndBio?.maxScore}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Links: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.professionalLinks?.score}/{selectedVerification.readinessReport.breakdown.professionalLinks?.maxScore}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Gov ID: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.governmentId?.score}/{selectedVerification.readinessReport.breakdown.governmentId?.maxScore}</strong>
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-indigo-100">
+                      Docs: <strong className="text-slate-900">{selectedVerification.readinessReport.breakdown.supportingDocuments?.score}/{selectedVerification.readinessReport.breakdown.supportingDocuments?.maxScore}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Field Group 3: Verified Professional Links */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Professional Profiles & Portfolio
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedVerification.linkedinUrl ? (
+                    <a
+                      href={selectedVerification.linkedinUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 font-bold hover:bg-sky-100 transition"
+                    >
+                      <LinkedinIcon className="w-3.5 h-3.5 text-sky-600" />
+                      <span>LinkedIn Profile</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">No LinkedIn provided</span>
+                  )}
+
+                  {selectedVerification.githubUrl ? (
+                    <a
+                      href={selectedVerification.githubUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold hover:bg-slate-200 transition"
+                    >
+                      <GithubIcon className="w-3.5 h-3.5 text-slate-800" />
+                      <span>GitHub</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : null}
+
+                  {selectedVerification.portfolioUrl ? (
+                    <a
+                      href={selectedVerification.portfolioUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 font-bold hover:bg-purple-100 transition"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>Portfolio</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Field Group 4: Verification Documents & Government ID */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Verification Documents (Private Storage)
+                </span>
+                <div className="space-y-2">
+                  {/* Government ID */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block">
+                        Government Identity Proof ({selectedVerification.governmentId?.idType || 'ID Proof'})
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        {selectedVerification.governmentId?.fileName || 'Document on file'}
+                      </p>
+                    </div>
+                    {selectedVerification.governmentId ? (
+                      <button
+                        type="button"
+                        disabled={previewingDocId === 'GOVERNMENT_ID'}
+                        onClick={() =>
+                          handlePreviewDocument(
+                            selectedVerification.id || selectedVerification._id || selectedVerification.profileId || selectedVerification.userId,
+                            'GOVERNMENT_ID',
+                            selectedVerification.governmentId?.fileName
+                          )
+                        }
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <FileCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{previewingDocId === 'GOVERNMENT_ID' ? 'Opening...' : 'Preview ID'}</span>
+                      </button>
+                    ) : (
+                      <span className="text-amber-600 font-bold text-[11px]">Not Uploaded</span>
+                    )}
+                  </div>
+
+                  {/* Supporting Documents (Resume, etc.) */}
+                  {selectedVerification.verificationDocuments && selectedVerification.verificationDocuments.length > 0 ? (
+                    selectedVerification.verificationDocuments.map((doc: any, i: number) => {
+                      const docId = doc._id || doc.id || doc.documentType;
+                      return (
+                        <div key={i} className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-900 block">{doc.title || doc.documentType}</span>
+                            <p className="text-[11px] text-slate-500">{doc.fileName || 'Document on file'}</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={previewingDocId === docId}
+                            onClick={() =>
+                              handlePreviewDocument(
+                                selectedVerification.id || selectedVerification._id || selectedVerification.profileId || selectedVerification.userId,
+                                docId,
+                                doc.fileName
+                              )
+                            }
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-slate-600" />
+                            <span>{previewingDocId === docId ? 'Opening...' : 'Preview Document'}</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Field Group 5: Declared Expertise & Skills */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Declared Technical Expertise & Skills ({selectedVerification.expertise?.length || 0})
@@ -3469,7 +4130,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     selectedVerification.expertise.map((tag) => (
                       <span
                         key={tag}
-                        className="px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-xs shadow-2xs"
+                        className="px-3 py-1 rounded-xl bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] font-semibold text-xs shadow-2xs"
                       >
                         {tag}
                       </span>
@@ -3480,7 +4141,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Field Group 3: Complete Professional Bio */}
+              {/* Field Group 6: Complete Professional Bio */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   Full Professional Biography (Submitted during onboarding)
@@ -3509,13 +4170,23 @@ export const SuperAdminDashboard: React.FC = () => {
                 Close
               </button>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRequestChangesModal(true);
+                  }}
+                  className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs border border-amber-200 cursor-pointer transition"
+                >
+                  Request Changes
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     setShowRejectVerificationModal(true);
                   }}
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs border border-rose-200 cursor-pointer transition"
+                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs border border-rose-200 cursor-pointer transition"
                 >
                   Reject Application
                 </button>
@@ -3524,7 +4195,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   type="button"
                   disabled={processingVerification}
                   onClick={() => handleApproveInstructor(selectedVerification.id || selectedVerification._id || selectedVerification.userId)}
-                  className="flex-1 sm:flex-initial px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 transition"
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 transition"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Approve & Unlock Dashboard</span>
@@ -3540,7 +4211,7 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-extrabold text-slate-900 text-sm">Reject Instructor Application</h3>
+              <h3 className="font-semibold text-slate-900 text-sm">Reject Instructor Application</h3>
               <button
                 type="button"
                 onClick={() => setShowRejectVerificationModal(false)}
@@ -3585,17 +4256,67 @@ export const SuperAdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Request Changes Modal */}
+      {showRequestChangesModal && selectedVerification && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900 text-sm">Request Application Revisions</h3>
+              <button
+                type="button"
+                onClick={() => setShowRequestChangesModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600">
+                Specify what corrections or additional verification documents are needed from <strong className="text-slate-900">{selectedVerification.name}</strong>. An email notification and dashboard alert will be sent immediately.
+              </p>
+              <textarea
+                rows={4}
+                required
+                placeholder="e.g. Please upload a clearer copy of your Government ID, and provide your GitHub/Portfolio link..."
+                value={verificationChangesFeedback}
+                onChange={(e) => setVerificationChangesFeedback(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRequestChangesModal(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs cursor-pointer hover:bg-slate-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={processingVerification}
+                onClick={handleRequestChangesInstructor}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer transition disabled:opacity-60"
+              >
+                {processingVerification ? 'Sending...' : 'Send Revision Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Single Payout Settlement Modal (Strict Lifecycle with Mandatory UTR & Cashfree Gateway) */}
       {showDisburseModal && selectedPayoutToDisburse && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-semibold">
                   ₹
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Instructor Payout Settlement</h3>
+                  <h3 className="font-semibold text-slate-900 text-sm">Instructor Payout Settlement</h3>
                   <p className="text-[11px] text-slate-500 font-mono">{selectedPayoutToDisburse.payoutId}</p>
                 </div>
               </div>
@@ -3618,11 +4339,11 @@ export const SuperAdminDashboard: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-emerald-900 font-semibold">Settlement Amount:</span>
-                <span className="text-base text-emerald-700 font-black">₹{selectedPayoutToDisburse.amount.toLocaleString('en-IN')}</span>
+                <span className="text-base text-emerald-700 font-semibold">₹{selectedPayoutToDisburse.amount.toLocaleString('en-IN')}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-emerald-900 font-semibold">Current State:</span>
-                <span className="text-xs font-black uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-semibold uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
                   {selectedPayoutToDisburse.status}
                 </span>
               </div>
@@ -3701,7 +4422,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 type="button"
                 disabled={processingPayout}
                 onClick={handleConfirmDisburse}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
@@ -3723,11 +4444,11 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center font-black">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center font-semibold">
                   ₹
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">Batch Payout Settlement</h3>
+                  <h3 className="font-semibold text-slate-900 text-sm">Batch Payout Settlement</h3>
                   <p className="text-[11px] text-slate-500">Lifecycle-driven batch settlement with mandatory UTR audit</p>
                 </div>
               </div>
@@ -3743,7 +4464,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-emerald-900 font-semibold">Total Pending / Processing:</span>
-                <span className="text-xl text-emerald-700 font-black">{payoutsData.metrics.pendingPayouts}</span>
+                <span className="text-xl text-emerald-700 font-semibold">{payoutsData.metrics.pendingPayouts}</span>
               </div>
               <p className="text-[11px] text-emerald-800">
                 You can either initiate the batch into <strong>PROCESSING</strong> state, or confirm full batch settlement with a verified Bank Batch UTR.
@@ -3815,7 +4536,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   type="button"
                   disabled={processingPayout}
                   onClick={handleConfirmBatchDisburse}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center gap-1.5 cursor-pointer transition disabled:opacity-60"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{processingPayout ? 'Settling...' : 'Confirm Batch Settlement'}</span>
@@ -3825,6 +4546,56 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Mobile Bottom Dock (<= 500px) */}
+      <div className="min-[501px]:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-40 px-2 py-1.5 flex items-center justify-around shadow-lg">
+        <button
+          onClick={() => setActiveNav('dashboard')}
+          className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+            activeNav === 'dashboard' ? 'text-[#FA5A36] font-bold' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span className="text-[10px]">Overview</span>
+        </button>
+        <button
+          onClick={() => setActiveNav('users')}
+          className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+            activeNav === 'users' ? 'text-[#FA5A36] font-bold' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span className="text-[10px]">Users</span>
+        </button>
+        <button
+          onClick={() => setActiveNav('instructor-verifications')}
+          className={`relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+            activeNav === 'instructor-verifications' ? 'text-[#FA5A36] font-bold' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <UserCheck className="w-4 h-4" />
+          <span className="text-[10px]">Verify</span>
+          {verificationCounts.pending > 0 && (
+            <span className="absolute -top-0.5 right-2 w-2 h-2 rounded-full bg-[#FA5A36]" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveNav('courses')}
+          className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+            activeNav === 'courses' ? 'text-[#FA5A36] font-bold' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span className="text-[10px]">Courses</span>
+        </button>
+        <button
+          onClick={() => setMobileDrawerOpen(true)}
+          className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-slate-500 font-medium hover:text-slate-800 transition-colors cursor-pointer"
+        >
+          <Menu className="w-4 h-4" />
+          <span className="text-[10px]">More</span>
+        </button>
+      </div>
     </div>
   );
 };

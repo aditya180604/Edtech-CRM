@@ -463,14 +463,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
 
           <div className="space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
                 Create Course on Behalf of Instructor
               </h2>
-              <span className="px-3 py-1 rounded-full text-[11px] font-black bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-900 border border-purple-200 flex items-center gap-1.5 shadow-2xs">
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-900 border border-[#FFCCC2] flex items-center gap-1.5 shadow-2xs">
+                <Sparkles className="w-3.5 h-3.5 text-[#FA5A36]" />
                 Root Admin Mode
               </span>
-              <span className="px-3 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 Fee Waived (₹0)
               </span>
             </div>
@@ -496,7 +496,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             <button
               type="button"
               onClick={() => setCreateStep(createStep + 1)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
             >
               <span>Next Step</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -536,14 +536,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
       {/* =========================================================================
           TARGET INSTRUCTOR ASSIGNMENT CARD (Prominent Selector with Details)
          ========================================================================= */}
-      <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-blue-50/70 rounded-3xl border border-indigo-200 p-6 shadow-xs space-y-4">
+      <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-blue-50/70 rounded-3xl border border-[#FFCCC2] p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-[#FA5A36] text-white flex items-center justify-center font-semibold text-xs shadow-sm">
               <UserCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">
+              <h3 className="font-semibold text-slate-900 text-sm">
                 Target Instructor Assignment <span className="text-red-500">*</span>
               </h3>
               <p className="text-[11px] text-slate-600 font-medium">
@@ -552,7 +552,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             </div>
           </div>
 
-          <span className="self-start sm:self-auto text-[11px] font-bold text-indigo-800 bg-white/90 px-3 py-1 rounded-full border border-indigo-200 shadow-2xs">
+          <span className="self-start sm:self-auto text-[11px] font-bold text-[#C23315] bg-white/90 px-3 py-1 rounded-full border border-[#FFCCC2] shadow-2xs">
             {instructors.length} Registered Instructors Available
           </span>
         </div>
@@ -571,7 +571,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <select
                 value={selectedInstructorId}
                 onChange={(e) => setSelectedInstructorId(e.target.value)}
-                className="w-full p-3 bg-white border border-indigo-200 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs cursor-pointer"
+                className="w-full p-3 bg-white border border-[#FFCCC2] rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-2xs cursor-pointer"
               >
                 {filteredInstructors.map((inst) => {
                   const id = inst.id || inst._id;
@@ -586,8 +586,8 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             </div>
 
             {selectedInstructor && (
-              <div className="md:col-span-4 p-3 bg-white/90 rounded-2xl border border-indigo-100 flex items-center gap-3 shadow-2xs">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+              <div className="md:col-span-4 p-3 bg-white/90 rounded-2xl border border-[#FFCCC2] flex items-center gap-3 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-[#FA5A36] text-white font-semibold text-xs flex items-center justify-center shrink-0 shadow-xs">
                   {selectedInstructor.profilePhoto ? (
                     <img
                       src={selectedInstructor.profilePhoto}
@@ -599,13 +599,13 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-extrabold text-xs text-slate-900 truncate">
+                  <p className="font-semibold text-xs text-slate-900 truncate">
                     {instructorDisplayName}
                   </p>
                   <p className="text-[10px] text-slate-500 truncate">
                     {selectedInstructor.email}
                   </p>
-                  <span className="inline-block text-[9px] font-black text-emerald-700 uppercase">
+                  <span className="inline-block text-[9px] font-semibold text-emerald-700 uppercase">
                     Fee Waived • Direct Assignment
                   </span>
                 </div>
@@ -637,16 +637,16 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               onClick={() => setCreateStep(s.step)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none ${
                 createStep === s.step
-                  ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 shadow-2xs'
+                  ? 'bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] shadow-2xs'
                   : createStep > s.step
                   ? 'bg-emerald-50/60 border border-emerald-100 text-emerald-800'
                   : 'bg-transparent border border-transparent text-slate-600 hover:bg-slate-50'
               }`}
             >
               <span
-                className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
+                className={`w-5 h-5 rounded-full flex items-center justify-center font-semibold text-[11px] shrink-0 ${
                   createStep === s.step
-                    ? 'bg-indigo-600 text-white'
+                    ? 'bg-[#FA5A36] text-white'
                     : createStep > s.step
                     ? 'bg-emerald-500 text-white'
                     : 'bg-slate-100 text-slate-500'
@@ -671,11 +671,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 1 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Basic Information</h3>
+                <h3 className="text-base font-semibold text-slate-900">Basic Information</h3>
                 <p className="text-slate-500 font-medium text-xs">Add core course title, descriptions, category and thumbnail.</p>
               </div>
             </div>
@@ -691,7 +691,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     placeholder="e.g. Master Full-Stack Web Development & Microservices"
                     value={courseFormData.title}
                     onChange={(e) => setCourseFormData({ ...courseFormData, title: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                   />
                 </div>
 
@@ -708,7 +708,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     placeholder="Brief 1-2 sentence overview shown on catalog cards..."
                     value={courseFormData.shortDescription}
                     onChange={(e) => setCourseFormData({ ...courseFormData, shortDescription: e.target.value })}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs resize-none"
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs resize-none"
                   />
                 </div>
 
@@ -767,7 +767,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                           type="button"
                           onClick={() => setThumbUploadTab('url')}
                           className={`px-3 py-1.5 rounded-lg font-bold text-xs cursor-pointer transition-colors ${
-                            thumbUploadTab === 'url' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                            thumbUploadTab === 'url' ? 'bg-[#FA5A36] text-white' : 'text-slate-600 hover:bg-slate-200'
                           }`}
                         >
                           Web URL
@@ -776,7 +776,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                           type="button"
                           onClick={() => setThumbUploadTab('device')}
                           className={`px-3 py-1.5 rounded-lg font-bold text-xs cursor-pointer transition-colors ${
-                            thumbUploadTab === 'device' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                            thumbUploadTab === 'device' ? 'bg-[#FA5A36] text-white' : 'text-slate-600 hover:bg-slate-200'
                           }`}
                         >
                           Device File
@@ -802,7 +802,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         </div>
                       ) : (
                         <label className="flex flex-col items-center justify-center p-6 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 cursor-pointer text-center">
-                          <Upload className="w-6 h-6 text-indigo-600 mb-1" />
+                          <Upload className="w-6 h-6 text-[#FA5A36] mb-1" />
                           <span className="font-bold text-slate-800 text-xs">Click to browse image from device</span>
                           <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, WebP up to 5MB</span>
                           <input type="file" accept="image/*" onChange={handleDeviceFileUpload} className="hidden" />
@@ -883,7 +883,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       placeholder="e.g. Thursday, 5th September | 7:30PM"
                       value={courseFormData.schedule}
                       onChange={(e) => setCourseFormData({ ...courseFormData, schedule: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">Displayed at the top of the course card.</p>
                   </div>
@@ -896,7 +896,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       placeholder="e.g. Pro Mentor, Top 1% Mentor"
                       value={courseFormData.mentorStatus}
                       onChange={(e) => setCourseFormData({ ...courseFormData, mentorStatus: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">Visual highlight badge on the course thumbnail.</p>
                   </div>
@@ -924,11 +924,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 2 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Course Overview & Target Audience</h3>
+                <h3 className="text-base font-semibold text-slate-900">Course Overview & Target Audience</h3>
                 <p className="text-slate-500 font-medium text-xs">Define who should take this course and what goals it achieves.</p>
               </div>
             </div>
@@ -985,7 +985,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewAudienceInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1041,14 +1041,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewGoalInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {courseFormData.courseGoals.map((g, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-800 font-medium border border-purple-100">
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF5F2] text-[#C23315] font-medium border border-[#FFCCC2]">
                       <span>✓ {g}</span>
                       <button
                         type="button"
@@ -1071,14 +1071,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <div className="pt-4 border-t border-slate-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="font-extrabold text-slate-800 block">
+                    <label className="font-semibold text-slate-800 block">
                       Professional Summary Tags (Image 1 Feature)
                     </label>
                     <p className="text-[11px] text-slate-500 font-medium">
                       Core corporate & role experience points (e.g., Ex-Apple | Full Stack Engineer | MERN Developer).
                     </p>
                   </div>
-                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                  <span className="text-[10px] font-bold text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
                     {courseFormData.professionalTags.length} Tags
                   </span>
                 </div>
@@ -1086,9 +1086,9 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   {courseFormData.professionalTags.map((tag, idx) => (
                     <span
                       key={idx}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-xs shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF5F2] border border-[#FFCCC2] text-indigo-900 font-bold text-xs shadow-2xs"
                     >
-                      <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                      <Tag className="w-3.5 h-3.5 text-[#FA5A36]" />
                       <span>{tag}</span>
                       <button
                         type="button"
@@ -1123,7 +1123,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         }
                       }
                     }}
-                    className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                    className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                   />
                   <button
                     type="button"
@@ -1136,7 +1136,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewProfessionalTagInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                    className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                   >
                     + Add Tag
                   </button>
@@ -1147,14 +1147,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <div className="pt-4 border-t border-slate-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="font-extrabold text-slate-800 block">
+                    <label className="font-semibold text-slate-800 block">
                       Education & Qualifications (Optional - Image 1 Feature)
                     </label>
                     <p className="text-[11px] text-slate-500 font-medium">
                       Degrees & certifications (e.g., PG Diploma, Art & Design). Omitted from card if left empty.
                     </p>
                   </div>
-                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                  <span className="text-[10px] font-bold text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
                     {courseFormData.qualifications.length} Credentials
                   </span>
                 </div>
@@ -1162,9 +1162,9 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   {courseFormData.qualifications.map((q, idx) => (
                     <span
                       key={idx}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 font-bold text-xs shadow-2xs"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF5F2] border border-[#FFCCC2] text-purple-900 font-bold text-xs shadow-2xs"
                     >
-                      <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
+                      <GraduationCap className="w-3.5 h-3.5 text-[#FA5A36]" />
                       <span>{q}</span>
                       <button
                         type="button"
@@ -1212,7 +1212,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewQualificationInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                    className="px-4 py-2 bg-[#FA5A36] hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                   >
                     + Add Credential
                   </button>
@@ -1228,11 +1228,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 3 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">What Students Will Learn</h3>
+                <h3 className="text-base font-semibold text-slate-900">What Students Will Learn</h3>
                 <p className="text-slate-500 font-medium text-xs">Define tangible skills, learning objectives, and core concepts.</p>
               </div>
             </div>
@@ -1258,7 +1258,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewLearningObjectiveInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1304,7 +1304,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewFoundationalConceptInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1350,7 +1350,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewPriorKnowledgeInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1380,7 +1380,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <div className="pt-4 border-t border-slate-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="font-extrabold text-slate-800 block">
+                    <label className="font-semibold text-slate-800 block">
                       Experience & Achievement Metrics (Image 1 Feature)
                     </label>
                     <p className="text-[11px] text-slate-500 font-medium">
@@ -1462,11 +1462,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
           <div className="space-y-6 text-xs">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900">Curriculum & Syllabus Structure</h3>
+                  <h3 className="text-base font-semibold text-slate-900">Curriculum & Syllabus Structure</h3>
                   <p className="text-slate-500 font-medium text-xs">Organize modules, atomic lessons/topics, and upload syllabus document.</p>
                 </div>
               </div>
@@ -1474,7 +1474,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <button
                 type="button"
                 onClick={() => setWizardModuleModal(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Module</span>
@@ -1488,7 +1488,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 <button
                   type="button"
                   onClick={() => setWizardModuleModal(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs cursor-pointer"
+                  className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl text-xs cursor-pointer"
                 >
                   Create First Module
                 </button>
@@ -1499,10 +1499,10 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   <div key={mIdx} className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center">
+                        <span className="w-6 h-6 rounded-lg bg-[#FA5A36] text-white font-semibold text-xs flex items-center justify-center">
                           {mIdx + 1}
                         </span>
-                        <h4 className="font-extrabold text-slate-900 text-sm">{mod.title}</h4>
+                        <h4 className="font-semibold text-slate-900 text-sm">{mod.title}</h4>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -1521,7 +1521,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                             });
                             setWizardTopicModal(true);
                           }}
-                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-indigo-400 text-indigo-600 font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                          className="px-3 py-1.5 bg-white border border-slate-200 hover:border-indigo-400 text-[#FA5A36] font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                         >
                           + Add Topic
                         </button>
@@ -1540,7 +1540,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     {mod.topics.length === 0 ? (
                       <p className="text-slate-400 italic text-[11px] pl-8">No topics added to this module yet.</p>
                     ) : (
-                      <div className="space-y-2 pl-4 border-l-2 border-indigo-200 ml-3">
+                      <div className="space-y-2 pl-4 border-l-2 border-[#FFCCC2] ml-3">
                         {mod.topics.map((t, tIdx) => (
                           <div
                             key={tIdx}
@@ -1577,7 +1577,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                                   });
                                   setWizardTopicModal(true);
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg cursor-pointer"
+                                className="p-1.5 text-slate-400 hover:text-[#FA5A36] rounded-lg cursor-pointer"
                                 title="Edit Topic"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -1604,9 +1604,9 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 pt-4">
               <label className="font-bold text-slate-800 block">Course Syllabus PDF Document</label>
               {courseFormData.syllabusUrl ? (
-                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-indigo-200">
+                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-[#FFCCC2]">
                   <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-5 h-5 text-indigo-600 shrink-0" />
+                    <FileText className="w-5 h-5 text-[#FA5A36] shrink-0" />
                     <span className="font-bold text-xs text-slate-800 truncate">
                       {courseFormData.syllabusFileName || 'Syllabus.pdf'}
                     </span>
@@ -1627,7 +1627,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       type="button"
                       onClick={() => setSyllabusUploadTab('url')}
                       className={`px-3 py-1.5 rounded-lg font-bold text-xs cursor-pointer ${
-                        syllabusUploadTab === 'url' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                        syllabusUploadTab === 'url' ? 'bg-[#FA5A36] text-white' : 'text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       Web URL
@@ -1636,7 +1636,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       type="button"
                       onClick={() => setSyllabusUploadTab('device')}
                       className={`px-3 py-1.5 rounded-lg font-bold text-xs cursor-pointer ${
-                        syllabusUploadTab === 'device' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                        syllabusUploadTab === 'device' ? 'bg-[#FA5A36] text-white' : 'text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       Upload PDF
@@ -1662,7 +1662,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     </div>
                   ) : (
                     <label className="flex flex-col items-center justify-center p-6 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 cursor-pointer text-center">
-                      <Upload className="w-6 h-6 text-indigo-600 mb-1" />
+                      <Upload className="w-6 h-6 text-[#FA5A36] mb-1" />
                       <span className="font-bold text-slate-800 text-xs">Select Syllabus PDF from device</span>
                       <input type="file" accept=".pdf" onChange={handleSyllabusFileUpload} className="hidden" />
                     </label>
@@ -1679,11 +1679,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 5 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Course Foundations & Core Tools</h3>
+                <h3 className="text-base font-semibold text-slate-900">Course Foundations & Core Tools</h3>
                 <p className="text-slate-500 font-medium text-xs">List key tools, IDEs, platforms and prerequisites.</p>
               </div>
             </div>
@@ -1709,14 +1709,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewCoreToolInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {courseFormData.coreTools.map((tool, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-100 font-medium">
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF5F2] text-[#C23315] border border-[#FFCCC2] font-medium">
                       <span>• {tool}</span>
                       <button
                         type="button"
@@ -1755,7 +1755,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewPrerequisiteInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1790,11 +1790,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 6 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <Monitor className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">System & Software Requirements</h3>
+                <h3 className="text-base font-semibold text-slate-900">System & Software Requirements</h3>
                 <p className="text-slate-500 font-medium text-xs">Hardware specs, runtime engines, and necessary developer accounts.</p>
               </div>
             </div>
@@ -1820,7 +1820,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewHardwareReqInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1866,7 +1866,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewSoftwareReqInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1912,7 +1912,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         setNewRequiredAccountInput('');
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                   >
                     Add
                   </button>
@@ -1947,11 +1947,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 7 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <Award className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">This Course Includes & Highlights</h3>
+                <h3 className="text-base font-semibold text-slate-900">This Course Includes & Highlights</h3>
                 <p className="text-slate-500 font-medium text-xs">Video hours, downloadable resources, project count, and certificate perks.</p>
               </div>
             </div>
@@ -2032,7 +2032,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       certificateSettings: { ...p.certificateSettings, enableCertificate: e.target.checked },
                     }))
                   }
-                  className="w-4 h-4 text-indigo-600 rounded"
+                  className="w-4 h-4 text-[#FA5A36] rounded"
                 />
                 <span className="font-bold text-slate-900 text-xs">Enable Verified Certificate of Completion</span>
               </label>
@@ -2076,14 +2076,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       setNewSkillTagInput('');
                     }
                   }}
-                  className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer"
                 >
                   Add Tag
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {courseFormData.skills.map((sk, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-100 font-bold">
+                  <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFF5F2] text-[#C23315] border border-[#FFCCC2] font-bold">
                     <span>#{sk}</span>
                     <button
                       type="button"
@@ -2110,11 +2110,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
         {createStep === 8 && (
           <div className="space-y-6 text-xs">
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                 <CreditCard className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Tuition Pricing & Access Tier</h3>
+                <h3 className="text-base font-semibold text-slate-900">Tuition Pricing & Access Tier</h3>
                 <p className="text-slate-500 font-medium text-xs">Set the course tuition, discounts, currency, and access duration.</p>
               </div>
             </div>
@@ -2127,7 +2127,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   min={0}
                   value={courseFormData.coursePrice}
                   onChange={(e) => setCourseFormData({ ...courseFormData, coursePrice: Number(e.target.value) })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-base focus:border-indigo-500 focus:outline-none"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-base focus:border-[#FA5A36] focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">Set 0 for a free course.</span>
               </div>
@@ -2139,7 +2139,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   min={0}
                   value={courseFormData.discountPrice}
                   onChange={(e) => setCourseFormData({ ...courseFormData, discountPrice: Number(e.target.value) })}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-base focus:border-indigo-500 focus:outline-none"
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-base focus:border-[#FA5A36] focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">Optional discounted student price.</span>
               </div>
@@ -2178,7 +2178,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   Maximum Enrollment Limit (Optional)
                 </label>
                 {courseFormData.maxEnrollmentLimit ? (
-                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 font-bold text-[11px]">
+                  <span className="px-2.5 py-0.5 rounded-lg bg-[#FFE6E0] text-[#C23315] font-bold text-[11px]">
                     Capped at {courseFormData.maxEnrollmentLimit} Students
                   </span>
                 ) : (
@@ -2199,7 +2199,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     maxEnrollmentLimit: val === '' ? '' : Math.max(1, parseInt(val, 10)),
                   }));
                 }}
-                className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 text-base focus:border-indigo-500 focus:outline-none shadow-2xs"
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 text-base focus:border-[#FA5A36] focus:outline-none shadow-2xs"
               />
               <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                 Restrict maximum student signups. Once active enrollments hit this limit, the course automatically locks with a <strong>"Sold Out / Course Full"</strong> badge.
@@ -2215,14 +2215,14 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
           <div className="space-y-6 text-xs pt-1">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                <h3 className="text-base sm:text-lg font-semibold text-slate-900">
                   Step 9: Complete Course Review & Super Admin Publication
                 </h3>
                 <p className="text-slate-500 font-medium">
                   Verify course parameters, catalog preview, and publish on behalf of {instructorDisplayName} with publishing fees 100% waived.
                 </p>
               </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black">
+              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-semibold">
                 Step 9 of 9
               </span>
             </div>
@@ -2230,17 +2230,17 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             {/* Summary Metric Stats Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                <p className="text-lg font-black text-slate-900">{courseFormData.modules.length}</p>
+                <p className="text-lg font-semibold text-slate-900">{courseFormData.modules.length}</p>
                 <p className="text-[11px] font-semibold text-slate-500">Modules Configured</p>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                <p className="text-lg font-black text-indigo-600">
+                <p className="text-lg font-semibold text-[#FA5A36]">
                   {courseFormData.modules.reduce((acc, m) => acc + m.topics.length, 0)}
                 </p>
                 <p className="text-[11px] font-semibold text-slate-500">Atomic Topics</p>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                <p className="text-lg font-black text-purple-600">
+                <p className="text-lg font-semibold text-[#FA5A36]">
                   {courseFormData.modules.reduce(
                     (acc, m) => acc + m.topics.reduce((tAcc, t) => tAcc + (t.duration || 30), 0),
                     0
@@ -2249,7 +2249,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 <p className="text-[11px] font-semibold text-slate-500">Total Duration</p>
               </div>
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                <p className="text-lg font-black text-emerald-600">
+                <p className="text-lg font-semibold text-emerald-600">
                   {courseFormData.coursePrice === 0 ? 'FREE' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
                 </p>
                 <p className="text-[11px] font-semibold text-slate-500">Tuition Price</p>
@@ -2260,8 +2260,8 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
             <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 space-y-6 shadow-xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-indigo-600" />
-                  <h4 className="font-extrabold text-slate-900 text-sm">Student View Catalog Preview (Image 1 Layout)</h4>
+                  <Eye className="w-4 h-4 text-[#FA5A36]" />
+                  <h4 className="font-semibold text-slate-900 text-sm">Student View Catalog Preview (Image 1 Layout)</h4>
                 </div>
                 <span className="text-[11px] font-bold text-slate-400">Live Simulation</span>
               </div>
@@ -2271,7 +2271,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   {/* Top Bar: Schedule & Deadline + Actionable Icons */}
                   <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 truncate">
-                      <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <Clock className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                       <span className="truncate">{courseFormData.schedule || 'Flexible Self-Paced Schedule'}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -2284,7 +2284,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                       </button>
                       <button
                         type="button"
-                        className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-[#FA5A36] hover:border-[#FFCCC2] transition-colors cursor-pointer"
                         title="Bookmark"
                       >
                         <Bookmark className="w-3.5 h-3.5" />
@@ -2304,11 +2304,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     )}
 
                     <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                      <span className="px-2.5 py-0.5 bg-slate-900/85 backdrop-blur-md text-white text-[10px] font-black rounded-md uppercase tracking-wider">
+                      <span className="px-2.5 py-0.5 bg-slate-900/85 backdrop-blur-md text-white text-[10px] font-semibold rounded-md uppercase tracking-wider">
                         {courseFormData.category}
                       </span>
                       {courseFormData.mentorStatus && (
-                        <span className="px-2.5 py-0.5 bg-amber-500/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-md flex items-center gap-1 shadow-xs">
+                        <span className="px-2.5 py-0.5 bg-amber-500/90 backdrop-blur-md text-white text-[10px] font-semibold rounded-md flex items-center gap-1 shadow-xs">
                           <Sparkles className="w-3 h-3 fill-current" />
                           {courseFormData.mentorStatus}
                         </span>
@@ -2316,7 +2316,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     </div>
 
                     {courseFormData.maxEnrollmentLimit && (
-                      <span className="absolute bottom-3 right-3 px-2.5 py-1 bg-indigo-900/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-lg border border-indigo-500/30">
+                      <span className="absolute bottom-3 right-3 px-2.5 py-1 bg-indigo-900/90 backdrop-blur-md text-white text-[10px] font-semibold rounded-lg border border-[#FA5A36]/30">
                         Seat Limit: {courseFormData.maxEnrollmentLimit}
                       </span>
                     )}
@@ -2324,7 +2324,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
 
                   {/* Card Body */}
                   <div className="p-4.5 space-y-3">
-                    <h3 className="text-base font-extrabold text-slate-900 line-clamp-2 leading-snug">
+                    <h3 className="text-base font-semibold text-slate-900 line-clamp-2 leading-snug">
                       {courseFormData.title || 'Untitled Course'}
                     </h3>
 
@@ -2348,7 +2348,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         {courseFormData.experienceMetrics.map((met, idx) => (
                           <span
                             key={idx}
-                            className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-black rounded-md border border-emerald-200/60 flex items-center gap-1"
+                            className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-semibold rounded-md border border-emerald-200/60 flex items-center gap-1"
                           >
                             <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
                             {met}
@@ -2360,11 +2360,11 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     {/* Education & Qualifications (Optional - Omitted if empty) */}
                     {courseFormData.qualifications && courseFormData.qualifications.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <GraduationCap className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        <GraduationCap className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                         {courseFormData.qualifications.map((q, idx) => (
                           <span
                             key={idx}
-                            className="px-2 py-0.5 bg-purple-50 text-purple-800 text-[10px] font-bold rounded-md border border-purple-200/60"
+                            className="px-2 py-0.5 bg-[#FFF5F2] text-[#C23315] text-[10px] font-bold rounded-md border border-[#FFCCC2]/60"
                           >
                             {q}
                           </span>
@@ -2375,10 +2375,10 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     {/* Structural Content Badges Row */}
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
                       <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2">
-                        <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <BookOpen className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                         <div className="truncate">
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Sessions</p>
-                          <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                          <p className="text-[11px] font-semibold text-slate-800 truncate">
                             {courseFormData.totalSessions || courseFormData.modules.reduce((a, m) => a + m.topics.length, 0) || 12}
                           </p>
                         </div>
@@ -2388,7 +2388,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         <Clock className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
                         <div className="truncate">
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Duration</p>
-                          <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                          <p className="text-[11px] font-semibold text-slate-800 truncate">
                             {courseFormData.courseIncludes.videoHours || '20+ Hrs'}
                           </p>
                         </div>
@@ -2398,7 +2398,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                         <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <div className="truncate">
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Enrolled</p>
-                          <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                          <p className="text-[11px] font-semibold text-slate-800 truncate">
                             {courseFormData.maxEnrollmentLimit ? `Max ${courseFormData.maxEnrollmentLimit}` : 'Active'}
                           </p>
                         </div>
@@ -2409,7 +2409,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                     <div className="flex items-center justify-between pt-1 text-xs">
                       <div className="flex items-center gap-1.5">
                         <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        <span className="font-extrabold text-slate-900">4.8</span>
+                        <span className="font-semibold text-slate-900">4.8</span>
                         <span className="text-[11px] text-slate-400 font-medium">(10.5k)</span>
                       </div>
                       <span className="text-slate-500 font-semibold text-[11px]">By {instructorDisplayName}</span>
@@ -2421,13 +2421,13 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 <div className="px-4.5 py-3.5 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between">
                   <div>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tuition</p>
-                    <p className="text-base font-black text-slate-900">
+                    <p className="text-base font-semibold text-slate-900">
                       {courseFormData.coursePrice === 0 ? 'FREE' : `₹${courseFormData.coursePrice.toLocaleString('en-IN')}`}
                     </p>
                   </div>
                   <button
                     type="button"
-                    className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                    className="px-4 py-2 bg-[#FA5A36] text-white font-bold text-xs rounded-xl shadow-xs"
                   >
                     Enroll Now
                   </button>
@@ -2436,7 +2436,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
 
               {/* Dynamic Syllabus Preview Hierarchy */}
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">Course Curriculum (Syllabus Preview)</h4>
+                <h4 className="font-semibold text-slate-900 text-xs sm:text-sm">Course Curriculum (Syllabus Preview)</h4>
 
                 {courseFormData.modules.length === 0 ? (
                   <p className="text-slate-400 italic text-xs py-2">No modules configured yet.</p>
@@ -2476,10 +2476,10 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-black text-base text-emerald-950">
+                      <h4 className="font-semibold text-base text-emerald-950">
                         Platform Publishing Fee 100% Waived
                       </h4>
-                      <span className="px-3 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900 border border-emerald-400">
+                      <span className="px-3 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-200 text-emerald-900 border border-emerald-400">
                         ROOT ADMIN PRIVILEGE • ₹0 PAYABLE
                       </span>
                     </div>
@@ -2494,7 +2494,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
               <div className="p-4 rounded-2xl bg-white/95 border border-emerald-200 grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
                 <div>
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Course Tuition Price</span>
-                  <p className="font-black text-slate-900 text-base">
+                  <p className="font-semibold text-slate-900 text-base">
                     ₹{courseFormData.coursePrice.toLocaleString('en-IN')}
                   </p>
                 </div>
@@ -2506,13 +2506,13 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 </div>
                 <div>
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Super Admin Waiver</span>
-                  <p className="font-black text-emerald-700 text-base">
+                  <p className="font-semibold text-emerald-700 text-base">
                     -100% (WAIVED)
                   </p>
                 </div>
                 <div>
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Total Amount Due</span>
-                  <p className="font-black text-emerald-700 text-xl">
+                  <p className="font-semibold text-emerald-700 text-xl">
                     ₹0.00
                   </p>
                 </div>
@@ -2533,7 +2533,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   type="button"
                   disabled={submitting}
                   onClick={() => handleSubmitCourse(true)}
-                  className="w-full sm:w-auto px-7 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 transition-all"
+                  className="w-full sm:w-auto px-7 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-2xl text-xs shadow-md shadow-emerald-600/20 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 transition-all"
                 >
                   {submitting ? (
                     <>
@@ -2580,7 +2580,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   placeholder="e.g. Advanced Routing & Controller Logic"
                   value={wizardModuleTitle}
                   onChange={(e) => setWizardModuleTitle(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                 />
               </div>
               <p className="text-[11px] text-slate-400 font-medium">
@@ -2596,7 +2596,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-indigo-700"
+                  className="px-5 py-2.5 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-[#E04322]"
                 >
                   Add Module
                 </button>
@@ -2642,7 +2642,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   placeholder="e.g. Database Transactions & Rollbacks"
                   value={wizardTopicForm.title}
                   onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, title: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                 />
               </div>
 
@@ -2654,7 +2654,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   placeholder="Brief synopsis of what this lesson covers..."
                   value={wizardTopicForm.description}
                   onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, description: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                 />
               </div>
 
@@ -2687,7 +2687,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                   type="checkbox"
                   checked={wizardTopicForm.isFree}
                   onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, isFree: e.target.checked })}
-                  className="w-4 h-4 text-indigo-600 rounded"
+                  className="w-4 h-4 text-[#FA5A36] rounded"
                 />
                 <span className="font-bold text-slate-800 text-xs">Allow as Free Preview Lesson</span>
               </label>
@@ -2716,7 +2716,7 @@ export const CreateCourseOnBehalfView: React.FC<CreateCourseOnBehalfViewProps> =
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-indigo-700"
+                  className="px-5 py-2.5 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-sm hover:bg-[#E04322]"
                 >
                   {editingTopicIndex !== null ? 'Save Topic' : 'Add Topic'}
                 </button>

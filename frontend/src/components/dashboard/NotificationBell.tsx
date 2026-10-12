@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, ExternalLink, CheckCheck, Clock } from 'lucide-react';
 import { notificationsApi, type DashboardNotification } from '../../api/notifications';
+import { useAuth } from '../../context/AuthContext';
+import { connectRealtimeSocket } from '../../realtime/socket';
 
 interface NotificationBellProps {
   onNotificationUpdate?: (notifications: DashboardNotification[]) => void;
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onNotificationUpdate }) => {
+  const { accessToken } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -30,6 +33,16 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNotificati
 
   useEffect(() => {
     fetchNotifications();
+    const socket = connectRealtimeSocket(accessToken);
+    const handleNewNotification = (notification: DashboardNotification) => {
+      setNotifications((current) => {
+        const updated = [notification, ...current.filter((item) => item._id !== notification._id)].slice(0, 30);
+        onNotificationUpdate?.(updated);
+        return updated;
+      });
+      setUnreadCount((current) => current + (notification.isRead ? 0 : 1));
+    };
+    socket.on('notification:new', handleNewNotification);
 
     // Real-time polling: check every 15 seconds for started webinars
     const interval = setInterval(fetchNotifications, 15000);
@@ -40,8 +53,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onNotificati
     return () => {
       clearInterval(interval);
       window.removeEventListener('webinarsChanged', handleWebinarsChanged);
+      socket.off('notification:new', handleNewNotification);
     };
-  }, [fetchNotifications]);
+  }, [accessToken, fetchNotifications, onNotificationUpdate]);
 
   // Close dropdown on click outside
   useEffect(() => {

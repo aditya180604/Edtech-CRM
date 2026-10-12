@@ -1,155 +1,217 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Globe, MessageCircle, Share2, Mail } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { EduLogo } from './ui/EduLogo';
 
 export const Footer: React.FC = () => {
+  const [openAccordion, setOpenAccordion] = useState<string | null>(null);
+
+  const toggleAccordion = (section: string) => {
+    setOpenAccordion((prev) => (prev === section ? null : section));
+  };
+
   return (
-    <footer className="bg-white border-t border-slate-200/80 pt-14 pb-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 pb-10 border-b border-slate-100">
-          {/* Col 1: Brand Info */}
+    <footer className="bg-white border-t border-slate-200/80 pt-10 sm:pt-14 pb-8 sm:pb-10">
+      <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-8 pb-8 sm:pb-10 border-b border-slate-100">
+          {/* Col 1: Brand Info & Social Icons - Image 2 Spec */}
           <div className="lg:col-span-5 space-y-4">
-            <Link to="/" className="inline-flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <span className="text-2xl font-black tracking-tight text-slate-900">
-                Edu<span className="text-indigo-600">Tech</span>
-              </span>
-            </Link>
-            <p className="text-sm text-slate-500 max-w-md leading-relaxed">
-              Empowering global learners with atomic skills, full engineering courses, and career paths designed by industry leaders. Learn on your own schedule with verified credentials.
+            <EduLogo size="lg" />
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md leading-relaxed font-normal">
+              Empowering global learners with atomic skills. Full range learning courses and career paths designed by industry leaders. Learn on your own schedule with verified credentials.
             </p>
-            {/* Social Icons */}
-            <div className="flex items-center gap-2.5 pt-1">
+
+            {/* Social Icons matching modern branding */}
+            <div className="flex items-center gap-2 pt-1">
+             
+              {/* Twitter / X */}
               <a
-                href="#"
-                className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 flex items-center justify-center transition-all shadow-2xs"
-                aria-label="Website"
+                href="https://twitter.com"
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-[#FFF5F2] border border-slate-200/80 text-slate-600 hover:text-[#FA5A36] hover:border-[#FFCCC2] flex items-center justify-center transition-colors"
+                aria-label="Twitter / X"
               >
-                <Globe className="w-4 h-4" />
+                <svg className="w-3.5 h-3.5 fill-currentColor" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
               </a>
+              {/* Instagram */}
               <a
-                href="#"
-                className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 flex items-center justify-center transition-all shadow-2xs"
-                aria-label="Community"
+                href="https://instagram.com"
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-[#FFF5F2] border border-slate-200/80 text-slate-600 hover:text-[#FA5A36] hover:border-[#FFCCC2] flex items-center justify-center transition-colors"
+                aria-label="Instagram"
               >
-                <MessageCircle className="w-4 h-4" />
+                <svg className="w-4 h-4 fill-currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                </svg>
               </a>
+              {/* YouTube */}
               <a
-                href="#"
-                className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 flex items-center justify-center transition-all shadow-2xs"
-                aria-label="Social Share"
+                href="https://youtube.com"
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-[#FFF5F2] border border-slate-200/80 text-slate-600 hover:text-[#FA5A36] hover:border-[#FFCCC2] flex items-center justify-center transition-colors"
+                aria-label="YouTube"
               >
-                <Share2 className="w-4 h-4" />
+                <svg className="w-4 h-4 fill-currentColor" viewBox="0 0 24 24">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
               </a>
+              {/* LinkedIn */}
               <a
-                href="#"
-                className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 flex items-center justify-center transition-all shadow-2xs"
-                aria-label="Contact"
+                href="https://linkedin.com"
+                target="_blank"
+                rel="noreferrer"
+                className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-[#FFF5F2] border border-slate-200/80 text-slate-600 hover:text-[#FA5A36] hover:border-[#FFCCC2] flex items-center justify-center transition-colors"
+                aria-label="LinkedIn"
               >
-                <Mail className="w-4 h-4" />
+                <svg className="w-3.5 h-3.5 fill-currentColor" viewBox="0 0 24 24">
+                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                </svg>
               </a>
             </div>
           </div>
 
-          {/* Col 2: Platform Links */}
-          <div className="lg:col-span-2 lg:col-start-7">
-            <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-4">
-              Platform
-            </h3>
-            <ul className="space-y-3 text-sm">
+          {/* Col 2: Platform Links (Mobile Accordion / Desktop Column) */}
+          <div className="lg:col-span-2 lg:col-start-7 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+            <button
+              type="button"
+              onClick={() => toggleAccordion('platform')}
+              className="w-full flex items-center justify-between text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 md:mb-4 cursor-pointer"
+            >
+              <span>Platform</span>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 md:hidden transition-transform duration-200 ${
+                  openAccordion === 'platform' ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <ul
+              className={`space-y-2.5 text-xs sm:text-sm ${
+                openAccordion === 'platform' ? 'block' : 'hidden md:block'
+              }`}
+            >
               <li>
-                <Link to="/courses" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/courses" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Courses
                 </Link>
               </li>
               <li>
-                <Link to="/topics" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/topics" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Topics
                 </Link>
               </li>
               <li>
-                <Link to="/learning-paths" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/learning-paths" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Learning Paths
                 </Link>
               </li>
               <li>
-                <Link to="/instructors" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/instructors" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Instructors
                 </Link>
               </li>
               <li>
-                <Link to="/webinars" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/webinars" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Webinars
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Col 3: Resources Links */}
-          <div className="lg:col-span-2">
-            <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-4">
-              Resources
-            </h3>
-            <ul className="space-y-3 text-sm">
+          {/* Col 3: Resources Links (Mobile Accordion / Desktop Column) */}
+          <div className="lg:col-span-2 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+            <button
+              type="button"
+              onClick={() => toggleAccordion('resources')}
+              className="w-full flex items-center justify-between text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 md:mb-4 cursor-pointer"
+            >
+              <span>Resources</span>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 md:hidden transition-transform duration-200 ${
+                  openAccordion === 'resources' ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <ul
+              className={`space-y-2.5 text-xs sm:text-sm ${
+                openAccordion === 'resources' ? 'block' : 'hidden md:block'
+              }`}
+            >
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/blog" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Blog
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/help" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Help Center
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/community" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Community
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/career-support" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Career Support
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
 
-          {/* Col 4: Company Links */}
-          <div className="lg:col-span-2">
-            <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-4">
-              Company
-            </h3>
-            <ul className="space-y-3 text-sm">
+          {/* Col 4: Company Links (Mobile Accordion / Desktop Column) */}
+          <div className="lg:col-span-2 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+            <button
+              type="button"
+              onClick={() => toggleAccordion('company')}
+              className="w-full flex items-center justify-between text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 md:mb-4 cursor-pointer"
+            >
+              <span>Company</span>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 md:hidden transition-transform duration-200 ${
+                  openAccordion === 'company' ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <ul
+              className={`space-y-2.5 text-xs sm:text-sm ${
+                openAccordion === 'company' ? 'block' : 'hidden md:block'
+              }`}
+            >
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/about" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   About Us
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/contact" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Contact Us
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/privacy" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Privacy Policy
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+                <Link to="/terms" className="text-slate-500 hover:text-[#FA5A36] font-medium transition-colors">
                   Terms of Service
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
         </div>
 
-        {/* Bottom Centered Copyrights (Completely removed 'Made with...' and removed Subscribe section) */}
-        <div className="pt-8 flex flex-col items-center justify-center text-center space-y-1 text-xs">
-         
-          <p className="font-medium text-slate-500">© 2026 SRR solutions . All rights reserved.</p>
+        {/* Bottom Centered Copyrights - Matching Image 2 */}
+        <div className="pt-6 sm:pt-8 flex flex-col items-center justify-center text-center space-y-1 text-xs">
+          <p className="font-medium text-slate-400 text-[11px] sm:text-xs">
+            © 2026–2027 EduTech. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

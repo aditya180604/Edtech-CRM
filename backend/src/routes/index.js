@@ -17,6 +17,8 @@ import { paymentRoutes as instructorPaymentRoutes } from '../modules/payments/pa
 import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
 import { aiRoutes } from '../modules/ai/ai.routes.js';
 import { quizRoutes } from '../modules/quizzes/quiz.routes.js';
+import { slotRoutes } from '../modules/slots/slot.routes.js';
+import { consultationRoutes } from '../modules/consultations/consultation.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -43,6 +45,8 @@ router.use('/super-admin', superAdminRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/courses', coursesRoutes);
 router.use('/webinars', webinarsRoutes);
+router.use('/slots', slotRoutes);
+router.use('/consultations', consultationRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/payments', instructorPaymentRoutes);
 router.use('/payments', studentPaymentRoutes);

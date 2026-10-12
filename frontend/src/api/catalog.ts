@@ -135,6 +135,7 @@ export interface CatalogInstructor {
   rating: number;
   studentCount: number | string;
   courseCount: number;
+  isVerified?: boolean;
   courses?: Array<{
     id: string;
     title: string;
@@ -230,7 +231,10 @@ export const catalogApi = {
    */
   async getLearningPaths(params?: { limit?: number }): Promise<CatalogLearningPath[]> {
     const response = await apiClient.get('/learning-paths', { params });
-    return response.data?.data || [];
+    const data = response.data?.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.learningPaths)) return data.learningPaths;
+    return [];
   },
 
   /**

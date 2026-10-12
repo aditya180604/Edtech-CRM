@@ -36,7 +36,9 @@ import {
   ShieldCheck,
   Zap,
   RefreshCw,
+  X,
 } from 'lucide-react';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 import {
   webinarsApi,
@@ -48,6 +50,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCart } from '../context/CartContext';
+import type { Room as LiveKitRoom } from 'livekit-client';
 
 // =========================================================================
 // REAL-TIME IN-PLATFORM LIVE CLASSROOM STUDIO
@@ -89,34 +92,77 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   const { success, info, error: toastError } = useToast();
 
   const isHost = role === 'HOST';
+  const isMentorship = roomState.category === '1-on-1 Mentorship';
 
   // Video & Audio Stream State
-  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(!isMentorship || isHost);
+  const [remoteCameraEnabled, setRemoteCameraEnabled] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [localCameraEnabled, setLocalCameraEnabled] = useState(true);
+  const [localMicEnabled, setLocalMicEnabled] = useState(true);
+  const [localScreenShareActive, setLocalScreenShareActive] = useState(false);
   const [screenShareActive, setScreenShareActive] = useState(false);
+  const [liveKitConnected, setLiveKitConnected] = useState(false);
+  const [liveKitHostPresent, setLiveKitHostPresent] = useState(false);
+  const [liveKitError, setLiveKitError] = useState<string | null>(null);
+  const [remoteMediaVersion, setRemoteMediaVersion] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isInstructorSpeaking, setIsInstructorSpeaking] = useState(false);
   const [mutedIncoming, setMutedIncoming] = useState(false);
+  const controlCameraEnabled = isMentorship ? localCameraEnabled : cameraEnabled;
+  const controlMicEnabled = isMentorship ? localMicEnabled : micEnabled;
+  const controlScreenShareActive = isMentorship ? localScreenShareActive : screenShareActive;
+  const stageCameraEnabled = isMentorship
+    ? isHost
+      ? localCameraEnabled
+      : remoteCameraEnabled
+    : cameraEnabled;
 
-  // Video Element References
+  // Video & Audio Element References
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const localPipVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remotePipVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const liveKitRoomRef = useRef<LiveKitRoom | null>(null);
+  const mutedIncomingRef = useRef(mutedIncoming);
+  mutedIncomingRef.current = mutedIncoming;
+  const localScreenShareActiveRef = useRef(localScreenShareActive);
+  localScreenShareActiveRef.current = localScreenShareActive;
 
-  // Media Stream References
+  // Media Stream & WebRTC References
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteScreenStreamRef = useRef<MediaStream | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
+  // Helper to dynamically update the video track transmitted over WebRTC (screen vs camera)
+  const updateWebRtcVideoTrack = (track: MediaStreamTrack | null) => {
+    if (!pcRef.current) return;
+    try {
+      const senders = pcRef.current.getSenders();
+      const videoSender =
+        senders.find((sender) => sender.track?.kind === 'video') ??
+        pcRef.current.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === 'video')?.sender;
+      if (videoSender) {
+        videoSender.replaceTrack(track).catch((e) => console.warn('[WebRTC] replaceTrack error:', e));
+      } else if (track && mediaStreamRef.current) {
+        pcRef.current.addTrack(track, mediaStreamRef.current);
+      }
+    } catch (e) {
+      console.warn('[WebRTC] updateWebRtcVideoTrack exception:', e);
+    }
+  };
+
   // Active Sidebar Tab
   const [activeTab, setActiveTab] = useState<'chat' | 'qa' | 'attendees' | 'notes' | 'resources'>('chat');
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   // Real-Time Chat
   const [chatMessages, setChatMessages] = useState<LiveChatMessage[]>(roomState.chatMessages || []);
@@ -146,26 +192,34 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   // Real-Time Connected Participants List
   const [activeParticipants, setActiveParticipants] = useState<ParticipantInfo[]>(() => {
     const list: ParticipantInfo[] = [];
-    // 1. Host
+
+    // Host presence: only true if current user is host or backend reported host online
+    const hostAtt = Array.isArray(roomState.attendees)
+      ? roomState.attendees.find((a) => a.role === 'HOST' || a.userId === roomState.instructor.id)
+      : null;
+    const isHostActuallyOnline = isHost || Boolean(hostAtt?.isOnline);
+
+    // 1. Host / Mentor
     list.push({
       id: roomState.instructor.id || 'host',
       name: roomState.instructor.name,
       avatar: roomState.instructor.avatar || null,
       role: 'HOST',
-      isOnline: true,
+      isOnline: isHostActuallyOnline,
       isSpeaking: false,
     });
 
     // 2. Initial attendees from roomState
     if (Array.isArray(roomState.attendees)) {
       roomState.attendees.forEach((att) => {
-        if (att.userId && att.userId !== roomState.instructor.id) {
+        if (att.userId && att.userId !== (roomState.instructor.id || 'host')) {
+          const isMe = user && (((user as any)._id || (user as any).id)?.toString() === att.userId);
           list.push({
             id: att.userId,
             name: att.userName,
             avatar: att.userAvatar || null,
             role: (att.role as any) || 'STUDENT',
-            isOnline: att.isOnline !== false,
+            isOnline: isMe ? true : Boolean(att.isOnline),
           });
         }
       });
@@ -214,7 +268,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
         // 1. Host broadcast state update received by Students
         if (msg.type === 'HOST_STREAM_STATE') {
-          if (!isHost) {
+          if (!isHost && !isMentorship) {
             setCameraEnabled(Boolean(msg.cameraEnabled));
             setMicEnabled(Boolean(msg.micEnabled));
             setScreenShareActive(Boolean(msg.screenShareActive));
@@ -334,11 +388,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
     } catch (e) {
       console.warn('BroadcastChannel presence sync not supported:', e);
     }
-  }, [roomState.roomCode, isHost, user, cameraEnabled, micEnabled, screenShareActive, isInstructorSpeaking, audioLevel, roomState.instructor]);
+  }, [roomState.roomCode, isHost, isMentorship, user, cameraEnabled, micEnabled, screenShareActive, isInstructorSpeaking, audioLevel, roomState.instructor]);
 
   // Host Initialize Local Media Streams (Camera & Mic)
   useEffect(() => {
     let active = true;
+
+    if (isMentorship) return;
 
     if (isHost) {
       async function startHostMedia() {
@@ -444,20 +500,282 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [isHost, roomState.roomCode]);
+  }, [isHost, isMentorship, roomState.roomCode]);
 
-  // Auto-attach video streams whenever screen share or camera state changes
   useEffect(() => {
+    if (!isMentorship) return;
+
+    let cancelled = false;
+    let room: LiveKitRoom | null = null;
+    const remoteCameraStream = new MediaStream();
+    const remoteScreenStream = new MediaStream();
+    const remoteAudioStream = new MediaStream();
+    remoteStreamRef.current = remoteCameraStream;
+    remoteScreenStreamRef.current = remoteScreenStream;
+
+    const playVideo = (element: HTMLVideoElement | null, stream: MediaStream | null) => {
+      if (!element) return;
+      element.srcObject = stream;
+      if (stream) element.play().catch((error) => console.warn('LiveKit video playback:', error));
+    };
+
+    const syncLocalCamera = () => {
+      const cameraTrack = [...(room?.localParticipant.trackPublications.values() || [])]
+        .find((publication) => publication.source === 'camera')?.track;
+      const localStream = cameraTrack ? new MediaStream([cameraTrack.mediaStreamTrack]) : null;
+      mediaStreamRef.current = localStream;
+      playVideo(localVideoRef.current, localStream);
+      playVideo(localPipVideoRef.current, localStream);
+    };
+
+    const attachRemoteVideo = () => {
+      const remoteCamera = remoteCameraStream.getVideoTracks().length ? remoteCameraStream : null;
+      if (isHost) {
+        playVideo(remotePipVideoRef.current, remoteCamera);
+      } else {
+        playVideo(remoteVideoRef.current, remoteCamera);
+        playVideo(remotePipVideoRef.current, remoteCamera);
+      }
+      if (!localScreenShareActiveRef.current) {
+        playVideo(screenVideoRef.current, remoteScreenStream.getVideoTracks().length ? remoteScreenStream : null);
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteAudioStream;
+        remoteAudioRef.current.muted = mutedIncomingRef.current;
+        if (remoteAudioStream.getAudioTracks().length) {
+          remoteAudioRef.current.play().catch((error) => console.warn('LiveKit audio playback:', error));
+        }
+      }
+    };
+
+    const connect = async () => {
+      try {
+        const response = await webinarsApi.getLiveKitToken(roomState.roomCode);
+        const credentials = response.data;
+        if (!response.success || !credentials?.allowed || !credentials.token || !credentials.serverUrl) {
+          throw new Error('This account is not authorized to join the mentorship media room.');
+        }
+        if (cancelled) return;
+
+        const { Room } = await import('livekit-client');
+        if (cancelled) return;
+        const connectedRoom = new Room({ adaptiveStream: true, dynacast: true });
+        room = connectedRoom;
+        liveKitRoomRef.current = connectedRoom;
+
+        const isHostParticipant = (participant: { identity: string }) =>
+          Boolean(roomState.instructor.id && participant.identity === `user_${roomState.instructor.id}`);
+        connectedRoom.on('participantConnected', (participant) => {
+          if (isHostParticipant(participant)) setLiveKitHostPresent(true);
+        });
+        connectedRoom.on('participantDisconnected', (participant) => {
+          if (isHostParticipant(participant)) setLiveKitHostPresent(false);
+        });
+
+        connectedRoom.on('trackSubscribed', (track) => {
+          const mediaTrack = track.mediaStreamTrack;
+          if (track.source === 'screen_share') {
+            if (!remoteScreenStream.getTracks().some((current) => current.id === mediaTrack.id)) {
+              remoteScreenStream.addTrack(mediaTrack);
+            }
+            setScreenShareActive(true);
+          } else if (track.source === 'microphone' || track.kind === 'audio') {
+            if (!remoteAudioStream.getTracks().some((current) => current.id === mediaTrack.id)) {
+              remoteAudioStream.addTrack(mediaTrack);
+            }
+          } else if (track.source === 'camera' || track.kind === 'video') {
+            if (!remoteCameraStream.getTracks().some((current) => current.id === mediaTrack.id)) {
+              remoteCameraStream.addTrack(mediaTrack);
+            }
+            setRemoteCameraEnabled(true);
+          }
+          attachRemoteVideo();
+          setRemoteMediaVersion((version) => version + 1);
+        });
+
+        connectedRoom.on('trackUnsubscribed', (track) => {
+          const mediaTrack = track.mediaStreamTrack;
+          remoteCameraStream.removeTrack(mediaTrack);
+          remoteScreenStream.removeTrack(mediaTrack);
+          remoteAudioStream.removeTrack(mediaTrack);
+          if (track.source === 'screen_share') {
+            setScreenShareActive(localScreenShareActiveRef.current || remoteScreenStream.getVideoTracks().length > 0);
+          }
+          if (track.source === 'camera') setRemoteCameraEnabled(false);
+          attachRemoteVideo();
+          setRemoteMediaVersion((version) => version + 1);
+        });
+
+        connectedRoom.on('localTrackPublished', (publication) => {
+          if (publication.source === 'camera') {
+            setLocalCameraEnabled(true);
+            if (isHost) setCameraEnabled(true);
+            syncLocalCamera();
+          }
+          if (publication.source === 'screen_share') {
+            setLocalScreenShareActive(true);
+            setScreenShareActive(true);
+            const screenTrack = publication.track?.mediaStreamTrack;
+            if (screenTrack) {
+              screenStreamRef.current = new MediaStream([screenTrack]);
+              playVideo(screenVideoRef.current, screenStreamRef.current);
+            }
+          }
+        });
+
+        connectedRoom.on('localTrackUnpublished', (publication) => {
+          if (publication.source === 'camera') {
+            setLocalCameraEnabled(false);
+            if (isHost) setCameraEnabled(false);
+            syncLocalCamera();
+          }
+          if (publication.source === 'screen_share') {
+            setLocalScreenShareActive(false);
+            screenStreamRef.current = null;
+            setScreenShareActive(remoteScreenStream.getVideoTracks().length > 0);
+          }
+        });
+
+        connectedRoom.on('trackMuted', (publication, participant) => {
+          if (participant.isLocal) return;
+          if (publication.source === 'camera') setRemoteCameraEnabled(false);
+          if (publication.source === 'screen_share') {
+            setScreenShareActive(localScreenShareActiveRef.current);
+          }
+        });
+
+        connectedRoom.on('trackUnmuted', (publication, participant) => {
+          if (participant.isLocal) return;
+          if (publication.source === 'camera') setRemoteCameraEnabled(true);
+          if (publication.source === 'screen_share') setScreenShareActive(true);
+        });
+
+        connectedRoom.on('disconnected', () => {
+          if (!cancelled) {
+            setLiveKitConnected(false);
+            if (!isHost) setLiveKitHostPresent(false);
+          }
+        });
+
+        await connectedRoom.connect(credentials.serverUrl, credentials.token);
+        if (cancelled) return;
+        if (!isHost) {
+          setLiveKitHostPresent(
+            Array.from(connectedRoom.remoteParticipants.values()).some(isHostParticipant)
+          );
+        }
+        setLiveKitConnected(true);
+        setLiveKitError(null);
+
+        try {
+          const publication = await connectedRoom.localParticipant.setMicrophoneEnabled(true);
+          const enabled = Boolean(publication);
+          setLocalMicEnabled(enabled);
+          if (isHost) setMicEnabled(enabled);
+        } catch (error) {
+          setLocalMicEnabled(false);
+          if (isHost) setMicEnabled(false);
+          toastError(
+            'Microphone Unavailable',
+            error instanceof Error ? error.message : 'Could not publish your microphone.'
+          );
+        }
+
+        try {
+          const publication = await connectedRoom.localParticipant.setCameraEnabled(true, {
+            resolution: { width: 1280, height: 720 },
+          });
+          const enabled = Boolean(publication);
+          setLocalCameraEnabled(enabled);
+          if (isHost) setCameraEnabled(enabled);
+        } catch (error) {
+          setLocalCameraEnabled(false);
+          if (isHost) setCameraEnabled(false);
+          toastError(
+            'Camera Unavailable',
+            error instanceof Error ? error.message : 'Could not publish your camera.'
+          );
+        }
+        syncLocalCamera();
+        attachRemoteVideo();
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : 'Could not connect to mentorship audio and video.';
+        setLiveKitError(message);
+        setLiveKitConnected(false);
+        setLiveKitHostPresent(false);
+        setLocalCameraEnabled(false);
+        setLocalMicEnabled(false);
+        if (isHost) {
+          setCameraEnabled(false);
+          setMicEnabled(false);
+        }
+        toastError('Media Connection Error', message);
+      }
+    };
+
+    void connect();
+
+    return () => {
+      cancelled = true;
+      setLiveKitConnected(false);
+      liveKitRoomRef.current = null;
+      if (room) void room.disconnect();
+      [remoteCameraStream, remoteScreenStream, remoteAudioStream].forEach((stream) => {
+        stream.getTracks().forEach((track) => stream.removeTrack(track));
+      });
+      [localVideoRef.current, localPipVideoRef.current, remoteVideoRef.current, remotePipVideoRef.current, screenVideoRef.current]
+        .forEach((element) => {
+          if (element) element.srcObject = null;
+        });
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+      mediaStreamRef.current = null;
+      remoteStreamRef.current = null;
+      remoteScreenStreamRef.current = null;
+    };
+  }, [isHost, isMentorship, roomState.roomCode, toastError]);
+
+  // Auto-attach video and audio streams whenever screen share or camera state changes
+  useEffect(() => {
+    if (isMentorship) {
+      const localCamera = mediaStreamRef.current;
+      const remoteCamera = remoteStreamRef.current?.getVideoTracks().length ? remoteStreamRef.current : null;
+      const activeScreen = localScreenShareActive
+        ? screenStreamRef.current
+        : remoteScreenStreamRef.current?.getVideoTracks().length
+          ? remoteScreenStreamRef.current
+          : null;
+      const attach = (element: HTMLVideoElement | null, stream: MediaStream | null) => {
+        if (!element) return;
+        element.srcObject = stream;
+        if (stream) element.play().catch((error) => console.warn('LiveKit video playback:', error));
+      };
+
+      attach(localVideoRef.current, localCamera);
+      attach(localPipVideoRef.current, localCamera);
+      attach(remoteVideoRef.current, remoteCamera);
+      attach(remotePipVideoRef.current, remoteCamera);
+      attach(screenVideoRef.current, screenShareActive ? activeScreen : null);
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = mutedIncoming;
+        if (remoteAudioRef.current.srcObject) {
+          remoteAudioRef.current.play().catch((error) => console.warn('LiveKit audio playback:', error));
+        }
+      }
+      return;
+    }
     const cached = window.__edtech_active_streams?.[roomState.roomCode];
 
     if (screenShareActive) {
-      const activeScreen = isHost ? screenStreamRef.current : (cached?.screenStream || null);
+      // Screen share stage: host uses local screenStream, student uses remoteStreamRef or cached
+      const activeScreen = isHost ? screenStreamRef.current : (remoteStreamRef.current || cached?.screenStream || null);
       if (activeScreen && screenVideoRef.current) {
         screenVideoRef.current.srcObject = activeScreen;
         screenVideoRef.current.play().catch((e) => console.warn('Screen video play:', e));
       }
 
-      const activeCamera = isHost ? mediaStreamRef.current : (cached?.cameraStream || null);
+      // PiP Camera: host uses mediaStreamRef, student uses remoteStreamRef
+      const activeCamera = isHost ? mediaStreamRef.current : (remoteStreamRef.current || cached?.cameraStream || null);
       if (activeCamera) {
         const targetPip = isHost ? localPipVideoRef.current : remotePipVideoRef.current;
         if (targetPip) {
@@ -466,7 +784,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         }
       }
     } else {
-      const activeCamera = isHost ? mediaStreamRef.current : (cached?.cameraStream || null);
+      const activeCamera = isHost ? mediaStreamRef.current : (remoteStreamRef.current || cached?.cameraStream || null);
       if (activeCamera) {
         const targetVideo = isHost ? localVideoRef.current : remoteVideoRef.current;
         if (targetVideo) {
@@ -475,7 +793,239 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         }
       }
     }
-  }, [screenShareActive, cameraEnabled, isHost, roomState.roomCode]);
+
+    // Attach student remote audio element whenever remote stream is available
+    if (!isMentorship && !isHost && remoteStreamRef.current && remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      remoteAudioRef.current.play().catch((e) => console.warn('Remote audio play:', e));
+    }
+  }, [screenShareActive, cameraEnabled, isHost, isMentorship, localScreenShareActive, mutedIncoming, remoteMediaVersion, roomState.roomCode]);
+
+  // Ensure remote audio playback after user interaction if browser autoplay is blocked.
+  useEffect(() => {
+    if (isHost && !isMentorship) return;
+    const enableAudio = () => {
+      if (remoteAudioRef.current && remoteAudioRef.current.paused) {
+        remoteAudioRef.current.play().catch(() => {});
+      }
+    };
+    window.addEventListener('click', enableAudio, { once: true });
+    window.addEventListener('touchstart', enableAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', enableAudio);
+      window.removeEventListener('touchstart', enableAudio);
+    };
+  }, [isHost, isMentorship]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current) remoteAudioRef.current.muted = mutedIncoming;
+  }, [mutedIncoming]);
+
+  // Real-Time WebRTC Peer Streaming for cross-tab, incognito & cross-device video sharing
+  useEffect(() => {
+    let active = true;
+    if (isMentorship) return;
+    let signalPoller: any = null;
+    let lastSignalTs = 0; // Receive any active cached offer immediately
+    const myId = user ? (((user as any)._id || (user as any).id)?.toString() || 'user') : 'guest';
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    });
+    pcRef.current = pc;
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && active) {
+        webinarsApi
+          .sendSignal(roomState.roomCode, {
+            type: 'candidate',
+            candidate: event.candidate,
+            senderId: myId,
+          })
+          .catch(() => {});
+      }
+    };
+
+    if (isHost) {
+      // HOST: Attach local tracks and send offer
+      const sendHostOffer = async () => {
+        if (!active || !pcRef.current) return;
+        try {
+          if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach((track) => {
+              try {
+                const senders = pc.getSenders();
+                if (!senders.some((s) => s.track === track)) {
+                  pc.addTrack(track, mediaStreamRef.current!);
+                }
+              } catch (e) {}
+            });
+          }
+
+          if (screenStreamRef.current && screenShareActive) {
+            const screenTrack = screenStreamRef.current.getVideoTracks()[0];
+            if (screenTrack) {
+              const videoSender =
+                pc.getSenders().find((sender) => sender.track?.kind === 'video') ??
+                pc.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === 'video')?.sender;
+              if (videoSender) {
+                videoSender.replaceTrack(screenTrack).catch(() => {});
+              } else {
+                try {
+                  pc.addTrack(screenTrack, screenStreamRef.current);
+                } catch (e) {}
+              }
+            }
+          }
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await webinarsApi.sendSignal(roomState.roomCode, {
+            type: 'offer',
+            sdp: offer.sdp,
+            senderId: myId,
+          });
+        } catch (e) {
+          console.warn('[WebRTC Host Offer error]:', e);
+        }
+      };
+
+      const delayTimer = setTimeout(() => {
+        sendHostOffer();
+      }, 1000);
+
+      signalPoller = setInterval(async () => {
+        if (!active) return;
+        try {
+          const res = await webinarsApi.getSignals(roomState.roomCode, lastSignalTs, myId);
+          if (res.success && Array.isArray(res.data?.signals)) {
+            for (const s of res.data.signals) {
+              if (s.timestamp > lastSignalTs) lastSignalTs = s.timestamp;
+              if (s.type === 'request-offer') {
+                await sendHostOffer();
+              } else if (s.type === 'answer' && s.sdp) {
+                if (pc.signalingState === 'have-local-offer') {
+                  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: s.sdp }));
+                }
+              } else if (s.type === 'candidate' && s.candidate) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(s.candidate));
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (e) {}
+      }, 1500);
+
+      return () => {
+        active = false;
+        clearTimeout(delayTimer);
+        clearInterval(signalPoller);
+        pc.close();
+        pcRef.current = null;
+      };
+    } else {
+      // STUDENT: Receive remote media stream and setup audio listener
+      pc.ontrack = (event) => {
+        const incomingStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        remoteStreamRef.current = incomingStream;
+
+        // 1. Play persistent audio
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = incomingStream;
+          remoteAudioRef.current.play().catch((e) => console.warn('Remote audio play:', e));
+        }
+
+        // 2. Play video elements
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = incomingStream;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+        if (screenVideoRef.current) {
+          screenVideoRef.current.srcObject = incomingStream;
+          screenVideoRef.current.play().catch(() => {});
+        }
+        if (remotePipVideoRef.current) {
+          remotePipVideoRef.current.srcObject = incomingStream;
+          remotePipVideoRef.current.play().catch(() => {});
+        }
+
+        // 3. Real-time audio analyser on student side for voice waveform & speaking alert
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass && incomingStream.getAudioTracks().length > 0) {
+            const audioCtx = new AudioContextClass();
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            const source = audioCtx.createMediaStreamSource(incomingStream);
+            source.connect(analyser);
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            const checkStudentAudioLevel = () => {
+              if (!active) return;
+              analyser.getByteFrequencyData(dataArray);
+              let sum = 0;
+              for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+              const avg = sum / dataArray.length;
+              const level = Math.min(100, Math.round((avg / 128) * 100));
+              setAudioLevel(level);
+              setIsInstructorSpeaking(level > 10);
+              requestAnimationFrame(checkStudentAudioLevel);
+            };
+            checkStudentAudioLevel();
+          }
+        } catch (e) {
+          console.warn('[WebRTC Student AudioContext]:', e);
+        }
+      };
+
+      // Request offer from host immediately upon student mounting
+      webinarsApi
+        .sendSignal(roomState.roomCode, {
+          type: 'request-offer',
+          senderId: myId,
+        })
+        .catch(() => {});
+
+      signalPoller = setInterval(async () => {
+        if (!active) return;
+        try {
+          const res = await webinarsApi.getSignals(roomState.roomCode, lastSignalTs, myId);
+          if (res.success && Array.isArray(res.data?.signals)) {
+            for (const s of res.data.signals) {
+              if (s.timestamp > lastSignalTs) lastSignalTs = s.timestamp;
+              if (s.type === 'offer' && s.sdp) {
+                if (pc.signalingState === 'stable' || pc.signalingState === 'have-remote-offer') {
+                  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: s.sdp }));
+                  const answer = await pc.createAnswer();
+                  await pc.setLocalDescription(answer);
+                  await webinarsApi.sendSignal(roomState.roomCode, {
+                    type: 'answer',
+                    sdp: answer.sdp,
+                    senderId: myId,
+                  });
+                }
+              } else if (s.type === 'candidate' && s.candidate) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(s.candidate));
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (e) {}
+      }, 1500);
+
+      return () => {
+        active = false;
+        clearInterval(signalPoller);
+        pc.close();
+        pcRef.current = null;
+      };
+    }
+  }, [isHost, isMentorship, roomState.roomCode, user]);
 
   // Sync Room Updates (Chat, Q&A, Hand Raises, Attendees) periodically
   useEffect(() => {
@@ -492,6 +1042,25 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           if (res.data.qa) setQaList(res.data.qa);
           if (res.data.raisedHands) setRaisedHands(res.data.raisedHands);
 
+          // Sync host broadcast state if student
+          if (!isHost && !isMentorship && res.data.hostStreamState) {
+            if (typeof res.data.hostStreamState.cameraEnabled === 'boolean') {
+              setCameraEnabled(res.data.hostStreamState.cameraEnabled);
+            }
+            if (typeof res.data.hostStreamState.micEnabled === 'boolean') {
+              setMicEnabled(res.data.hostStreamState.micEnabled);
+            }
+            if (typeof res.data.hostStreamState.screenShareActive === 'boolean') {
+              setScreenShareActive(res.data.hostStreamState.screenShareActive);
+            }
+            if (typeof res.data.hostStreamState.isInstructorSpeaking === 'boolean') {
+              setIsInstructorSpeaking(res.data.hostStreamState.isInstructorSpeaking);
+            }
+            if (typeof res.data.hostStreamState.audioLevel === 'number') {
+              setAudioLevel(res.data.hostStreamState.audioLevel);
+            }
+          }
+
           // Update active attendees list
           if (Array.isArray(res.data.attendees)) {
             setActiveParticipants((prev) => {
@@ -499,12 +1068,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               res.data.attendees!.forEach((att) => {
                 if (att.userId) {
                   const existing = map.get(att.userId);
+                  const isMe = user && (((user as any)._id || (user as any).id)?.toString() === att.userId);
                   map.set(att.userId, {
                     id: att.userId,
                     name: att.userName,
                     avatar: att.userAvatar || null,
                     role: (att.role as any) || 'STUDENT',
-                    isOnline: att.isOnline !== false,
+                    isOnline: isMe ? true : Boolean(att.isOnline),
                     isSpeaking: existing?.isSpeaking || false,
                     hasHandRaised: existing?.hasHandRaised || false,
                     canSpeak: existing?.canSpeak || false,
@@ -518,13 +1088,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
       } catch (err) {
         // silent background poll error
       }
-    }, 3000);
+    }, 2000);
 
     return () => {
       mounted = false;
       clearInterval(poller);
     };
-  }, [roomState.roomCode, onWebinarEnded]);
+  }, [roomState.roomCode, onWebinarEnded, isHost, isMentorship]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -543,30 +1113,151 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   }, [raisedHands, user]);
 
   // Toggle Camera Track (Host)
-  const handleToggleCamera = () => {
-    if (mediaStreamRef.current) {
-      const nextState = !cameraEnabled;
-      const videoTracks = mediaStreamRef.current.getVideoTracks();
-      videoTracks.forEach((t) => {
-        t.enabled = nextState;
-      });
-      setCameraEnabled(nextState);
+  const handleToggleCamera = async () => {
+    if (isMentorship) {
+      const room = liveKitRoomRef.current;
+      if (!room || !liveKitConnected) {
+        toastError('Media Not Connected', 'Wait for the mentorship media room to connect, then try again.');
+        return;
+      }
+      const nextState = !localCameraEnabled;
+      try {
+        const publication = await room.localParticipant.setCameraEnabled(nextState, {
+          resolution: { width: 1280, height: 720 },
+        });
+        if (nextState && !publication) throw new Error('Camera could not be published.');
+        const enabled = Boolean(publication);
+        setLocalCameraEnabled(enabled);
+        if (isHost) setCameraEnabled(enabled);
+      } catch (error) {
+        toastError('Camera Error', error instanceof Error ? error.message : 'Could not change camera state.');
+      }
+      return;
+    }
+
+    if (cameraEnabled) {
+      // 1. TURN OFF: Stop video tracks physically so webcam hardware sensor & LED light turn OFF completely
+      if (mediaStreamRef.current) {
+        const videoTracks = mediaStreamRef.current.getVideoTracks();
+        videoTracks.forEach((t) => {
+          t.stop();
+          mediaStreamRef.current?.removeTrack(t);
+        });
+      }
+      if (window.__edtech_active_streams?.[roomState.roomCode]) {
+        window.__edtech_active_streams[roomState.roomCode].cameraStream = null;
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (localPipVideoRef.current) {
+        localPipVideoRef.current.srcObject = null;
+      }
+
+      // If screen share is not active, replace WebRTC video track with null so remote sees camera off
+      if (!screenShareActive) {
+        updateWebRtcVideoTrack(null);
+      }
+
+      setCameraEnabled(false);
 
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: 'HOST_STREAM_STATE',
-          cameraEnabled: nextState,
+          cameraEnabled: false,
           micEnabled,
           screenShareActive,
           isInstructorSpeaking,
           audioLevel,
         });
       }
+
+      webinarsApi.updateBroadcastState(roomState.roomCode, {
+        cameraEnabled: false,
+        micEnabled,
+        screenShareActive,
+        isInstructorSpeaking,
+        audioLevel,
+      }).catch(() => {});
+    } else {
+      // 2. TURN ON: Re-acquire camera hardware device and attach video stream
+      try {
+        const newVideoStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        const newTrack = newVideoStream.getVideoTracks()[0];
+        if (newTrack) {
+          if (!mediaStreamRef.current) {
+            mediaStreamRef.current = new MediaStream();
+          }
+          mediaStreamRef.current.addTrack(newTrack);
+
+          if (window.__edtech_active_streams?.[roomState.roomCode]) {
+            window.__edtech_active_streams[roomState.roomCode].cameraStream = mediaStreamRef.current;
+          }
+
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = mediaStreamRef.current;
+            localVideoRef.current.play().catch(() => {});
+          }
+          if (localPipVideoRef.current) {
+            localPipVideoRef.current.srcObject = mediaStreamRef.current;
+            localPipVideoRef.current.play().catch(() => {});
+          }
+
+          // If screen share is not currently active, stream camera track over WebRTC
+          if (!screenShareActive) {
+            updateWebRtcVideoTrack(newTrack);
+          }
+        }
+        setCameraEnabled(true);
+
+        if (broadcastChannelRef.current) {
+          broadcastChannelRef.current.postMessage({
+            type: 'HOST_STREAM_STATE',
+            cameraEnabled: true,
+            micEnabled,
+            screenShareActive,
+            isInstructorSpeaking,
+            audioLevel,
+          });
+        }
+
+        webinarsApi.updateBroadcastState(roomState.roomCode, {
+          cameraEnabled: true,
+          micEnabled,
+          screenShareActive,
+          isInstructorSpeaking,
+          audioLevel,
+        }).catch(() => {});
+      } catch (err: any) {
+        console.error('Failed to re-enable camera:', err);
+        toastError('Camera Error', 'Could not access camera device.');
+      }
     }
   };
 
   // Toggle Mic Track (Host)
-  const handleToggleMic = () => {
+  const handleToggleMic = async () => {
+    if (isMentorship) {
+      const room = liveKitRoomRef.current;
+      if (!room || !liveKitConnected) {
+        toastError('Media Not Connected', 'Wait for the mentorship media room to connect, then try again.');
+        return;
+      }
+      const nextState = !localMicEnabled;
+      try {
+        const publication = await room.localParticipant.setMicrophoneEnabled(nextState);
+        if (nextState && !publication) throw new Error('Microphone could not be published.');
+        const enabled = nextState;
+        setLocalMicEnabled(enabled);
+        if (isHost) setMicEnabled(enabled);
+      } catch (error) {
+        toastError('Microphone Error', error instanceof Error ? error.message : 'Could not change microphone state.');
+      }
+      return;
+    }
+
     if (mediaStreamRef.current) {
       const nextState = !micEnabled;
       const audioTracks = mediaStreamRef.current.getAudioTracks();
@@ -581,15 +1272,42 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           cameraEnabled,
           micEnabled: nextState,
           screenShareActive,
-          isInstructorSpeaking,
-          audioLevel,
+          isInstructorSpeaking: nextState ? isInstructorSpeaking : false,
+          audioLevel: nextState ? audioLevel : 0,
         });
       }
+
+      webinarsApi.updateBroadcastState(roomState.roomCode, {
+        cameraEnabled,
+        micEnabled: nextState,
+        screenShareActive,
+        isInstructorSpeaking: nextState ? isInstructorSpeaking : false,
+        audioLevel: nextState ? audioLevel : 0,
+      }).catch(() => {});
     }
   };
 
   // Toggle Screen Sharing (Host)
   const handleToggleScreenShare = async () => {
+    if (isMentorship) {
+      const room = liveKitRoomRef.current;
+      if (!room || !liveKitConnected) {
+        toastError('Media Not Connected', 'Wait for the mentorship media room to connect, then try again.');
+        return;
+      }
+      try {
+        const nextState = !localScreenShareActive;
+        const publication = await room.localParticipant.setScreenShareEnabled(nextState);
+        if (nextState && !publication) throw new Error('Screen sharing could not be started.');
+        const enabled = nextState;
+        setLocalScreenShareActive(enabled);
+        setScreenShareActive(enabled || Boolean(remoteScreenStreamRef.current?.getVideoTracks().length));
+      } catch (error) {
+        toastError('Screen Share Error', error instanceof Error ? error.message : 'Could not change screen sharing state.');
+      }
+      return;
+    }
+
     if (screenShareActive) {
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -599,6 +1317,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         window.__edtech_active_streams[roomState.roomCode].screenStream = null;
       }
       setScreenShareActive(false);
+
+      // Restore camera track to WebRTC video stream
+      const camTrack = cameraEnabled ? (mediaStreamRef.current?.getVideoTracks()[0] || null) : null;
+      updateWebRtcVideoTrack(camTrack);
 
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
@@ -610,6 +1332,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           audioLevel,
         });
       }
+      webinarsApi.updateBroadcastState(roomState.roomCode, {
+        cameraEnabled,
+        micEnabled,
+        screenShareActive: false,
+        isInstructorSpeaking,
+        audioLevel,
+      }).catch(() => {});
       console.log('[SCREEN SHARE] Screen sharing stopped by user');
     } else {
       try {
@@ -629,6 +1358,9 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
         setScreenShareActive(true);
 
+        // Instantly transmit screen share video track over WebRTC to student
+        updateWebRtcVideoTrack(screenTrack);
+
         if (screenVideoRef.current) {
           screenVideoRef.current.srcObject = screenStream;
           screenVideoRef.current.play().catch(() => {});
@@ -645,6 +1377,14 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           });
         }
 
+        webinarsApi.updateBroadcastState(roomState.roomCode, {
+          cameraEnabled,
+          micEnabled,
+          screenShareActive: true,
+          isInstructorSpeaking,
+          audioLevel,
+        }).catch(() => {});
+
         // Handle user stopping screen share from Chrome's floating "Stop sharing" bar
         screenTrack.onended = () => {
           console.log('[SCREEN SHARE] stopped by browser onended event');
@@ -656,6 +1396,11 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
             window.__edtech_active_streams[roomState.roomCode].screenStream = null;
           }
           setScreenShareActive(false);
+
+          // Restore camera track to WebRTC video stream
+          const camTrack = cameraEnabled ? (mediaStreamRef.current?.getVideoTracks()[0] || null) : null;
+          updateWebRtcVideoTrack(camTrack);
+
           if (broadcastChannelRef.current) {
             broadcastChannelRef.current.postMessage({
               type: 'HOST_STREAM_STATE',
@@ -666,6 +1411,13 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               audioLevel,
             });
           }
+          webinarsApi.updateBroadcastState(roomState.roomCode, {
+            cameraEnabled,
+            micEnabled,
+            screenShareActive: false,
+            isInstructorSpeaking,
+            audioLevel,
+          }).catch(() => {});
         };
       } catch (err: any) {
         if (err.name !== 'NotAllowedError') {
@@ -822,39 +1574,40 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
     }
   };
 
-  // Computed online count
-  const onlineCount = Math.max(
-    activeParticipants.filter((p) => p.isOnline !== false).length,
-    roomState.onlineCount || 0,
-    roomState.registrationsCount || 0,
-    1
-  );
+  // Real-time host presence
+  const isHostOnline =
+    isHost ||
+    liveKitHostPresent ||
+    activeParticipants.some((p) => p.role === 'HOST' && p.isOnline === true);
+
+  // Computed online count strictly based on currently connected participants
+  const onlineCount = activeParticipants.filter((p) => p.isOnline === true).length || 1;
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-white overflow-hidden select-none font-sans">
       {/* Top Navbar / Studio Status Header */}
-      <header className="h-16 px-4 sm:px-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between z-20 shrink-0 shadow-lg">
+      <header className="h-14 min-[501px]:h-16 px-3 sm:px-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between z-20 shrink-0 shadow-lg gap-2">
         {/* Left: Brand & Webinar Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={onLeave}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
             title="Leave Classroom"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white flex items-center gap-1 shadow-sm">
-                <Radio className="w-3 h-3 animate-pulse" /> LIVE NOW
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-red-600 text-white flex items-center gap-1 shadow-sm shrink-0">
+                <Radio className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-pulse" /> LIVE NOW
               </span>
-              <span className="text-xs font-bold text-slate-300 hidden sm:inline">
+              <span className="text-[11px] sm:text-xs font-bold text-slate-300 hidden sm:inline truncate">
                 {roomState.category}
               </span>
             </div>
-            <h1 className="text-sm sm:text-base font-black text-white truncate max-w-[200px] sm:max-w-md md:max-w-lg">
+            <h1 className="text-xs sm:text-base font-black text-white truncate max-w-[120px] min-[400px]:max-w-[200px] sm:max-w-md md:max-w-lg">
               {roomState.title}
             </h1>
           </div>
@@ -863,17 +1616,27 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         {/* Center: Live Broadcast Info Badge */}
         <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300 font-semibold shadow-inner">
           <Wifi className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-          <span>EduTech Live Studio</span>
+          <span>Edu<span className="text-[#FA5A36]">Tech</span> Studio</span>
           <span className="text-slate-600">•</span>
-          <span className="text-indigo-400 font-bold">{isHost ? 'Host Broadcasting' : 'Connected'}</span>
+          <span className="text-[#FA5A36] font-bold">
+            {isMentorship
+              ? liveKitConnected
+                ? 'Media Connected'
+                : liveKitError
+                  ? 'Media Error'
+                  : 'Connecting Media'
+              : isHost
+                ? 'Host Broadcasting'
+                : 'Connected'}
+          </span>
         </div>
 
         {/* Right: Participants Count & Leave / End Session */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs font-bold text-slate-200">
-            <Users className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>{onlineCount} Online</span>
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-[11px] sm:text-xs font-bold text-slate-200">
+            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#FA5A36]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>{onlineCount} <span className="hidden min-[400px]:inline">Online</span></span>
           </div>
 
           <button
@@ -882,10 +1645,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               navigator.clipboard.writeText(window.location.href);
               success('Link Copied', 'Live room URL copied to clipboard.');
             }}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer"
+            className="p-1.5 sm:p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer hidden min-[400px]:block"
             title="Share Room"
           >
-            <Share2 className="w-4 h-4" />
+            <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Host End Session OR Student Leave Button */}
@@ -893,16 +1656,16 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
             <button
               type="button"
               onClick={() => setShowEndModal(true)}
-              className="px-3.5 py-1.5 bg-red-600/90 hover:bg-red-600 text-white font-extrabold text-xs rounded-xl shadow-md shadow-red-600/20 flex items-center gap-1.5 transition cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 bg-red-600/90 hover:bg-red-600 text-white font-bold text-xs rounded-xl shadow-md shadow-red-600/20 flex items-center gap-1 sm:gap-1.5 transition cursor-pointer"
             >
-              <StopCircle className="w-4 h-4" />
-              <span>End Webinar</span>
+              <StopCircle className="w-3.5 h-3.5" />
+              <span><span className="hidden sm:inline">End </span>Session</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onLeave}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1 sm:gap-1.5 transition cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 text-red-400" />
               <span>Leave</span>
@@ -918,6 +1681,15 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           <div className="w-full flex-1 rounded-3xl bg-slate-900 border border-slate-800/80 overflow-hidden relative flex flex-col items-center justify-between shadow-2xl">
             {/* Primary Video / Broadcast Canvas View */}
             <div className="w-full flex-1 relative flex items-center justify-center bg-black overflow-hidden">
+              {/* Persistent background audio element for Mentor microphone audio playback */}
+              <audio
+                ref={remoteAudioRef}
+                autoPlay
+                playsInline
+                muted={mutedIncoming}
+                style={{ display: 'none' }}
+              />
+
               {/* Screen Share Stage View (Host or Student) */}
               {screenShareActive ? (
                 <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden">
@@ -925,10 +1697,11 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     ref={screenVideoRef}
                     autoPlay
                     playsInline
+                    muted
                     className="w-full h-full object-contain"
                   />
                   {/* Host Camera Picture-in-Picture */}
-                  {cameraEnabled && (
+                  {stageCameraEnabled && (
                     <div className="absolute bottom-4 right-4 w-44 h-28 sm:w-56 sm:h-36 rounded-2xl overflow-hidden border-2 border-indigo-500 shadow-2xl bg-slate-900 z-20">
                       <video
                         ref={isHost ? localPipVideoRef : remotePipVideoRef}
@@ -948,7 +1721,39 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     <span>Live Screen Share</span>
                   </div>
                 </div>
-              ) : cameraEnabled ? (
+              ) : !isHost && !isHostOnline ? (
+                /* Student waiting for Mentor to connect */
+                <div className="text-center p-8 max-w-md space-y-4 animate-in fade-in">
+                  <div className="relative inline-block">
+                    {roomState.instructor.avatar ? (
+                      <img
+                        src={roomState.instructor.avatar}
+                        alt={roomState.instructor.name}
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover mx-auto ring-4 ring-slate-800 shadow-2xl"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-800 text-white font-bold text-3xl flex items-center justify-center mx-auto shadow-2xl border-2 border-slate-700">
+                        {roomState.instructor.name?.[0] || 'M'}
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-slate-900 animate-pulse" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-bold text-white">
+                      Waiting for Mentor to Join
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      You are connected. <strong className="text-white">{roomState.instructor.name}</strong> has not joined the session yet.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-[11px] text-slate-300">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    <span>Live video & audio will start automatically once mentor connects</span>
+                  </div>
+                </div>
+              ) : stageCameraEnabled ? (
                 /* Live Camera Stream (Host Preview or Student Remote Stream) */
                 <div className="w-full h-full relative flex items-center justify-center bg-black">
                   <video
@@ -958,15 +1763,29 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     muted={isHost ? true : mutedIncoming}
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
+                  {isMentorship && (isHost ? remoteCameraEnabled : localCameraEnabled) && (
+                    <div className="absolute bottom-4 right-4 w-36 h-24 sm:w-44 sm:h-28 rounded-2xl overflow-hidden border-2 border-slate-600 shadow-2xl bg-slate-900 z-20">
+                      <video
+                        ref={isHost ? remotePipVideoRef : localPipVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover scale-x-[-1]"
+                      />
+                      <div className="absolute bottom-1 left-2 text-[10px] font-bold text-white bg-black/70 px-2 py-0.5 rounded">
+                        {isHost ? 'Student' : 'You'}
+                      </div>
+                    </div>
+                  )}
                   <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700 text-xs text-white font-bold">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                     <span>Live Studio Active</span>
                   </div>
                   <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700 text-xs text-white font-semibold">
-                    <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                    <div className="w-6 h-6 rounded-full bg-[#FA5A36] flex items-center justify-center text-[10px] font-bold">
                       {roomState.instructor.name?.[0] || 'H'}
                     </div>
-                    <span>{roomState.instructor.name} (Host)</span>
+                    <span>{roomState.instructor.name} (Mentor)</span>
                   </div>
                 </div>
               ) : (
@@ -977,10 +1796,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                       <img
                         src={roomState.instructor.avatar}
                         alt={roomState.instructor.name}
-                        className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover mx-auto ring-4 ring-indigo-500/30 shadow-2xl shadow-indigo-500/20"
+                        className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover mx-auto ring-4 ring-[#FA5A36]/30 shadow-2xl shadow-[#FA5A36]/20"
                       />
                     ) : (
-                      <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-4xl flex items-center justify-center mx-auto shadow-2xl">
+                      <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-full bg-[#FA5A36] text-white font-bold text-4xl flex items-center justify-center mx-auto shadow-2xl">
                         {roomState.instructor.name?.[0] || 'I'}
                       </div>
                     )}
@@ -991,10 +1810,10 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   </div>
 
                   <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-white">
+                    <h3 className="text-xl sm:text-2xl font-bold text-white">
                       {roomState.instructor.name}
                     </h3>
-                    <p className="text-xs sm:text-sm font-semibold text-indigo-400 mt-0.5">
+                    <p className="text-xs sm:text-sm font-semibold text-[#FA5A36] mt-0.5">
                       {roomState.instructor.headline || 'Lead Instructor & Workshop Host'}
                     </p>
                     <p className="text-xs text-slate-400 mt-2">
@@ -1006,22 +1825,22 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   <div className="flex items-center justify-center gap-1.5 pt-2">
                     <span
                       className={`w-1.5 h-6 rounded-full transition-all duration-150 ${
-                        isInstructorSpeaking ? 'bg-indigo-400 h-8 animate-pulse' : 'bg-slate-700 h-4'
+                        isInstructorSpeaking ? 'bg-[#FA5A36] h-8 animate-pulse' : 'bg-slate-700 h-4'
                       }`}
                     ></span>
                     <span
                       className={`w-1.5 h-8 rounded-full transition-all duration-150 ${
-                        isInstructorSpeaking ? 'bg-indigo-500 h-10 animate-pulse' : 'bg-slate-700 h-5'
+                        isInstructorSpeaking ? 'bg-[#FA5A36] h-10 animate-pulse' : 'bg-slate-700 h-5'
                       }`}
                     ></span>
                     <span
                       className={`w-1.5 h-5 rounded-full transition-all duration-150 ${
-                        isInstructorSpeaking ? 'bg-indigo-400 h-7 animate-pulse' : 'bg-slate-700 h-3'
+                        isInstructorSpeaking ? 'bg-[#FA5A36] h-7 animate-pulse' : 'bg-slate-700 h-3'
                       }`}
                     ></span>
                     <span
                       className={`w-1.5 h-7 rounded-full transition-all duration-150 ${
-                        isInstructorSpeaking ? 'bg-indigo-600 h-9 animate-pulse' : 'bg-slate-700 h-4'
+                        isInstructorSpeaking ? 'bg-[#FA5A36] h-9 animate-pulse' : 'bg-slate-700 h-4'
                       }`}
                     ></span>
                   </div>
@@ -1030,7 +1849,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
 
               {/* Speaking Alert Overlay */}
               {isInstructorSpeaking && (
-                <div className="absolute top-4 right-4 px-3 py-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-indigo-500/30 flex items-center gap-2 text-xs font-bold text-white shadow-lg animate-in fade-in">
+                <div className="absolute top-4 right-4 px-3 py-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-[#FA5A36]/40 flex items-center gap-2 text-xs font-bold text-white shadow-lg animate-in fade-in">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
                   <span>{roomState.instructor.name} is speaking</span>
                 </div>
@@ -1040,37 +1859,57 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
             {/* MULTI-PARTICIPANT VIDEO & AVATAR THUMBNAIL STRIP */}
             <div className="w-full bg-slate-950/90 backdrop-blur-md border-t border-slate-800/80 px-4 py-2.5 flex items-center gap-3 overflow-x-auto z-10 shrink-0">
               <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
-                <Users className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Active ({activeParticipants.length})</span>
+                <Users className="w-3.5 h-3.5 text-[#FA5A36]" />
+                <span>Active ({activeParticipants.filter((p) => p.isOnline === true).length || 1})</span>
               </div>
 
-              {/* Host Thumbnail Tile */}
-              <div className="flex items-center gap-2 p-1.5 pr-3 rounded-2xl bg-slate-900 border border-indigo-500/40 shrink-0 shadow-md">
+              {/* Host / Mentor Thumbnail Tile */}
+              <div
+                className={`flex items-center gap-2 p-1.5 pr-3 rounded-2xl border shrink-0 shadow-md transition-all ${
+                  isHostOnline
+                    ? 'bg-slate-900 border-[#FA5A36]/40'
+                    : 'bg-slate-900/60 border-slate-800 opacity-60'
+                }`}
+              >
                 <div className="relative">
                   {roomState.instructor.avatar ? (
                     <img
                       src={roomState.instructor.avatar}
                       alt={roomState.instructor.name}
-                      className="w-7 h-7 rounded-xl object-cover ring-2 ring-indigo-500"
+                      className="w-7 h-7 rounded-xl object-cover ring-1 ring-slate-700"
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center">
+                    <div className="w-7 h-7 rounded-xl bg-slate-800 text-white font-bold text-xs flex items-center justify-center">
                       {roomState.instructor.name?.[0] || 'H'}
                     </div>
                   )}
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-900"></span>
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-slate-900 ${
+                      isHostOnline ? 'bg-emerald-500' : 'bg-slate-500'
+                    }`}
+                  ></span>
                 </div>
                 <div className="text-left">
                   <div className="flex items-center gap-1">
-                    <p className="text-xs font-black text-white truncate max-w-[100px]">
-                      {roomState.instructor.name}
+                    <p className="text-xs font-bold text-white truncate max-w-[100px]">
+                      {roomState.instructor.name} {isHost && '(You)'}
                     </p>
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-indigo-500/20 text-indigo-300 uppercase">
-                      Host
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-[#FA5A36]/20 text-[#FA5A36] uppercase">
+                      Mentor
                     </span>
                   </div>
-                  <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <Mic className="w-2.5 h-2.5" /> Broadcasting
+                  <p
+                    className={`text-[10px] font-semibold flex items-center gap-1 ${
+                      isHostOnline ? 'text-emerald-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {isHostOnline ? (
+                      <>
+                        <Mic className="w-2.5 h-2.5" /> Broadcasting
+                      </>
+                    ) : (
+                      'Not joined yet'
+                    )}
                   </p>
                 </div>
               </div>
@@ -1082,6 +1921,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   const hasRaised = raisedHands.some((rh) => rh.userId === student.id);
                   const canSpeak = raisedHands.find((rh) => rh.userId === student.id)?.canSpeak;
                   const isCurrentUser = user && ((user as any)._id || (user as any).id)?.toString() === student.id;
+                  const isStudentOnline = isCurrentUser || Boolean(student.isOnline);
 
                   return (
                     <div
@@ -1089,7 +1929,9 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                       className={`flex items-center gap-2 p-1.5 pr-3 rounded-2xl border transition-all shrink-0 ${
                         hasRaised
                           ? 'bg-amber-500/10 border-amber-500/40'
-                          : 'bg-slate-900/80 border-slate-800'
+                          : isStudentOnline
+                          ? 'bg-slate-900/80 border-slate-700'
+                          : 'bg-slate-900/50 border-slate-800 opacity-60'
                       }`}
                     >
                       <div className="relative">
@@ -1108,7 +1950,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                         )}
                         <span
                           className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-slate-900 ${
-                            student.isOnline !== false ? 'bg-emerald-500' : 'bg-slate-500'
+                            isStudentOnline ? 'bg-emerald-500' : 'bg-slate-500'
                           }`}
                         ></span>
                       </div>
@@ -1137,21 +1979,21 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           </div>
 
           {/* Bottom Broadcast Control Dock */}
-          <div className="h-16 mt-3 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 px-4 flex items-center justify-between shrink-0">
-            {/* Left Controls: Raise Hand (Student) */}
-            <div className="flex items-center gap-2">
+          <div className="h-14 min-[501px]:h-16 mt-2 min-[501px]:mt-3 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 px-2 min-[501px]:px-4 flex items-center justify-between shrink-0 gap-1 min-[501px]:gap-2">
+            {/* Left Controls: Raise Hand (Student) & Volume */}
+            <div className="flex items-center gap-1 min-[501px]:gap-2">
               {!isHost && (
                 <button
                   type="button"
                   onClick={handleToggleRaiseHand}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition cursor-pointer ${
+                  className={`px-2 min-[501px]:px-3.5 py-1.5 min-[501px]:py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
                     isHandRaised
                       ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                   }`}
                 >
-                  <Hand className="w-4 h-4" />
-                  <span>{isHandRaised ? 'Hand Raised ✋' : 'Raise Hand'}</span>
+                  <Hand className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4" />
+                  <span className="hidden min-[400px]:inline">{isHandRaised ? 'Hand Raised ✋' : 'Raise Hand'}</span>
                 </button>
               )}
 
@@ -1159,54 +2001,55 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setMutedIncoming(!mutedIncoming)}
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer"
+                className="p-2 min-[501px]:p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer"
                 title={mutedIncoming ? 'Unmute Live Audio' : 'Mute Live Audio'}
               >
-                {mutedIncoming ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+                {mutedIncoming ? <VolumeX className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4" />}
               </button>
             </div>
 
             {/* Center Controls: Host Mic / Camera / Screen Share */}
-            {isHost ? (
-              <div className="flex items-center gap-2 sm:gap-3">
+            {isHost || roomState.category === '1-on-1 Mentorship' ? (
+              <div className="flex items-center gap-1.5 min-[501px]:gap-3">
                 <button
                   type="button"
                   onClick={handleToggleMic}
-                  className={`p-3 rounded-2xl font-bold transition cursor-pointer shadow-md ${
-                    micEnabled
+                  className={`p-2 min-[501px]:p-3 rounded-xl min-[501px]:rounded-2xl font-bold transition cursor-pointer shadow-md ${
+                    controlMicEnabled
                       ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
                       : 'bg-red-600 hover:bg-red-700 text-white'
                   }`}
-                  title={micEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
+                  title={controlMicEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
                 >
-                  {micEnabled ? <Mic className="w-5 h-5 text-emerald-400" /> : <MicOff className="w-5 h-5" />}
+                  {controlMicEnabled ? <Mic className="w-4 h-4 min-[501px]:w-5 min-[501px]:h-5 text-emerald-400" /> : <MicOff className="w-4 h-4 min-[501px]:w-5 min-[501px]:h-5" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleToggleCamera}
-                  className={`p-3 rounded-2xl font-bold transition cursor-pointer shadow-md ${
-                    cameraEnabled
+                  className={`p-2 min-[501px]:p-3 rounded-xl min-[501px]:rounded-2xl font-bold transition cursor-pointer shadow-md ${
+                    controlCameraEnabled
                       ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
                       : 'bg-red-600 hover:bg-red-700 text-white'
                   }`}
-                  title={cameraEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
+                  title={controlCameraEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
                 >
-                  {cameraEnabled ? <Video className="w-5 h-5 text-indigo-400" /> : <VideoOff className="w-5 h-5" />}
+                  {controlCameraEnabled ? <Video className="w-4 h-4 min-[501px]:w-5 min-[501px]:h-5 text-indigo-400" /> : <VideoOff className="w-4 h-4 min-[501px]:w-5 min-[501px]:h-5" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleToggleScreenShare}
-                  className={`px-3.5 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-md ${
-                    screenShareActive
+                  className={`p-2 min-[501px]:px-3.5 min-[501px]:py-2.5 rounded-xl min-[501px]:rounded-2xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-md ${
+                    controlScreenShareActive
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                   }`}
+                  title={controlScreenShareActive ? 'Stop Sharing' : 'Share Screen'}
                 >
                   <ScreenShare className="w-4 h-4" />
                   <span className="hidden sm:inline">
-                    {screenShareActive ? 'Stop Sharing' : 'Share Screen'}
+                    {controlScreenShareActive ? 'Stop Sharing' : 'Share Screen'}
                   </span>
                 </button>
               </div>
@@ -1217,7 +2060,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   type="button"
                   onClick={handleToggleMic}
                   disabled={!raisedHands.find((rh) => rh.userId === (user as any)?._id?.toString())?.canSpeak}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                  className={`px-2.5 min-[501px]:px-3.5 py-1.5 min-[501px]:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
                     !raisedHands.find((rh) => rh.userId === (user as any)?._id?.toString())?.canSpeak
                       ? 'opacity-40 bg-slate-800 text-slate-400 cursor-not-allowed'
                       : micEnabled
@@ -1225,50 +2068,84 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                       : 'bg-slate-800 text-slate-200'
                   }`}
                 >
-                  {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                  <span>{micEnabled ? 'Mic Active' : 'Mic Muted'}</span>
+                  {micEnabled ? <Mic className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4" /> : <MicOff className="w-3.5 h-3.5 min-[501px]:w-4 min-[501px]:h-4" />}
+                  <span className="hidden min-[400px]:inline">{micEnabled ? 'Mic Active' : 'Mic Muted'}</span>
                 </button>
               </div>
             )}
 
-            {/* Right Controls: Tab Switchers */}
-            <div className="flex items-center gap-1.5">
+            {/* Right Controls: Tab Switchers (Desktop) & Mobile Tools Toggle Button (<= 500px) */}
+            <div className="flex items-center gap-1 sm:gap-1.5">
               <button
                 type="button"
-                onClick={() => setActiveTab('chat')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  activeTab === 'chat'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                onClick={() => setMobilePanelOpen(!mobilePanelOpen)}
+                className={`min-[501px]:hidden px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  mobilePanelOpen ? 'bg-[#FA5A36] text-white shadow-xs' : 'bg-slate-800 text-slate-300'
                 }`}
+                title="Chat & Tools"
               >
-                Chat
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="text-[11px] capitalize">{activeTab}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('qa')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  activeTab === 'qa'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-              >
-                Q&A
-              </button>
+
+              <div className="hidden min-[501px]:flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('chat')}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'chat'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('qa')}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'qa'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  Q&A
+                </button>
+              </div>
             </div>
           </div>
         </main>
 
-        {/* Right Interactive Sidebar */}
-        <aside className="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col h-80 lg:h-auto shrink-0">
+        {/* Right Interactive Sidebar & Mobile Bottom Sheet Drawer */}
+        <aside
+          className={`${
+            mobilePanelOpen
+              ? 'fixed inset-x-0 bottom-0 top-14 z-50 flex flex-col bg-slate-900 border-t border-slate-700 rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-200'
+              : 'hidden'
+          } min-[501px]:flex min-[501px]:relative min-[501px]:inset-auto min-[501px]:top-auto min-[501px]:w-full lg:min-[501px]:w-96 min-[501px]:bg-slate-900 min-[501px]:border-t lg:min-[501px]:border-t-0 lg:min-[501px]:border-l min-[501px]:border-slate-800 min-[501px]:flex-col min-[501px]:h-80 lg:min-[501px]:h-auto shrink-0`}
+        >
+          {/* Mobile Drawer Close Header (<= 500px) */}
+          <div className="min-[501px]:hidden flex items-center justify-between px-3.5 py-2 border-b border-slate-800 bg-slate-950/90 shrink-0">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#FA5A36]"></span>
+              Session Tools • {activeTab.toUpperCase()}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMobilePanelOpen(false)}
+              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           {/* Tabs Navigation Header */}
-          <div className="flex border-b border-slate-800 p-2 gap-1 overflow-x-auto text-xs shrink-0">
+          <div className="flex border-b border-slate-800 p-2 gap-1 overflow-x-auto text-xs shrink-0 font-sans">
             <button
               type="button"
               onClick={() => setActiveTab('chat')}
               className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'chat'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-[#FA5A36] text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -1281,7 +2158,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               onClick={() => setActiveTab('qa')}
               className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'qa'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-[#FA5A36] text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -1299,14 +2176,14 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               onClick={() => setActiveTab('attendees')}
               className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'attendees'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-[#FA5A36] text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
               <span>Attendees</span>
               {raisedHands.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center justify-center">
                   {raisedHands.length}
                 </span>
               )}
@@ -1317,7 +2194,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               onClick={() => setActiveTab('notes')}
               className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'notes'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-[#FA5A36] text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -1330,7 +2207,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               onClick={() => setActiveTab('resources')}
               className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'resources'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-[#FA5A36] text-white shadow-xs'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
@@ -1399,12 +2276,12 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     value={messageInput}
                     onChange={(e) => setMessageInput(e.target.value)}
                     placeholder={isQuestionMode ? 'Ask a question for the instructor...' : 'Type a live message...'}
-                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#FA5A36] transition"
                   />
                   <button
                     type="submit"
                     disabled={!messageInput.trim() || isSendingChat}
-                    className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition disabled:opacity-40 cursor-pointer shadow-md"
+                    className="p-2.5 rounded-xl bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold transition disabled:opacity-40 cursor-pointer shadow-md"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -1454,7 +2331,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                           onClick={() => handleUpvote(qa.id)}
                           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                             qa.hasUpvoted
-                              ? 'bg-indigo-600 text-white'
+                              ? 'bg-[#FA5A36] text-white'
                               : 'bg-slate-700/60 hover:bg-slate-700 text-slate-300'
                           }`}
                         >
@@ -1484,12 +2361,12 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   value={qaInput}
                   onChange={(e) => setQaInput(e.target.value)}
                   placeholder="Ask a question for the live Q&A..."
-                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#FA5A36] transition"
                 />
                 <button
                   type="submit"
                   disabled={!qaInput.trim() || isSubmittingQa}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition disabled:opacity-40 cursor-pointer shadow-md shrink-0"
+                  className="px-4 py-2.5 rounded-xl bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs transition disabled:opacity-40 cursor-pointer shadow-md shrink-0"
                 >
                   Ask
                 </button>
@@ -1552,14 +2429,14 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                 </div>
 
                 {/* Host Item */}
-                <div className="p-2.5 rounded-xl bg-slate-800/80 border border-indigo-500/30 flex items-center justify-between shadow-sm">
+                <div className="p-2.5 rounded-xl bg-slate-800/80 border border-[#FA5A36]/30 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-white text-xs ring-2 ring-indigo-500">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FA5A36] to-[#E04322] flex items-center justify-center font-semibold text-white text-xs ring-2 ring-[#FA5A36]">
                       {roomState.instructor.name?.[0] || 'H'}
                     </div>
                     <div>
-                      <p className="font-extrabold text-white text-xs">{roomState.instructor.name}</p>
-                      <p className="text-[10px] text-indigo-400">Host / Instructor</p>
+                      <p className="font-semibold text-white text-xs">{roomState.instructor.name}</p>
+                      <p className="text-[10px] text-[#FA5A36]">Host / Instructor</p>
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 flex items-center gap-1">
@@ -1624,7 +2501,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Write your personal observations, takeaways, key commands, and learning points here..."
-                className="flex-1 p-3 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition resize-none leading-relaxed"
+                className="flex-1 p-3 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#FA5A36] transition resize-none leading-relaxed"
               />
 
               <div className="flex items-center justify-between pt-1">
@@ -1635,7 +2512,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   type="button"
                   onClick={handleSaveNotes}
                   disabled={isSavingNotes}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>{isSavingNotes ? 'Saving...' : 'Save Notes'}</span>
@@ -1661,7 +2538,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                     className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between gap-2"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
+                      <div className="p-2 rounded-xl bg-[#FA5A36]/10 text-[#FA5A36] shrink-0">
                         <FileText className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
@@ -1872,7 +2749,7 @@ const HostPreflightStudio: React.FC<HostPreflightStudioProps> = ({
           </div>
 
           <div className="hidden sm:flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#FA5A36]/10 text-[#FA5A36] border border-[#FA5A36]/20">
               {roomState.category}
             </span>
           </div>
@@ -1899,10 +2776,10 @@ const HostPreflightStudio: React.FC<HostPreflightStudioProps> = ({
                 />
               ) : (
                 <div className="text-center space-y-3">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-2xl flex items-center justify-center mx-auto shadow-xl ring-4 ring-indigo-500/20">
+                  <div className="w-20 h-20 rounded-full bg-[#FA5A36] text-white font-bold text-2xl flex items-center justify-center mx-auto shadow-xl ring-4 ring-[#FA5A36]/20">
                     {roomState.instructor?.name?.[0] || 'H'}
                   </div>
-                  <p className="text-xs font-bold text-slate-400">Camera is turned off</p>
+                  <p className="text-xs font-semibold text-slate-400">Camera is turned off</p>
                 </div>
               )}
 
@@ -1959,8 +2836,8 @@ const HostPreflightStudio: React.FC<HostPreflightStudioProps> = ({
           {/* Session Info & Go Live CTA (5 Cols) */}
           <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6 shadow-2xl">
             <div className="space-y-4">
-              <h2 className="text-base font-extrabold text-white flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-400" /> Pre-Broadcast Checklist
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-[#FA5A36]" /> Pre-Broadcast Checklist
               </h2>
 
               {/* Checklist items */}
@@ -1987,7 +2864,7 @@ const HostPreflightStudio: React.FC<HostPreflightStudioProps> = ({
 
                 <div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-300 font-semibold flex items-center gap-2">
-                    <Users className="w-4 h-4 text-indigo-400" />
+                    <Users className="w-4 h-4 text-[#FA5A36]" />
                     Enrolled Learners
                   </span>
                   <strong className="text-white">{roomState.registrationsCount} Registered</strong>
@@ -1995,11 +2872,11 @@ const HostPreflightStudio: React.FC<HostPreflightStudioProps> = ({
               </div>
 
               {/* Instructor Tips */}
-              <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 space-y-1">
-                <p className="font-bold flex items-center gap-1.5 text-indigo-200">
+              <div className="p-3.5 rounded-2xl bg-[#FA5A36]/10 border border-[#FA5A36]/20 text-xs text-orange-200 space-y-1">
+                <p className="font-bold flex items-center gap-1.5 text-orange-100">
                   <Zap className="w-3.5 h-3.5 text-amber-400" /> Live Studio Ready
                 </p>
-                <p className="text-[11px] leading-relaxed text-indigo-300/80">
+                <p className="text-[11px] leading-relaxed text-orange-200/80">
                   Once you click <strong>Start Live Webinar</strong>, your live classroom opens and video/audio will stream to all waiting learners.
                 </p>
               </div>
@@ -2104,7 +2981,7 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
             Starts In
           </span>
-          <div className="flex items-center justify-center gap-3 font-mono font-black text-2xl sm:text-3xl text-indigo-400">
+          <div className="flex items-center justify-center gap-3 font-mono font-bold text-2xl sm:text-3xl text-[#FA5A36]">
             <div className="bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
               {String(timeLeft.hours).padStart(2, '0')}
               <span className="block text-[9px] font-sans font-normal text-slate-400">HRS</span>
@@ -2128,16 +3005,16 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
             <img
               src={roomState.instructor.avatar}
               alt={roomState.instructor.name}
-              className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-500/40"
+              className="w-12 h-12 rounded-xl object-cover ring-2 ring-[#FA5A36]/40"
             />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-base flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-[#FA5A36] text-white font-bold text-base flex items-center justify-center">
               {roomState.instructor.name?.[0] || 'I'}
             </div>
           )}
           <div>
-            <p className="font-extrabold text-white text-sm">{roomState.instructor.name}</p>
-            <p className="text-[11px] text-indigo-400 font-semibold">
+            <p className="font-bold text-white text-sm">{roomState.instructor.name}</p>
+            <p className="text-[11px] text-[#FA5A36] font-semibold">
               {roomState.instructor.headline || 'Lead Instructor'}
             </p>
           </div>
@@ -2147,7 +3024,7 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="p-3 bg-slate-800/50 border border-slate-700/60 rounded-xl space-y-1">
             <span className="text-[10px] text-slate-400 font-bold block flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-indigo-400" /> Start Time
+              <Calendar className="w-3 h-3 text-[#FA5A36]" /> Start Time
             </span>
             <strong className="text-white text-xs block">
               {new Date(roomState.startTime).toLocaleString('en-US', {
@@ -2160,7 +3037,7 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
           </div>
           <div className="p-3 bg-slate-800/50 border border-slate-700/60 rounded-xl space-y-1">
             <span className="text-[10px] text-slate-400 font-bold block flex items-center gap-1">
-              <Users className="w-3 h-3 text-indigo-400" /> Enrolled Learners
+              <Users className="w-3 h-3 text-[#FA5A36]" /> Enrolled Learners
             </span>
             <strong className="text-white text-xs block">{roomState.registrationsCount} Registered</strong>
           </div>
@@ -2168,7 +3045,7 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
 
         {/* Waiting Status */}
         <div className="text-center p-4 bg-slate-800/60 border border-slate-700/60 rounded-2xl space-y-2">
-          <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mx-auto"></div>
+          <div className="w-8 h-8 rounded-full border-2 border-[#FA5A36] border-t-transparent animate-spin mx-auto"></div>
           <p className="text-xs font-bold text-white">The instructor is setting up the studio...</p>
           <p className="text-[11px] text-slate-400">
             You will automatically enter the live room the moment the instructor begins broadcasting.
@@ -2176,7 +3053,7 @@ const StudentWaitingRoom: React.FC<StudentWaitingRoomProps> = ({
           <button
             type="button"
             onClick={onRefresh}
-            className="text-xs text-indigo-400 hover:text-indigo-300 font-bold underline mt-1 cursor-pointer flex items-center justify-center gap-1 mx-auto"
+            className="text-xs text-[#FA5A36] hover:text-[#e04825] font-bold underline mt-1 cursor-pointer flex items-center justify-center gap-1 mx-auto"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Check Status Now</span>
@@ -2264,15 +3141,21 @@ export const LiveWebinarRoomPage: React.FC = () => {
         // ignore
       }
     }
-    navigate('/webinars');
+    const is1on1 = roomState?.category === '1-on-1 Mentorship';
+    info('Left Session', 'You left the room. You can rejoin at any time while the session is active.');
+    if (is1on1) {
+      navigate('/dashboard/student');
+    } else {
+      navigate('/webinars');
+    }
   };
 
   // Loading State
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 space-y-4">
-        <div className="w-12 h-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
-        <p className="text-sm font-bold text-slate-400">Connecting to secure live studio...</p>
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 space-y-4 font-sans">
+        <div className="w-12 h-12 rounded-full border-4 border-[#FA5A36] border-t-transparent animate-spin"></div>
+        <p className="text-sm font-semibold text-slate-400">Connecting to secure live studio...</p>
       </div>
     );
   }
@@ -2280,17 +3163,17 @@ export const LiveWebinarRoomPage: React.FC = () => {
   // Not Found State
   if (!roomState) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-4">
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center space-y-4 font-sans">
         <div className="w-16 h-16 rounded-3xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto">
           <AlertCircle className="w-8 h-8" />
         </div>
-        <h2 className="text-2xl font-black">Live Workshop Not Found</h2>
+        <h2 className="text-2xl font-bold">Live Workshop Not Found</h2>
         <p className="text-xs text-slate-400 max-w-sm">
           The requested room code does not exist or may have been deleted.
         </p>
         <Link
           to="/webinars"
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition"
+          className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-xl transition cursor-pointer"
         >
           Explore Scheduled Webinars
         </Link>
@@ -2298,64 +3181,106 @@ export const LiveWebinarRoomPage: React.FC = () => {
     );
   }
 
-  // Paywall Gatekeeper (Paid webinar & not registered)
-  if (!roomState.hasAccess) {
+  // Paywall Gatekeeper (Paid webinar & not registered; never block 1-on-1 mentorship which is already booked and paid)
+  if (!roomState.hasAccess && roomState.category !== '1-on-1 Mentorship') {
+    const is1on1 = roomState.category === '1-on-1 Mentorship';
+
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 sm:p-6">
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 sm:p-6 font-sans">
         <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in fade-in">
           <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
             <Lock className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase bg-[#FA5A36]/10 text-[#FA5A36] border border-[#FA5A36]/20">
               {roomState.category}
             </span>
-            <h2 className="text-xl font-black text-white pt-2">{roomState.title}</h2>
-            <p className="text-xs text-slate-400">{roomState.description}</p>
+            <h2 className="text-xl font-bold text-white pt-2">{roomState.title}</h2>
+            <p className="text-xs text-slate-400">
+              {is1on1
+                ? 'This is a private 1-on-1 consultation room. Please sign in with the student or mentor account used to book this session.'
+                : roomState.description}
+            </p>
           </div>
 
-          {/* Ticket Pass Price Card */}
-          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between">
-            <div className="text-left">
-              <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
-                Workshop Pass
-              </span>
-              <span className="text-xl font-black text-white">
-                {roomState.price > 0 ? `₹${roomState.price.toLocaleString('en-IN')}` : 'Free'}
-              </span>
+          {!isAuthenticated ? (
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+                }}
+                className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#FA5A36]/30 transition cursor-pointer"
+              >
+                Sign In to Enter Room
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white font-semibold text-xs rounded-2xl transition cursor-pointer"
+              >
+                Return to Home
+              </button>
             </div>
-            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
-              Live Q&A + Materials
-            </span>
-          </div>
+          ) : is1on1 ? (
+            <div className="space-y-2 pt-2">
+              <p className="text-xs text-amber-300 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                You are currently signed in as {user?.email || 'a different user'}. This consultation is reserved for {roomState.instructor.name} and the booked student.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/mentorship')}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold text-xs rounded-2xl transition cursor-pointer"
+              >
+                Back to Mentorship Directory
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Ticket Pass Price Card */}
+              <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between">
+                <div className="text-left">
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
+                    Workshop Pass
+                  </span>
+                  <span className="text-xl font-bold text-white">
+                    {roomState.price > 0 ? `₹${roomState.price.toLocaleString('en-IN')}` : 'Free'}
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+                  Live Q&A + Materials
+                </span>
+              </div>
 
-          <div className="space-y-2 pt-2">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const res = await webinarsApi.register(roomState.id);
-                  if (res.success) {
-                    success('Registration Complete', 'You now have full access to this live workshop!');
-                    await fetchRoom();
-                  }
-                } catch (err: any) {
-                  toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
-                }
-              }}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-indigo-600/30 transition cursor-pointer"
-            >
-              Register & Join Live Room Now
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/webinars')}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white font-bold text-xs rounded-2xl transition cursor-pointer"
-            >
-              Back to Catalog
-            </button>
-          </div>
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await webinarsApi.register(roomState.id);
+                      if (res.success) {
+                        success('Registration Complete', 'You now have full access to this live workshop!');
+                        await fetchRoom();
+                      }
+                    } catch (err: any) {
+                      toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
+                    }
+                  }}
+                  className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#FA5A36]/30 transition cursor-pointer"
+                >
+                  Register & Join Live Room Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/webinars')}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white font-semibold text-xs rounded-2xl transition cursor-pointer"
+                >
+                  Back to Catalog
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -2363,39 +3288,87 @@ export const LiveWebinarRoomPage: React.FC = () => {
 
   // Session Completed State
   if (hasEnded || roomState.status === 'COMPLETED') {
+    const is1on1 = roomState.category === '1-on-1 Mentorship';
+    const nowMs = new Date().getTime();
+    const endMs = roomState.endTime ? new Date(roomState.endTime).getTime() : nowMs + 3600000;
+    // Allow rejoining if it's 1-on-1 mentorship or within scheduled session window (+ 2 hours grace)
+    const canRejoinSession = is1on1 || (nowMs <= endMs + 2 * 3600000);
+
+    const handleRejoinSession = async () => {
+      try {
+        setHasEnded(false);
+        await webinarsApi.reopenOrRejoinRoom(roomState.roomCode);
+        await fetchRoom();
+        success('Reconnected', 'Successfully rejoined the live session studio.');
+      } catch (e) {
+        setHasEnded(false);
+        await fetchRoom();
+      }
+    };
+
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 font-sans">
         <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 text-center space-y-5 shadow-2xl animate-in fade-in">
           <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-2xl font-black text-white">This Live Session Has Ended</h2>
+            <h2 className="text-2xl font-bold text-white">This Live Session Has Ended</h2>
             <p className="text-xs text-slate-400">
-              Thank you for participating in <strong className="text-white">{roomState.title}</strong> hosted by{' '}
-              {roomState.instructor.name}.
+              {is1on1
+                ? 'Your 1-on-1 session is temporarily closed or ended by host.'
+                : `Thank you for participating in ${roomState.title} hosted by ${roomState.instructor.name}.`}
             </p>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs text-slate-400 space-y-1 text-left">
             <div className="flex justify-between">
-              <span>Total Registered:</span>
-              <strong className="text-white">{roomState.registrationsCount}</strong>
+              <span>Instructor:</span>
+              <strong className="text-[#FA5A36]">{roomState.instructor.name}</strong>
             </div>
             <div className="flex justify-between">
-              <span>Instructor:</span>
-              <strong className="text-indigo-400">{roomState.instructor.name}</strong>
+              <span>Category:</span>
+              <strong className="text-white">{roomState.category}</strong>
+            </div>
+            <div className="flex justify-between">
+              <span>Rejoin Access:</span>
+              <strong className={canRejoinSession ? 'text-emerald-400' : 'text-slate-400'}>
+                {canRejoinSession ? 'Available Within Time Window' : 'Closed'}
+              </strong>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate('/webinars')}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl transition cursor-pointer shadow-md"
-          >
-            Explore More Live Sessions
-          </button>
+          {canRejoinSession ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
+                <span>The session is within its scheduled time period. You can rejoin as many times as you need!</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRejoinSession}
+                className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl transition cursor-pointer shadow-lg shadow-[#FA5A36]/30 flex items-center justify-center gap-2"
+              >
+                <Video className="w-4 h-4" />
+                <span>Rejoin Live Session Now</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(is1on1 ? '/dashboard/student' : '/webinars')}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs rounded-2xl transition cursor-pointer"
+              >
+                {is1on1 ? 'Back to Student Dashboard' : 'Explore More Live Sessions'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(is1on1 ? '/dashboard/student' : '/webinars')}
+              className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl transition cursor-pointer shadow-md"
+            >
+              {is1on1 ? 'Return to Student Dashboard' : 'Explore More Live Sessions'}
+            </button>
+          )}
         </div>
       </div>
     );

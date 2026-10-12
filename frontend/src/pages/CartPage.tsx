@@ -50,16 +50,16 @@ export const CartPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between font-sans">
       <Navbar />
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
-        {/* Breadcrumb & Steps */}
+      <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-16 py-10">
+        {/* Breadcrumb & Steps (Screen 5) */}
         <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mb-3">
+          <h1 className="text-2xl sm:text-4xl font-semibold text-slate-900 tracking-tight mb-3">
             Shopping Cart
           </h1>
-          <div className="flex items-center gap-3 text-xs font-semibold text-slate-400">
-            <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 font-bold">
+          <div className="flex items-center gap-3 text-xs font-medium text-slate-400">
+            <span className="text-[#FA5A36] bg-[#FFF5F2] px-3.5 py-1 rounded-full border border-[#FFCCC2] font-semibold">
               1. Cart ({items.length})
             </span>
             <span>→</span>
@@ -71,73 +71,73 @@ export const CartPage: React.FC = () => {
 
         {items.length === 0 ? (
           /* Empty Cart State */
-          <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center max-w-xl mx-auto space-y-4 shadow-xs">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-2xs">
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center max-w-xl mx-auto space-y-4 shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center mx-auto shadow-2xs border border-[#FFCCC2]">
               <ShoppingBag className="w-8 h-8" />
             </div>
-            <h2 className="text-xl font-black text-slate-900">Your Cart is Empty</h2>
-            <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-sm mx-auto">
+            <h2 className="text-xl font-semibold text-slate-900">Your Cart is Empty</h2>
+            <p className="text-xs text-slate-500 font-normal leading-relaxed max-w-sm mx-auto">
               Explore our wide range of full-length industrial courses and standalone atomic topics to start learning today.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 to="/courses"
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all"
+                className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-medium text-xs rounded-xl shadow-md shadow-[#FA5A36]/20 transition-all"
               >
                 Browse All Courses
               </Link>
               <Link
                 to="/topics"
-                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-xl transition-colors"
               >
                 Explore Atomic Topics
               </Link>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Dynamic Cart Items List */}
             <div className="lg:col-span-8 space-y-4">
               {items.map((item) => (
                 <div
                   key={item.productId}
-                  className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-slate-200"
+                  className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-[#FFCCC2]"
                 >
                   <div className="flex items-start sm:items-center gap-4 min-w-0">
                     <div
-                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 ${
+                      className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-medium text-xs shrink-0 ${
                         item.productType === 'COURSE'
-                          ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-100'
-                          : 'bg-cyan-500/10 text-cyan-700 border border-cyan-100'
+                          ? 'bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]'
+                          : 'bg-blue-50 text-blue-600 border border-blue-100'
                       }`}
                     >
                       {item.productType === 'COURSE' ? 'COURSE' : 'TOPIC'}
                     </div>
 
-                    <div className="min-w-0 space-y-0.5">
+                    <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         {item.instructorName && (
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-[11px] text-slate-500 font-normal">
                             By {item.instructorName}
                           </span>
                         )}
                         {item.isEligibleForCoupon && (
-                          <span className="px-2 py-0.2 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-emerald-200">
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-medium rounded-md flex items-center gap-1 border border-emerald-200">
                             <Sparkles className="w-2.5 h-2.5" /> Coupon Discount Applied
                           </span>
                         )}
                         {item.hasUpgradeCredit && (item.creditDeduction ?? 0) > 0 && (
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-indigo-200">
-                            <Sparkles className="w-2.5 h-2.5 text-indigo-600" /> Topic Credit Applied: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} {item.ownedTopicCount === 1 ? 'topic' : 'topics'} owned)
+                          <span className="px-2.5 py-0.5 bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-medium rounded-md flex items-center gap-1 border border-[#FFCCC2]">
+                            <Sparkles className="w-2.5 h-2.5" /> Topic Credit: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} {item.ownedTopicCount === 1 ? 'topic' : 'topics'} owned)
                           </span>
                         )}
                       </div>
 
-                      <h3 className="text-base font-bold text-slate-900 leading-snug">
+                      <h3 className="text-base font-semibold text-slate-900 leading-snug">
                         {item.title}
                       </h3>
 
-                      <p className="text-xs text-slate-500 font-medium">
+                      <p className="text-xs text-slate-500 font-normal">
                         {item.productType === 'COURSE'
                           ? 'Full Course Lifetime Access • Certificate Included'
                           : 'Atomic Skill • Topic Access'}
@@ -145,18 +145,18 @@ export const CartPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-50 shrink-0">
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 shrink-0">
                     {(item.discount > 0 || (item.creditDeduction ?? 0) > 0) ? (
                       <div className="text-right">
-                        <span className="text-xs text-slate-400 line-through block">
+                        <span className="text-xs text-slate-400 line-through block font-normal">
                           ₹{item.unitPrice.toLocaleString('en-IN')}
                         </span>
-                        <span className="text-base sm:text-lg font-black text-emerald-600 block">
+                        <span className="text-lg font-semibold text-emerald-600 block">
                           {item.finalPrice === 0 ? 'FREE' : `₹${item.finalPrice.toLocaleString('en-IN')}`}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-base sm:text-lg font-black text-slate-900 block">
+                      <span className="text-lg font-semibold text-slate-900 block">
                         {item.unitPrice === 0 ? 'FREE' : `₹${item.unitPrice.toLocaleString('en-IN')}`}
                       </span>
                     )}
@@ -164,79 +164,79 @@ export const CartPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => removeFromCart(item.productId)}
-                      className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-bold cursor-pointer transition-colors p-1 mt-1"
+                      className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 font-medium cursor-pointer transition-colors p-1 mt-1"
                       title="Remove from Cart"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Remove </span>
+                      <span>Remove</span>
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Dynamic Order Summary */}
-            <div className="lg:col-span-4">
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4 sticky top-24">
-                <h2 className="text-base sm:text-lg font-black text-slate-900 pb-3 border-b border-slate-100">
+            {/* Dynamic Order Summary (Screen 5) */}
+            <div className="lg:col-span-4 sticky top-24">
+              <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900 pb-3 border-b border-slate-100">
                   Order Summary
                 </h2>
 
-                <div className="space-y-2.5 text-xs sm:text-sm">
+                <div className="space-y-3 text-xs sm:text-sm">
                   <div className="flex justify-between text-slate-600">
                     <span>Subtotal ({items.length} {items.length === 1 ? 'item' : 'items'})</span>
-                    <span className="font-bold text-slate-900">₹{subtotal.toLocaleString('en-IN')}</span>
+                    <span className="font-semibold text-slate-900">₹{subtotal.toLocaleString('en-IN')}</span>
                   </div>
 
                   <div className="flex justify-between text-slate-600 items-center">
                     <span className="flex items-center gap-1">
                       <span>Coupon Discount</span>
                       {appliedCoupon && (
-                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-black font-mono">
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-medium font-mono">
                           {appliedCoupon.code}
                         </span>
                       )}
                     </span>
-                    <span className="font-bold text-emerald-600">
+                    <span className="font-semibold text-emerald-600">
                       {discount > 0 ? `-₹${discount.toLocaleString('en-IN')}` : '₹0'}
                     </span>
                   </div>
 
                   {appliedCoupon && (
-                    <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold">{appliedCoupon.description}</span>
+                        <span className="font-medium">{appliedCoupon.description}</span>
                         <button
                           type="button"
                           onClick={removeCoupon}
-                          className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                          className="text-rose-500 hover:text-rose-700 font-medium ml-2 cursor-pointer"
                         >
                           Remove
                         </button>
                       </div>
                       {appliedCoupon.courseTitle && (
-                        <p className="text-[10px] text-emerald-700">
-                          Target: <span className="font-bold">{appliedCoupon.courseTitle}</span>
+                        <p className="text-[11px] text-emerald-700">
+                          Target: <span className="font-medium">{appliedCoupon.courseTitle}</span>
                         </p>
                       )}
                     </div>
                   )}
 
                   {credit > 0 && (
-                    <div className="flex justify-between items-center bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100">
-                      <span className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <div className="flex justify-between items-center bg-[#FFF5F2] p-3 rounded-xl border border-[#FFCCC2]">
+                      <span className="flex items-center gap-1.5 text-slate-800 font-medium text-xs">
+                        <Sparkles className="w-3.5 h-3.5 text-[#FA5A36]" />
                         <span>Topic Credit (Upgrade)</span>
                       </span>
-                      <span className="font-black text-indigo-700 text-xs sm:text-sm">
+                      <span className="font-semibold text-[#FA5A36] text-xs sm:text-sm">
                         -₹{credit.toLocaleString('en-IN')}
                       </span>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-base sm:text-lg font-black text-slate-900 pt-3 border-t border-slate-100">
+                  <div className="flex justify-between text-lg font-semibold text-slate-900 pt-3 border-t border-slate-100">
                     <span>Total</span>
-                    <span className="text-indigo-600">
+                    <span className="text-[#FA5A36] text-xl font-semibold">
                       {total === 0 ? 'FREE' : `₹${total.toLocaleString('en-IN')}`}
                     </span>
                   </div>
@@ -254,13 +254,13 @@ export const CartPage: React.FC = () => {
                         maxLength={8}
                         disabled={isValidatingCoupon}
                         onChange={(e) => setCouponInput(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                        className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 font-mono font-medium focus:outline-none focus:border-[#FA5A36] focus:bg-white"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={isValidatingCoupon || !couponInput.trim()}
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer transition-colors flex items-center gap-1.5"
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white text-xs font-medium rounded-xl shrink-0 cursor-pointer transition-colors flex items-center gap-1.5"
                     >
                       {isValidatingCoupon ? (
                         <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
@@ -272,8 +272,8 @@ export const CartPage: React.FC = () => {
 
                   {couponFeedback && (
                     <p
-                      className={`text-[11px] font-bold ${
-                        couponFeedback.success ? 'text-emerald-600' : 'text-red-500'
+                      className={`text-[11px] font-medium ${
+                        couponFeedback.success ? 'text-emerald-600' : 'text-rose-500'
                       }`}
                     >
                       {couponFeedback.message}
@@ -281,11 +281,11 @@ export const CartPage: React.FC = () => {
                   )}
                 </form>
 
-                {/* Proceed to Checkout Action Button */}
+                {/* Proceed to Checkout Action Button (Brand Coral) */}
                 <button
                   type="button"
                   onClick={handleProceedToCheckout}
-                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-medium text-sm rounded-xl shadow-md shadow-[#FA5A36]/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
                 >
                   <span>{isAuthenticated ? 'Proceed to Checkout' : 'Login to Checkout'}</span>
                   <ArrowRight className="w-4 h-4" />

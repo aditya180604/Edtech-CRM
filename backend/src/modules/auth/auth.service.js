@@ -15,6 +15,29 @@ export class AuthService {
   }
 
   /**
+   * Generate Chunked Alphanumeric Unique Instructor ID, e.g. ins-7k9p-3m4w
+   */
+  static async generateUniqueInstructorId() {
+    const chars = '23456789abcdefghjkmnpqrstuvwxyz';
+    let unique = false;
+    let newId = '';
+    while (!unique) {
+      let part1 = '';
+      let part2 = '';
+      for (let i = 0; i < 4; i++) {
+        part1 += chars[Math.floor(Math.random() * chars.length)];
+        part2 += chars[Math.floor(Math.random() * chars.length)];
+      }
+      newId = `ins-${part1}-${part2}`;
+      const existing = await User.findOne({ instructorId: newId }).lean();
+      if (!existing) {
+        unique = true;
+      }
+    }
+    return newId;
+  }
+
+  /**
    * Generate JWT Access Token and Refresh Token with cryptographic JTI
    */
   static generateTokens(user) {
@@ -24,6 +47,7 @@ export class AuthService {
       userId: user._id.toString(),
       email: user.email,
       role: user.role,
+      instructorId: user.instructorId || undefined,
     };
 
     const accessToken = jwt.sign(payload, config.jwt.secret, {
@@ -79,6 +103,11 @@ export class AuthService {
     const rawVerifyToken = crypto.randomBytes(32).toString('hex');
     const verificationToken = this.hashToken(rawVerifyToken);
 
+    let instructorId = undefined;
+    if (role === ROLES.INSTRUCTOR) {
+      instructorId = await this.generateUniqueInstructorId();
+    }
+
     // 5. Create user record
     const user = await User.create({
       firstName,
@@ -90,12 +119,14 @@ export class AuthService {
       status: USER_STATUS.ACTIVE,
       emailVerified: false,
       verificationToken,
+      instructorId,
     });
 
     // 6. If registered as instructor, initialize instructor profile
     if (role === ROLES.INSTRUCTOR) {
       await InstructorProfile.create({
         userId: user._id,
+        instructorId,
         bio: '',
         skills: [],
         expertise: [],
@@ -113,7 +144,7 @@ export class AuthService {
       action: 'USER_REGISTERED',
       resourceType: 'USER',
       resourceId: user._id.toString(),
-      newValue: { email: user.email, role: user.role },
+      newValue: { email: user.email, role: user.role, instructorId },
     });
 
     const userPayload = await this.formatUserPayload(user);
@@ -144,6 +175,7 @@ export class AuthService {
     return {
       _id: user._id,
       id: user._id,
+      instructorId: user.instructorId || instructorProfile?.instructorId || undefined,
       firstName: user.firstName,
       lastName: user.lastName,
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
@@ -172,6 +204,19 @@ export class AuthService {
         userAgent,
       });
       throw new AppError('Invalid email or password.', 401);
+    }
+
+    // Enforce single password authority: Firebase-enrolled accounts must not use legacy backend password check
+    if (user.firebaseUid) {
+      await AuditLogger.log({
+        actorId: user._id,
+        action: 'LOGIN_FAILED',
+        resourceType: 'AUTH',
+        newValue: { email: normalizedEmail, reason: 'FIREBASE_ENROLLED_ACCOUNT_LEGACY_REJECTED' },
+        ipAddress,
+        userAgent,
+      });
+      throw new AppError('This account is managed by Firebase Authentication. Please sign in with your Firebase credentials.', 401);
     }
 
     const isMatch = await user.comparePassword(password);
@@ -337,18 +382,32 @@ export class AuthService {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // 1. Look for existing user by firebaseUid OR by email
-    let user = await User.findOne({
-      $or: [{ firebaseUid: uid }, { email: normalizedEmail }],
-    });
-
+    // 1. Look for existing user by firebaseUid first, then by email
+    let user = await User.findOne({ firebaseUid: uid });
     let isNewUser = false;
 
+    if (!user) {
+      // Check for existing legacy user by email
+      user = await User.findOne({ email: normalizedEmail });
+      if (user) {
+        if (user.firebaseUid && user.firebaseUid !== uid) {
+          throw new AppError('An account with this email is already linked to another identity.', 409);
+        }
+        user.firebaseUid = uid;
+      }
+    }
+
     if (user) {
+      if (user.status !== USER_STATUS.ACTIVE) {
+        throw new AppError(`Account is ${user.status ? user.status.toLowerCase() : 'inactive'}. Access revoked.`, 403);
+      }
+
       // Existing user: Link firebaseUid if not set, update profile picture if missing
       if (!user.firebaseUid) {
         user.firebaseUid = uid;
       }
+      // Retire legacy password hash since Firebase is now the single authoritative verifier
+      user.passwordHash = undefined;
       if (email_verified && !user.emailVerified) {
         user.emailVerified = true;
       }
@@ -397,28 +456,114 @@ export class AuthService {
       newValue: { email: user.email, role: user.role, firebaseUid: uid },
     });
 
+    const userPayload = await this.formatUserPayload(user);
+
     return {
-      user: {
-        _id: user._id,
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        status: user.status,
-        profilePhoto: user.profilePhoto,
-        emailVerified: user.emailVerified,
-        isProfileCompleted: user.isProfileCompleted,
-        skills: user.skills || [],
-        interests: user.interests || [],
-        firebaseUid: user.firebaseUid,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
+      user: userPayload,
       accessToken,
       refreshToken,
       isNewUser,
     };
   }
+
+  /**
+   * Request password reset token / email
+   */
+  static async forgotPassword(email) {
+    if (!email) {
+      throw new AppError('Email address is required.', 400);
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // Prevent user enumeration: Return same message even if email is not found
+    if (!user) {
+      return {
+        message: 'If an account exists with this email, password reset instructions have been sent.',
+      };
+    }
+
+    // Generate secure random reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = this.hashToken(resetToken);
+    user.passwordResetExpires = new Date(Date.now() + 30 * 60 * 1000); // Exactly 30 minutes expiry
+    await user.save();
+
+    await AuditLogger.log({
+      actorId: user._id,
+      action: 'PASSWORD_RESET_REQUESTED',
+      resourceType: 'AUTH',
+      resourceId: user._id.toString(),
+      newValue: { email: user.email },
+    });
+
+    return {
+      message: 'If an account exists with this email, password reset instructions have been sent.',
+      ...(process.env.NODE_ENV !== 'production' && { resetToken }),
+    };
+  }
+
+  /**
+   * Reset password with validated token
+   */
+  static async resetPassword({ token, newPassword }) {
+    if (!token || !newPassword) {
+      throw new AppError('Reset token and new password are required.', 400);
+    }
+
+    if (newPassword.length < 8) {
+      throw new AppError('Password must be at least 8 characters long.', 400);
+    }
+
+    const hashedToken = this.hashToken(token);
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new AppError('Password reset link is invalid or has expired.', 400);
+    }
+
+    user.passwordHash = await User.hashPassword(newPassword);
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    // Revoke previous refresh tokens for security
+    user.refreshTokenHash = undefined;
+    user.previousRefreshTokenHash = undefined;
+
+    await user.save();
+
+    await AuditLogger.log({
+      actorId: user._id,
+      action: 'PASSWORD_RESET_COMPLETED',
+      resourceType: 'AUTH',
+      resourceId: user._id.toString(),
+      newValue: { email: user.email },
+    });
+
+    return {
+      message: 'Password reset successfully. You can now log in with your new password.',
+    };
+  }
+
+  /**
+   * Check whether an email is enrolled in Firebase Authentication or legacy-only
+   */
+  static async checkAuthMethod(email) {
+    if (!email) {
+      return { exists: false, isFirebaseEnrolled: false };
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('firebaseUid');
+    if (!user) {
+      return { exists: false, isFirebaseEnrolled: false };
+    }
+    return {
+      exists: true,
+      isFirebaseEnrolled: Boolean(user.firebaseUid),
+    };
+  }
 }
+

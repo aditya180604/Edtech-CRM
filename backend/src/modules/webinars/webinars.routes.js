@@ -21,6 +21,10 @@ router.post('/room/:roomCode/raise-hand', authenticate, WebinarsController.toggl
 router.post('/room/:roomCode/allow-speak', authenticate, WebinarsController.allowStudentSpeak);
 router.post('/room/:roomCode/notes', authenticate, WebinarsController.saveUserNotes);
 router.post('/room/:roomCode/leave', optionalAuthenticate, WebinarsController.recordAttendanceLeave);
+router.post('/room/:roomCode/broadcast-state', optionalAuthenticate, WebinarsController.updateBroadcastState);
+router.post('/room/:roomCode/signal', optionalAuthenticate, WebinarsController.sendSignal);
+router.get('/room/:roomCode/signal', optionalAuthenticate, WebinarsController.getSignals);
+router.post('/room/:roomCode/reopen', optionalAuthenticate, WebinarsController.reopenOrRejoinRoom);
 
 // Details & Student / User Registration Endpoints
 router.get('/:id', optionalAuthenticate, WebinarsController.getDetails);

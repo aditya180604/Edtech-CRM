@@ -28,10 +28,13 @@ router.get('/courses/:id/review', SuperAdminController.getCourseReview);
 router.post('/courses/:id/approve', SuperAdminController.approveCourse);
 router.post('/courses/:id/reject', SuperAdminController.rejectCourse);
 router.get('/instructors', SuperAdminController.getInstructorsList);
+router.get('/instructors/:id/dashboard', SuperAdminController.getInstructorDashboard);
 router.get('/instructor-verifications', SuperAdminController.getInstructorVerifications);
 router.get('/instructor-verifications/:id', SuperAdminController.getInstructorVerificationById);
+router.get('/instructor-verifications/:id/documents/:docId', SuperAdminController.getInstructorDocument);
 router.post('/instructor-verifications/:id/approve', SuperAdminController.approveInstructorVerification);
 router.post('/instructor-verifications/:id/reject', SuperAdminController.rejectInstructorVerification);
+router.post('/instructor-verifications/:id/request-changes', SuperAdminController.requestChangesInstructorVerification);
 
 // 4. Orders Management
 router.get('/orders', SuperAdminController.getOrders);
@@ -67,7 +70,13 @@ router.patch('/taxes/:id/toggle', SuperAdminController.toggleTax);
 router.get('/infrastructure', SuperAdminController.getInfrastructure);
 router.get('/fraud', SuperAdminController.getFraud);
 
-// 11. Platform Fees Management (Image & Real Cashfree Fees Oversight)
+// 11. Instructor Registration Fee Management & Dynamic Rate Settings
+router.get('/registration-fee/settings', SuperAdminController.getRegistrationFeeSettings);
+router.put('/registration-fee/settings', SuperAdminController.updateRegistrationFeeSettings);
+router.get('/registration-fees', SuperAdminController.getRegistrationFees);
+router.post('/registration-fees/:orderId/verify', SuperAdminController.verifyRegistrationFeeOrder);
+
+// Backward compatibility alias for platform fees
 router.get('/platform-fees', SuperAdminController.getPlatformFees);
 
 export const superAdminRoutes = router;

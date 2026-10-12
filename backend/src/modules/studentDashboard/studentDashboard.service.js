@@ -22,6 +22,8 @@ import {
   QuizAttempt,
   Assignment,
   AssignmentSubmission,
+  CommunityQuestion,
+  Answer,
 } from '../../models/index.js';
 import { PRODUCT_TYPES, ENTITLEMENT_STATUS } from '../../config/constants.js';
 
@@ -106,6 +108,7 @@ export class StudentDashboardService {
       rankedLiveSessionsData,
       recommendationsData,
       enrolledPathsDocs,
+      questionsData,
     ] = await Promise.all([
       Promise.resolve(this._computeProfile(user)).catch(() => ({ completionPercentage: 0, missingFields: [] })),
       this._fetchLearningAndCourses(userObjectId, allEntitledCourseIds, allEntitledTopicIds, fullCourseEntitledIds).catch((err) => {
@@ -127,6 +130,7 @@ export class StudentDashboardService {
       entitledPathIds.length > 0
         ? LearningPath.find({ _id: { $in: entitledPathIds } }).lean().catch(() => [])
         : Promise.resolve([]),
+      this._fetchStudentQuestions(userObjectId).catch(() => []),
     ]);
 
     const formattedEnrolledPaths = (enrolledPathsDocs || []).map((p) => ({
@@ -161,6 +165,7 @@ export class StudentDashboardService {
       recentOrders: ordersData,
       notifications: notificationsData,
       recommendations: recommendationsData,
+      questions: questionsData,
     };
   }
 
@@ -248,6 +253,10 @@ export class StudentDashboardService {
       state: user.state || null,
       city: user.city || null,
       headline: user.headline || null,
+      bio: user.bio || null,
+      githubUrl: user.githubUrl || null,
+      linkedinUrl: user.linkedinUrl || null,
+      websiteUrl: user.websiteUrl || null,
       timezone: user.timezone || null,
       preferredLanguage: user.preferredLanguage || null,
       learningPreferences:
@@ -1159,5 +1168,49 @@ export class StudentDashboardService {
     // Absolutely NO fallback to generic/popular/latest published courses!
     // If student has no signal, return genuine empty list []
     return resultRecommendations.slice(0, 4);
+  }
+
+  /**
+   * Fetch course questions and doubts asked by THIS student
+   */
+  static async _fetchStudentQuestions(userId) {
+    try {
+      const questions = await CommunityQuestion.find({ userId })
+        .populate('courseId', 'title slug')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (!questions || questions.length === 0) return [];
+
+      const qIds = questions.map((q) => q._id);
+      const answers = await Answer.find({ questionId: { $in: qIds } })
+        .populate('userId', 'firstName lastName profilePhoto role')
+        .sort({ createdAt: 1 })
+        .lean();
+
+      return questions.map((q) => {
+        const qAnswers = answers.filter((a) => a.questionId.toString() === q._id.toString());
+        return {
+          id: q._id.toString(),
+          courseTitle: q.courseId?.title || 'Course Discussion',
+          courseId: q.courseId?._id?.toString() || q.courseId?.toString() || 'general',
+          courseSlug: q.courseId?.slug || '',
+          topicTitle: q.topicTitle || 'Enrolled Course Module',
+          questionTitle: q.question,
+          questionBody: q.question,
+          createdAt: q.createdAt,
+          status: (qAnswers.length > 0 || q.status === 'RESOLVED') ? 'ANSWERED' : 'PENDING',
+          answers: qAnswers.map((a) => ({
+            instructorName: [a.userId?.firstName, a.userId?.lastName].filter(Boolean).join(' ') || 'Instructor',
+            instructorPhoto: a.userId?.profilePhoto || null,
+            answerText: a.answer,
+            answeredAt: a.createdAt,
+          })),
+        };
+      });
+    } catch (err) {
+      console.warn('Failed to fetch student questions:', err.message);
+      return [];
+    }
   }
 }

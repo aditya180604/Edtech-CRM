@@ -13,6 +13,8 @@ import {
   AlertCircle,
   CheckCircle2,
   XCircle,
+  ArrowLeft,
+  KeyRound,
 } from 'lucide-react';
 import {
   validateEmail,
@@ -21,10 +23,11 @@ import {
   validatePasswordConfirm,
   getPasswordStrength,
 } from '../utils/validators';
+import { EduLogo } from './ui/EduLogo';
 
 export const AuthModal: React.FC = () => {
   const { authMode, closeAuth, switchMode } = useAuthModal();
-  const { login, register, loginWithGoogle, getRedirectPathForRole } = useAuth();
+  const { login, register, loginWithGoogle, sendPasswordReset, getRedirectPathForRole } = useAuth();
   const navigate = useNavigate();
 
   // Role selector (Student & Instructor ONLY - Admin removed!)
@@ -39,6 +42,13 @@ export const AuthModal: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Forgot password states
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotTouched, setForgotTouched] = useState(false);
+  const [forgotFeedback, setForgotFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   // Field touched states
   const [loginTouched, setLoginTouched] = useState({ email: false, password: false });
@@ -90,6 +100,19 @@ export const AuthModal: React.FC = () => {
     } else {
       setErrorMessage(result.message || 'Invalid email or password.');
     }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotTouched(true);
+    setForgotFeedback(null);
+    const emailErr = validateEmail(forgotEmail);
+    if (emailErr) return;
+
+    setForgotLoading(true);
+    const res = await sendPasswordReset(forgotEmail.trim());
+    setForgotLoading(false);
+    setForgotFeedback(res);
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
@@ -153,123 +176,225 @@ export const AuthModal: React.FC = () => {
           <X className="w-4 h-4" />
         </button>
 
-        {/* Brand Header with Graduation Cap */}
-        <div className="flex flex-col items-center mb-3.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 mb-1.5">
-            <GraduationCap className="w-5 h-5" />
+        {/* Brand Header with EduLogo */}
+        <div className="flex flex-col items-center mb-4">
+          <div className="mb-2">
+            <EduLogo size="md" to="" />
           </div>
-          <span className="text-xl font-black tracking-tight text-slate-900">
-            Edu<span className="text-indigo-600">Tech</span>
-          </span>
 
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
-            {authMode === 'login' ? 'Welcome Back' : 'Create Your Account'}
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-900 mt-0.5">
+            {isForgotPassword ? 'Reset Your Password' : authMode === 'login' ? 'Welcome Back' : 'Create Your Account'}
           </h2>
-          <p className="text-xs text-slate-500 text-center">
-            {authMode === 'login'
+          <p className="text-xs text-slate-500 text-center mt-0.5">
+            {isForgotPassword
+              ? 'Enter your email to receive password reset instructions.'
+              : authMode === 'login'
               ? 'Sign in to continue your learning journey.'
               : 'Join thousands of learners and start learning today.'}
           </p>
         </div>
 
         {/* Error Alert Message */}
-        {errorMessage && (
+        {errorMessage && !isForgotPassword && (
           <div className="mb-3 p-2.5 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {/* ===================== SIGN IN FORM ===================== */}
-        {authMode === 'login' && (
-          <form onSubmit={handleLoginSubmit} className="space-y-3" noValidate>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Email address <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-3.5 h-3.5" />
+        {/* ===================== FORGOT PASSWORD FORM ===================== */}
+        {isForgotPassword ? (
+          <div className="space-y-4">
+            {forgotFeedback && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-start gap-2.5 ${
+                  forgotFeedback.success
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                    : 'bg-red-50 border border-red-200 text-red-800'
+                }`}
+              >
+                {forgotFeedback.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold">{forgotFeedback.message}</p>
+                  {forgotFeedback.success && (
+                    <p className="text-[10px] text-emerald-700 mt-1">
+                      Please check your email inbox and spam folder. Follow the link inside to set a new password.
+                    </p>
+                  )}
                 </div>
-                <input
-                  type="email"
-                  required
-                  maxLength={100}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onBlur={() => setLoginTouched((prev) => ({ ...prev, email: true }))}
-                  placeholder="toppix851@gmail.com"
-                  className={`w-full pl-9 pr-3 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
-                    loginTouched.email && validateEmail(email)
-                      ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                      : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
-                  }`}
-                />
               </div>
-              {loginTouched.email && validateEmail(email) && (
-                <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                  <span>{validateEmail(email)}</span>
-                </p>
-              )}
-            </div>
+            )}
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-semibold text-slate-700">
-                  Password <span className="text-red-500">*</span>
-                </label>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-3.5 h-3.5" />
+            {!forgotFeedback?.success ? (
+              <form onSubmit={handleForgotSubmit} className="space-y-3" noValidate>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Email address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      maxLength={100}
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      onBlur={() => setForgotTouched(true)}
+                      placeholder="name@example.com"
+                      className={`w-full pl-9 pr-3 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                        forgotTouched && validateEmail(forgotEmail)
+                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                          : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
+                      }`}
+                    />
+                  </div>
+                  {forgotTouched && validateEmail(forgotEmail) && (
+                    <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                      <span>{validateEmail(forgotEmail)}</span>
+                    </p>
+                  )}
                 </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  maxLength={128}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onBlur={() => setLoginTouched((prev) => ({ ...prev, password: true }))}
-                  placeholder="••••••••••••"
-                  className={`w-full pl-9 pr-9 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
-                    loginTouched.password && !password
-                      ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                      : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
-                  }`}
-                />
+
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="w-full py-2.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-xs rounded-xl shadow-xs shadow-[#FA5A36]/25 transition-all disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {forgotLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Sending reset link...</span>
+                    </>
+                  ) : (
+                    'Send Password Reset Link'
+                  )}
                 </button>
-              </div>
-              {loginTouched.password && !password && (
-                <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                  <span>Password is required.</span>
-                </p>
-              )}
-            </div>
+              </form>
+            ) : null}
 
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
+              type="button"
+              onClick={() => {
+                setIsForgotPassword(false);
+                setForgotFeedback(null);
+              }}
+              className="w-full py-2 text-center text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
             >
-              {loading ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                'Sign In'
-              )}
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Sign In</span>
             </button>
-          </form>
-        )}
+          </div>
+        ) : (
+          <>
+            {/* ===================== SIGN IN FORM ===================== */}
+            {authMode === 'login' && (
+              <form onSubmit={handleLoginSubmit} className="space-y-3" noValidate>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Email address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      maxLength={100}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onBlur={() => setLoginTouched((prev) => ({ ...prev, email: true }))}
+                      placeholder="toppix851@gmail.com"
+                      className={`w-full pl-9 pr-3 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                        loginTouched.email && validateEmail(email)
+                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                          : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
+                      }`}
+                    />
+                  </div>
+                  {loginTouched.email && validateEmail(email) && (
+                    <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                      <span>{validateEmail(email)}</span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-700">
+                      Password <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true);
+                        setForgotEmail(email);
+                        setForgotFeedback(null);
+                      }}
+                      className="text-[11px] font-semibold text-[#FA5A36] hover:underline cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      maxLength={128}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onBlur={() => setLoginTouched((prev) => ({ ...prev, password: true }))}
+                      placeholder="••••••••••••"
+                      className={`w-full pl-9 pr-9 py-2 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
+                        loginTouched.password && !password
+                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                          : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {loginTouched.password && !password && (
+                    <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                      <span>Password is required.</span>
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-xs rounded-xl shadow-xs shadow-[#FA5A36]/25 transition-all disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
+                </button>
+              </form>
+            )}
+
 
         {/* ===================== SIGN UP FORM ===================== */}
         {authMode === 'signup' && (
@@ -279,9 +404,9 @@ export const AuthModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSignupRole('STUDENT')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 cursor-pointer ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 cursor-pointer ${
                   signupRole === 'STUDENT'
-                    ? 'bg-white text-indigo-600 shadow-xs'
+                    ? 'bg-white text-[#FA5A36] shadow-xs'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
@@ -290,9 +415,9 @@ export const AuthModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSignupRole('INSTRUCTOR')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all duration-150 cursor-pointer ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 cursor-pointer ${
                   signupRole === 'INSTRUCTOR'
-                    ? 'bg-white text-indigo-600 shadow-xs'
+                    ? 'bg-white text-[#FA5A36] shadow-xs'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
@@ -320,7 +445,7 @@ export const AuthModal: React.FC = () => {
                     className={`w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                       signupTouched.fullName && validateFullName(fullName)
                         ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                        : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                     }`}
                   />
                 </div>
@@ -351,7 +476,7 @@ export const AuthModal: React.FC = () => {
                     className={`w-full pl-9 pr-3 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                       signupTouched.email && validateEmail(email)
                         ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                        : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                     }`}
                   />
                 </div>
@@ -382,7 +507,7 @@ export const AuthModal: React.FC = () => {
                     className={`w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                       signupTouched.password && validatePassword(password)
                         ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                        : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                     }`}
                   />
                   <button
@@ -399,7 +524,7 @@ export const AuthModal: React.FC = () => {
                   <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="text-slate-500">Strength:</span>
-                      <span className={`font-bold ${
+                      <span className={`font-semibold ${
                         passStrength.score === 4 ? 'text-emerald-600' :
                         passStrength.score === 3 ? 'text-blue-600' :
                         passStrength.score === 2 ? 'text-amber-600' : 'text-red-500'
@@ -460,7 +585,7 @@ export const AuthModal: React.FC = () => {
                     className={`w-full pl-9 pr-9 py-1.5 bg-slate-50 text-xs text-slate-900 rounded-lg border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                       signupTouched.confirmPassword && validatePasswordConfirm(password, confirmPassword)
                         ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                        : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                     }`}
                   />
                   <button
@@ -482,7 +607,7 @@ export const AuthModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all disabled:opacity-70 cursor-pointer mt-1 flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-xs rounded-xl shadow-xs shadow-[#FA5A36]/25 transition-all disabled:opacity-70 cursor-pointer mt-1 flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -546,9 +671,10 @@ export const AuthModal: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setErrorMessage(null);
+                  setIsForgotPassword(false);
                   switchMode('signup');
                 }}
-                className="font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer underline"
+                className="font-semibold text-[#FA5A36] hover:text-[#E04322] cursor-pointer underline"
               >
                 Sign up
               </button>
@@ -560,16 +686,20 @@ export const AuthModal: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setErrorMessage(null);
+                  setIsForgotPassword(false);
                   switchMode('login');
                 }}
-                className="font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer underline"
+                className="font-semibold text-[#FA5A36] hover:text-[#E04322] cursor-pointer underline"
               >
                 Sign in
               </button>
             </>
           )}
         </p>
-      </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+</div>
+);
 };
+

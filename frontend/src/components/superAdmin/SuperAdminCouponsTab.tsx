@@ -175,7 +175,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Tag className="w-5 h-5 text-indigo-600" />
+            <Tag className="w-5 h-5 text-[#FA5A36]" />
             Promotional Coupons & Vouchers
           </h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -185,7 +185,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-sm shadow-indigo-600/20 cursor-pointer"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-bold rounded-xl transition shadow-sm shadow-indigo-600/20 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Create New Coupon</span>
@@ -201,7 +201,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
             placeholder="Search coupon code or course..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36]"
           />
         </div>
 
@@ -209,7 +209,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#FA5A36] cursor-pointer"
           >
             <option value="">All Statuses</option>
             <option value="ACTIVE">Active</option>
@@ -223,7 +223,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
         {loading ? (
           <div className="py-16 text-center space-y-3">
-            <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto" />
+            <Loader2 className="w-6 h-6 animate-spin text-[#FA5A36] mx-auto" />
             <p className="text-xs font-semibold text-slate-500">Loading coupons...</p>
           </div>
         ) : coupons.length === 0 ? (
@@ -253,7 +253,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     <tr key={coupon._id} className="hover:bg-slate-50/60 transition">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                          <span className="font-mono font-semibold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
                             {coupon.code}
                           </span>
                           <button
@@ -278,7 +278,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                        <span className="font-semibold text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
                           {coupon.discountType === 'PERCENTAGE'
                             ? `${coupon.discountValue}% OFF`
                             : `₹${coupon.discountValue} OFF`}
@@ -296,7 +296,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
 
                       <td className="py-3.5 px-4">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide border ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border ${
                             coupon.status === 'ACTIVE'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -310,7 +310,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                         <div className="inline-flex items-center gap-2">
                           <button
                             onClick={() => handleToggleStatus(coupon)}
-                            className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-indigo-600 rounded-lg transition"
+                            className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-[#FA5A36] rounded-lg transition"
                             title="Toggle Active State"
                           >
                             {coupon.status === 'ACTIVE' ? (
@@ -345,7 +345,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-indigo-600" />
+                  <Tag className="w-5 h-5 text-[#FA5A36]" />
                   Create Promotional Coupon
                 </h3>
                 <p className="text-xs text-slate-500">Configure discount rules and select target course.</p>
@@ -372,7 +372,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                       setSelectedInstructorId(e.target.value);
                       setFormData((prev) => ({ ...prev, courseId: '' }));
                     }}
-                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="">All Instructors ({uniqueInstructors.length} found)</option>
                     {uniqueInstructors.map((inst) => (
@@ -395,7 +395,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     required
                     value={formData.courseId}
                     onChange={(e) => setFormData((prev) => ({ ...prev, courseId: e.target.value }))}
-                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="">-- Select Course --</option>
                     {filteredCourses.map((c) => (
@@ -418,7 +418,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                   placeholder="e.g. FLASH50, WELCOME10"
                   value={formData.code}
                   onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase().replace(/\s+/g, '') }))}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 uppercase focus:outline-none focus:border-indigo-500"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 uppercase focus:outline-none focus:border-[#FA5A36]"
                 />
               </div>
 
@@ -431,7 +431,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                   <select
                     value={formData.discountType}
                     onChange={(e) => setFormData((prev) => ({ ...prev, discountType: e.target.value as any }))}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#FA5A36]"
                   >
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FIXED">Fixed Amount (₹)</option>
@@ -449,7 +449,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     required
                     value={formData.discountValue}
                     onChange={(e) => setFormData((prev) => ({ ...prev, discountValue: Number(e.target.value) }))}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -466,7 +466,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     required
                     value={formData.usageLimit}
                     onChange={(e) => setFormData((prev) => ({ ...prev, usageLimit: Number(e.target.value) }))}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
 
@@ -479,7 +479,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     min="1"
                     value={formData.perUserLimit || 1}
                     onChange={(e) => setFormData((prev) => ({ ...prev, perUserLimit: Number(e.target.value) }))}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -495,7 +495,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     required
                     value={formData.startDate}
                     onChange={(e) => setFormData((prev) => ({ ...prev, startDate: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
 
@@ -508,7 +508,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                     required
                     value={formData.expiryDate}
                     onChange={(e) => setFormData((prev) => ({ ...prev, expiryDate: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#FA5A36]"
                   />
                 </div>
               </div>
@@ -524,7 +524,7 @@ export const SuperAdminCouponsTab: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>

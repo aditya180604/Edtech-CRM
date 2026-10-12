@@ -19,18 +19,32 @@ export async function authenticate(req, res, next) {
     }
 
     // 1. Try legacy JWT token verification first
+    let isLocalJwt = false;
+    let decoded = null;
     try {
-      const decoded = jwt.verify(token, config.jwt.secret);
-      req.user = {
-        userId: decoded.userId,
-        _id: decoded.userId,
-        id: decoded.userId,
-        email: decoded.email,
-        role: decoded.role,
-      };
-      return next();
+      decoded = jwt.verify(token, config.jwt.secret);
+      isLocalJwt = true;
     } catch (jwtErr) {
       // If not a valid local JWT, fall through to Firebase verification
+    }
+
+    if (isLocalJwt && decoded?.userId) {
+      const user = await User.findById(decoded.userId).select('status role email firebaseUid');
+      if (!user) {
+        return next(new AppError('User account not found.', 401));
+      }
+      if (user.status !== 'ACTIVE') {
+        return next(new AppError(`Account is ${user.status ? user.status.toLowerCase() : 'inactive'}. Access revoked.`, 403));
+      }
+      req.user = {
+        userId: user._id.toString(),
+        _id: user._id.toString(),
+        id: user._id.toString(),
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      };
+      return next();
     }
 
     // 2. Try Firebase ID Token verification
@@ -50,6 +64,10 @@ export async function authenticate(req, res, next) {
         return next(new AppError('User account not found for this Firebase identity.', 401));
       }
 
+      if (user.status !== 'ACTIVE') {
+        return next(new AppError(`Account is ${user.status ? user.status.toLowerCase() : 'inactive'}. Access revoked.`, 403));
+      }
+
       // Link firebaseUid if not set
       if (!user.firebaseUid) {
         user.firebaseUid = decodedFirebase.uid;
@@ -62,6 +80,7 @@ export async function authenticate(req, res, next) {
         id: user._id.toString(),
         email: user.email,
         role: user.role,
+        status: user.status,
         firebaseUid: user.firebaseUid,
       };
 
@@ -87,14 +106,18 @@ export async function optionalAuthenticate(req, res, next) {
       // 1. Try local JWT
       try {
         const decoded = jwt.verify(token, config.jwt.secret);
-        req.user = {
-          userId: decoded.userId,
-          _id: decoded.userId,
-          id: decoded.userId,
-          email: decoded.email,
-          role: decoded.role,
-        };
-        return next();
+        const user = await User.findById(decoded.userId).select('status role email firebaseUid');
+        if (user && user.status === 'ACTIVE') {
+          req.user = {
+            userId: user._id.toString(),
+            _id: user._id.toString(),
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role,
+            status: user.status,
+          };
+          return next();
+        }
       } catch (e) {}
 
       // 2. Try Firebase ID Token
@@ -107,13 +130,14 @@ export async function optionalAuthenticate(req, res, next) {
             { email: (decodedFirebase.email || '').toLowerCase() },
           ],
         });
-        if (user) {
+        if (user && user.status === 'ACTIVE') {
           req.user = {
             userId: user._id.toString(),
             _id: user._id.toString(),
             id: user._id.toString(),
             email: user.email,
             role: user.role,
+            status: user.status,
             firebaseUid: user.firebaseUid,
           };
         }
@@ -124,3 +148,28 @@ export async function optionalAuthenticate(req, res, next) {
   }
   return next();
 }
+
+/**
+ * Role-Based Access Control middleware export
+ * Supports either array `authorizeRole(['INSTRUCTOR', 'SUPER_ADMIN'])`
+ * or spread arguments `authorizeRole('INSTRUCTOR', 'SUPER_ADMIN')`
+ */
+export function authorizeRole(...roles) {
+  const allowed = roles.flat();
+  return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return next(new AppError('Authentication required. Unauthorized access.', 401));
+    }
+    if (!allowed.includes(req.user.role)) {
+      return next(
+        new AppError(
+          `Access denied. Role '${req.user.role}' is not authorized to access this resource.`,
+          403
+        )
+      );
+    }
+    next();
+  };
+}
+
+export const authorize = authorizeRole;

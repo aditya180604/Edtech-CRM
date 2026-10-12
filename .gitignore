@@ -36,9 +36,42 @@ out/
 *.DS_Store
 Thumbs.db
 
-# Testing coverage
+# Testing & Test Suites (Backend & Frontend)
 coverage/
 .nyc_output/
+tests/
+test/
+__tests__/
+backend/tests/
+backend/test/
+backend/**/__tests__/
+backend/**/*.test.js
+backend/**/*.test.mjs
+backend/**/*.test.cjs
+backend/**/*.spec.js
+frontend/tests/
+frontend/test/
+frontend/**/__tests__/
+frontend/**/*.test.ts
+frontend/**/*.test.tsx
+frontend/**/*.test.js
+frontend/**/*.test.jsx
+frontend/**/*.spec.ts
+frontend/**/*.spec.tsx
+frontend/**/*.spec.js
+frontend/**/*.spec.jsx
+*.test.js
+*.test.ts
+*.test.jsx
+*.test.tsx
+*.test.mjs
+*.test.cjs
+*.spec.js
+*.spec.ts
+*.spec.jsx
+*.spec.tsx
+*.spec.mjs
+*.spec.cjs
 
 # Temporary / Cache files
 .temp/

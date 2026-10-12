@@ -57,8 +57,8 @@ export class LearningPathService {
 
     const pathIds = paths.map((p) => p._id);
 
-    // Aggregate real domain counts and topic counts from DB
-    const [domainsAgg, domainTopicsAgg, userPathEntitlements] = await Promise.all([
+    // Aggregate real domain counts, topic counts, and dynamic topic durations from DB
+    const [domainsAgg, domainTopicsAgg, durationAgg, userPathEntitlements] = await Promise.all([
       LearningPathDomain.aggregate([
         { $match: { learningPathId: { $in: pathIds }, status: 'PUBLISHED' } },
         { $group: { _id: '$learningPathId', count: { $sum: 1 } } },
@@ -66,6 +66,24 @@ export class LearningPathService {
       LearningPathDomainTopic.aggregate([
         { $match: { learningPathId: { $in: pathIds }, status: 'ACTIVE' } },
         { $group: { _id: '$learningPathId', count: { $sum: 1 } } },
+      ]),
+      LearningPathDomainTopic.aggregate([
+        { $match: { learningPathId: { $in: pathIds }, status: 'ACTIVE' } },
+        {
+          $lookup: {
+            from: 'topics',
+            localField: 'topicId',
+            foreignField: '_id',
+            as: 'topicDoc',
+          },
+        },
+        { $unwind: '$topicDoc' },
+        {
+          $group: {
+            _id: '$learningPathId',
+            totalMinutes: { $sum: { $ifNull: ['$topicDoc.duration', 0] } },
+          },
+        },
       ]),
       userId && mongoose.isValidObjectId(userId)
         ? Entitlement.find({
@@ -85,6 +103,17 @@ export class LearningPathService {
       const pId = p._id.toString();
       const domainCount = domainsAgg.find((d) => d._id.toString() === pId)?.count || 0;
       const topicCount = domainTopicsAgg.find((t) => t._id.toString() === pId)?.count || 0;
+      const totalMinutes = durationAgg.find((d) => d._id.toString() === pId)?.totalMinutes || 0;
+
+      let dynamicDuration = p.estimatedDuration;
+      if (totalMinutes > 0) {
+        if (totalMinutes >= 60) {
+          const hours = (totalMinutes / 60).toFixed(1);
+          dynamicDuration = `${hours.endsWith('.0') ? parseInt(hours) : hours} Hours`;
+        } else {
+          dynamicDuration = `${totalMinutes} Mins`;
+        }
+      }
 
       return {
         id: pId,
@@ -95,7 +124,7 @@ export class LearningPathService {
         skills: Array.isArray(p.skills) ? p.skills : [],
         career: p.career || null,
         level: p.level || 'ALL_LEVELS',
-        estimatedDuration: p.estimatedDuration || null,
+        estimatedDuration: dynamicDuration || 'Self-paced',
         domainsCount: domainCount,
         topicsCount: topicCount,
         thumbnail: p.thumbnail || null,
@@ -306,6 +335,17 @@ export class LearningPathService {
     const overallProgress =
       totalPathTopics > 0 ? Math.round((completedPathTopics / totalPathTopics) * 100) : 0;
 
+    const totalMinutes = topics.reduce((acc, t) => acc + (Number(t.duration) || 0), 0);
+    let dynamicDuration = path.estimatedDuration;
+    if (totalMinutes > 0) {
+      if (totalMinutes >= 60) {
+        const hours = (totalMinutes / 60).toFixed(1);
+        dynamicDuration = `${hours.endsWith('.0') ? parseInt(hours) : hours} Hours`;
+      } else {
+        dynamicDuration = `${totalMinutes} Mins`;
+      }
+    }
+
     return {
       id: pathId.toString(),
       learningPathId: path.learningPathId || pathId.toString(),
@@ -315,7 +355,7 @@ export class LearningPathService {
       skills: Array.isArray(path.skills) ? path.skills : [],
       career: path.career || null,
       level: path.level || 'ALL_LEVELS',
-      estimatedDuration: path.estimatedDuration || null,
+      estimatedDuration: dynamicDuration || 'Self-paced',
       totalDomains: domains.length,
       totalTopics: totalPathTopics,
       overallProgress: overallProgress,

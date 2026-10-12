@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { publishNotification } from '../services/realtime.service.js';
 import { COMMUNICATION_CHANNELS } from '../config/constants.js';
 
 // ==========================================
@@ -106,6 +107,10 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ userId: 1, isRead: 1 });
 notificationSchema.index({ userId: 1, createdAt: -1 });
+notificationSchema.post('save', (notification) => publishNotification(notification));
+notificationSchema.post('insertMany', (notifications) => {
+  notifications.forEach(publishNotification);
+});
 
 export const Notification =
   mongoose.models.Notification || mongoose.model('Notification', notificationSchema);

@@ -92,7 +92,7 @@ export const LearningPathDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/60 text-slate-900 flex flex-col justify-between selection:bg-indigo-500 selection:text-white font-sans">
+    <div className="min-h-screen bg-slate-50/60 text-slate-900 flex flex-col justify-between selection:bg-[#FA5A36] selection:text-white font-sans">
       <Navbar />
 
       <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
@@ -113,7 +113,7 @@ export const LearningPathDetailPage: React.FC = () => {
             <p className="text-sm text-slate-600 max-w-md mx-auto mb-6">{error}</p>
             <Link
               to="/learning-paths"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+              className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-bold rounded-xl transition-all shadow-sm"
             >
               Browse All Learning Paths
             </Link>
@@ -125,7 +125,7 @@ export const LearningPathDetailPage: React.FC = () => {
           <div className="space-y-8">
             {/* Breadcrumb Navigation */}
             <nav className="flex items-center gap-2 text-xs text-slate-500">
-              <Link to="/learning-paths" className="hover:text-indigo-600 transition-colors">
+              <Link to="/learning-paths" className="hover:text-[#FA5A36] transition-colors">
                 Learning Paths
               </Link>
               <span>/</span>
@@ -134,11 +134,11 @@ export const LearningPathDetailPage: React.FC = () => {
 
             {/* Path Hero Card */}
             <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-200/80 p-8 sm:p-10 shadow-sm">
-              <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-50/80 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#FFF5F2]/80 rounded-full blur-3xl pointer-events-none" />
               <div className="relative z-10 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold tracking-wide uppercase">
+                    <span className="px-3 py-1 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold tracking-wide uppercase">
                       {pathDetail.career || 'Career Roadmap'}
                     </span>
                     <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
@@ -163,7 +163,7 @@ export const LearningPathDetailPage: React.FC = () => {
                       <button
                         onClick={handleEnroll}
                         disabled={isEnrolling}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-extrabold rounded-xl transition-all duration-200 shadow-sm shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-extrabold rounded-xl transition-all duration-200 shadow-sm shadow-[#FA5A36]/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
                       >
                         {isEnrolling ? (
                           <>
@@ -199,11 +199,11 @@ export const LearningPathDetailPage: React.FC = () => {
                 <div className="pt-4 border-t border-slate-100 max-w-xl">
                   <div className="flex items-center justify-between text-xs font-semibold mb-2">
                     <span className="text-slate-600">Your Path Progress</span>
-                    <span className="text-indigo-600 font-bold">{pathDetail.overallProgress}%</span>
+                    <span className="text-[#FA5A36] font-bold">{pathDetail.overallProgress}%</span>
                   </div>
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-600 to-emerald-500 rounded-full transition-all duration-500"
+                      className="h-full bg-[#FA5A36] rounded-full transition-all duration-500"
                       style={{ width: `${pathDetail.overallProgress}%` }}
                     />
                   </div>
@@ -228,8 +228,8 @@ export const LearningPathDetailPage: React.FC = () => {
             {/* Summary Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                  <Layers className="w-5 h-5 text-indigo-600 shrink-0" />
+                <div className="w-10 h-10 rounded-xl bg-[#FFF5F2] flex items-center justify-center">
+                  <Layers className="w-5 h-5 text-[#FA5A36] shrink-0" />
                 </div>
                 <div>
                   <div className="text-lg font-bold text-slate-900">{pathDetail.totalDomains}</div>
@@ -237,8 +237,8 @@ export const LearningPathDetailPage: React.FC = () => {
                 </div>
               </div>
               <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-purple-600 shrink-0" />
+                <div className="w-10 h-10 rounded-xl bg-[#FFF5F2] flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-[#FA5A36] shrink-0" />
                 </div>
                 <div>
                   <div className="text-lg font-bold text-slate-900">{pathDetail.totalTopics}</div>
@@ -300,12 +300,12 @@ export const LearningPathDetailPage: React.FC = () => {
                       className="w-full flex items-center justify-between p-6 hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-extrabold text-sm shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#FFF5F2] border border-[#FFCCC2] flex items-center justify-center text-[#FA5A36] font-extrabold text-sm shrink-0">
                           {domainIndex + 1}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-indigo-600 font-bold uppercase tracking-wider">
+                            <span className="text-xs text-[#FA5A36] font-bold uppercase tracking-wider">
                               Domain {domainIndex + 1}
                             </span>
                             <span className="text-slate-300">•</span>
@@ -344,7 +344,7 @@ export const LearningPathDetailPage: React.FC = () => {
                             <Link
                               key={topic.id}
                               to={`/topics/${topic.id}`}
-                              className="group relative bg-slate-50/80 hover:bg-white border border-slate-200 hover:border-indigo-300 rounded-2xl p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                              className="group relative bg-slate-50/80 hover:bg-white border border-slate-200 hover:border-[#FFCCC2] rounded-2xl p-5 transition-all duration-200 hover:shadow-md flex flex-col justify-between"
                             >
                               <div>
                                 <div className="flex items-center justify-between gap-2 mb-2.5">
@@ -357,13 +357,13 @@ export const LearningPathDetailPage: React.FC = () => {
                                       <CheckCircle2 className="w-3 h-3" /> Completed
                                     </span>
                                   ) : topic.userStatus?.isPurchased ? (
-                                    <span className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                                    <span className="flex items-center gap-1 text-[11px] font-bold text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
                                       <PlayCircle className="w-3 h-3" /> Enrolled
                                     </span>
                                   ) : null}
                                 </div>
 
-                                <h4 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                <h4 className="text-base font-bold text-slate-900 group-hover:text-[#FA5A36] transition-colors">
                                   {topic.title}
                                 </h4>
                                 <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
@@ -373,8 +373,8 @@ export const LearningPathDetailPage: React.FC = () => {
 
                               {/* Footer Marketplace stats */}
                               <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-1.5 text-indigo-700 font-semibold">
-                                  <Users className="w-3.5 h-3.5 text-indigo-600" />
+                                <div className="flex items-center gap-1.5 text-[#FA5A36] font-semibold">
+                                  <Users className="w-3.5 h-3.5 text-[#FA5A36]" />
                                   <span>
                                     {topic.tutorsCount} {topic.tutorsCount === 1 ? 'Tutor' : 'Tutors'} Available
                                   </span>
@@ -388,7 +388,7 @@ export const LearningPathDetailPage: React.FC = () => {
                                   ) : (
                                     <span className="text-slate-500 text-[11px]">Free/Included</span>
                                   )}
-                                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] group-hover:translate-x-0.5 transition-all" />
                                 </div>
                               </div>
                             </Link>

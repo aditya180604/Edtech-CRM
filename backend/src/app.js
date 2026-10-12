@@ -54,6 +54,8 @@ app.use(
       'X-Requested-With',
       'Accept',
       'Origin',
+      'x-instructor-id',
+      'X-Instructor-Id',
       'idempotency-key',
       'Idempotency-Key',
       'x-idempotency-key',

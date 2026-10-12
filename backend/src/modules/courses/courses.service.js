@@ -279,16 +279,20 @@ export class CoursesService {
       if (userObjId) userQueries.push({ userId: userObjId });
 
       const activeEntitlements = await Entitlement.find({
-        $or: userQueries,
-        status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
-        $or: [
-          { productId: course._id },
-          { courseId: course._id },
-          { productId: course._id.toString() },
-          { courseId: course._id.toString() },
-          { productId: { $in: topicIds } },
-          { topicId: { $in: topicIds } },
+        $and: [
+          { $or: userQueries },
+          {
+            $or: [
+              { productId: course._id },
+              { courseId: course._id },
+              { productId: course._id.toString() },
+              { courseId: course._id.toString() },
+              { productId: { $in: topicIds } },
+              { topicId: { $in: topicIds } },
+            ],
+          },
         ],
+        status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
       }).lean();
 
       for (const ent of activeEntitlements) {
@@ -629,7 +633,24 @@ export class CoursesService {
       userId: userObjId,
     }).lean();
 
-    return review;
+    // Check enrollment eligibility
+    const entitlement = await Entitlement.findOne({
+      userId: userObjId,
+      $or: [{ courseId: course._id }, { productId: course._id }],
+      status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
+    }).lean();
+
+    const hasProgress = await LearningProgress.exists({
+      userId: userObjId,
+      courseId: course._id,
+    });
+
+    const isEligible = Boolean(entitlement || hasProgress);
+
+    return {
+      review,
+      isEligible,
+    };
   }
 
   static async submitReview({ slug, userId, rating, comment, title }) {
@@ -643,16 +664,35 @@ export class CoursesService {
     }
 
     const userObjId = new mongoose.Types.ObjectId(userId);
+
+    // Verify eligibility: Must have active entitlement or progress
+    const entitlement = await Entitlement.findOne({
+      userId: userObjId,
+      $or: [{ courseId: course._id }, { productId: course._id }],
+      status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
+    }).lean();
+
+    const hasProgress = await LearningProgress.exists({
+      userId: userObjId,
+      courseId: course._id,
+    });
+
+    if (!entitlement && !hasProgress) {
+      throw new Error('Eligibility requirement: Only students enrolled in or attending this course can submit a review.');
+    }
+
     const numRating = Math.max(1, Math.min(5, Number(rating) || 5));
 
     const review = await Review.findOneAndUpdate(
       { courseId: course._id, userId: userObjId },
       {
         $set: {
+          instructorId: course.instructorId || null,
           rating: numRating,
           comment: (comment || '').trim() || 'Great course!',
           title: (title || '').trim(),
           isVerifiedPurchase: true,
+          reviewType: 'COURSE',
           status: 'PUBLISHED',
         },
       },
@@ -679,6 +719,97 @@ export class CoursesService {
       avgRating,
       reviewCount: allReviews.length,
     };
+  }
+
+  static async getCourseReviews({ slug, rating, page = 1, limit = 10 }) {
+    let query = { slug };
+    if (mongoose.isValidObjectId(slug)) {
+      query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
+    }
+    const course = await Course.findOne(query).select('_id title rating reviewCount').lean();
+    if (!course) return { reviews: [], metrics: { avgRating: 0, totalReviews: 0, breakdown: {} } };
+
+    const filter = { courseId: course._id, status: 'PUBLISHED' };
+    if (rating && !isNaN(Number(rating))) {
+      filter.rating = Number(rating);
+    }
+
+    const allPublished = await Review.find({ courseId: course._id, status: 'PUBLISHED' }).lean();
+    const totalReviews = allPublished.length;
+    const avgRating = totalReviews > 0
+      ? Number((allPublished.reduce((acc, r) => acc + (r.rating || 0), 0) / totalReviews).toFixed(1))
+      : 0;
+
+    const breakdown = {
+      5: allPublished.filter((r) => r.rating === 5).length,
+      4: allPublished.filter((r) => r.rating === 4).length,
+      3: allPublished.filter((r) => r.rating === 3).length,
+      2: allPublished.filter((r) => r.rating === 2).length,
+      1: allPublished.filter((r) => r.rating === 1).length,
+    };
+
+    const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, parseInt(limit, 10));
+    const reviews = await Review.find(filter)
+      .populate('userId', 'firstName lastName profilePhoto')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit, 10))
+      .lean();
+
+    const formatted = reviews.map((r) => ({
+      _id: r._id,
+      rating: r.rating,
+      title: r.title || '',
+      comment: r.comment,
+      createdAt: r.createdAt,
+      isVerifiedPurchase: r.isVerifiedPurchase,
+      helpfulVotesCount: r.helpfulVotes?.length || 0,
+      studentName: [r.userId?.firstName, r.userId?.lastName].filter(Boolean).join(' ') || 'Student',
+      studentAvatar: r.userId?.profilePhoto || null,
+    }));
+
+    return {
+      reviews: formatted,
+      metrics: {
+        avgRating,
+        totalReviews,
+        breakdown,
+      },
+      pagination: {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        total: totalReviews,
+        pages: Math.ceil(totalReviews / parseInt(limit, 10)) || 1,
+      },
+    };
+  }
+
+  static async voteHelpfulReview({ userId, reviewId }) {
+    const review = await Review.findById(reviewId);
+    if (!review) throw new Error('Review not found');
+
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const existingIndex = review.helpfulVotes.findIndex((id) => id.toString() === userId.toString());
+
+    if (existingIndex > -1) {
+      review.helpfulVotes.splice(existingIndex, 1);
+    } else {
+      review.helpfulVotes.push(userObjId);
+    }
+
+    await review.save();
+    return { helpfulVotesCount: review.helpfulVotes.length, hasVoted: existingIndex === -1 };
+  }
+
+  static async flagReview({ userId, reviewId, reason = '' }) {
+    const review = await Review.findById(reviewId);
+    if (!review) throw new Error('Review not found');
+
+    review.status = 'FLAGGED';
+    review.flaggedReason = reason.trim() || 'Flagged by user for moderation';
+    await review.save();
+
+    return { message: 'Review reported for moderation. Thank you.' };
   }
 
   /**

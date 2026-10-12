@@ -135,13 +135,58 @@ export const LiveSession = mongoose.models.LiveSession || mongoose.model('LiveSe
 // ==========================================
 const bookingSchema = new mongoose.Schema(
   {
+    bookingCode: { type: String, unique: true, sparse: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    liveSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'LiveSession', required: true, index: true },
-    status: { type: String, default: 'CONFIRMED' }, // CONFIRMED, ATTENDED, CANCELLED
+    liveSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'LiveSession', index: true },
+    slotId: { type: mongoose.Schema.Types.ObjectId, ref: 'TeachingSlot', index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    notes: { type: String, default: '' },
+    bookingType: {
+      type: String,
+      enum: ['SLOT', 'CONSULTATION', 'WEBINAR'],
+      default: 'CONSULTATION',
+      index: true,
+    },
+    startTime: { type: Date, index: true },
+    endTime: { type: Date },
+    durationMinutes: { type: Number, default: 45 },
+    fee: { type: Number, default: 0 },
+    currency: { type: String, default: 'INR' },
+    paymentStatus: {
+      type: String,
+      enum: ['FREE', 'PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+      default: 'FREE',
+      index: true,
+    },
+    cashfreeOrderId: { type: String, sparse: true, index: true },
+    cashfreePaymentId: { type: String },
+    reservationExpiresAt: { type: Date, index: true },
+    meetingRoomCode: { type: String, index: true },
+    meetingUrl: { type: String },
+    studentEmailSent: { type: Boolean, default: false },
+    instructorEmailSent: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ['PENDING_PAYMENT', 'CONFIRMED', 'ATTENDED', 'CANCELLED', 'RESCHEDULED'],
+      default: 'CONFIRMED',
+      index: true,
+    },
+    cancellationReason: { type: String },
+    cancelledBy: { type: String, enum: ['STUDENT', 'INSTRUCTOR', 'ADMIN'] },
+    cancelledAt: { type: Date },
+    rescheduledFromBookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
     attendedMinutes: { type: Number, default: 0 },
     attendedAt: { type: Date },
+    actualStartedAt: { type: Date },
+    actualEndedAt: { type: Date },
+    consultationReview: {
+      rating: { type: Number, min: 1, max: 5 },
+      review: { type: String, trim: true, maxlength: 2000 },
+      submittedAt: { type: Date },
+    },
+    chatMessages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     bookedAt: { type: Date, default: Date.now },
-    cancelledAt: { type: Date },
   },
   {
     collection: 'bookings',
@@ -149,6 +194,58 @@ const bookingSchema = new mongoose.Schema(
   }
 );
 
-bookingSchema.index({ userId: 1, liveSessionId: 1 }, { unique: true });
+bookingSchema.index(
+  { userId: 1, liveSessionId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { liveSessionId: { $exists: true, $type: 'objectId' } },
+  }
+);
+bookingSchema.index({ userId: 1, slotId: 1, status: 1 });
 
 export const Booking = mongoose.models.Booking || mongoose.model('Booking', bookingSchema);
+
+// ==========================================
+// 35. TeachingSlot Model (Collection: teaching_slots)
+// ==========================================
+const teachingSlotSchema = new mongoose.Schema(
+  {
+    slotId: { type: String, unique: true, sparse: true, index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, default: '' },
+    slotType: {
+      type: String,
+      enum: ['ONE_ON_ONE', 'SMALL_GROUP', 'LIVE_CLASS'],
+      default: 'ONE_ON_ONE',
+    },
+    startTime: { type: Date, required: true, index: true },
+    endTime: { type: Date, required: true },
+    durationMinutes: { type: Number, default: 45 },
+    capacity: { type: Number, default: 1 },
+    bookedCount: { type: Number, default: 0 },
+    status: {
+      type: String,
+      enum: ['AVAILABLE', 'BOOKED', 'COMPLETED', 'CANCELLED'],
+      default: 'AVAILABLE',
+      index: true,
+    },
+    price: { type: Number, default: 0 },
+    currency: { type: String, default: 'INR' },
+    meetingType: { type: String, enum: ['IN_PLATFORM', 'EXTERNAL'], default: 'IN_PLATFORM' },
+    roomCode: { type: String, unique: true, sparse: true, index: true },
+    meetingUrl: { type: String },
+    timeZone: { type: String, default: 'UTC' },
+  },
+  {
+    collection: 'teaching_slots',
+    timestamps: true,
+  }
+);
+
+teachingSlotSchema.index({ instructorId: 1, startTime: 1, endTime: 1 });
+teachingSlotSchema.index({ courseId: 1, status: 1 });
+
+export const TeachingSlot =
+  mongoose.models.TeachingSlot || mongoose.model('TeachingSlot', teachingSlotSchema);

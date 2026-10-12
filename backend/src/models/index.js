@@ -59,11 +59,12 @@ export {
   Wishlist,
 } from './engagement.models.js';
 
-// 32-34: Live Learning & Webinars
+// 32-35: Live Learning & Webinars
 export {
   Webinar,
   LiveSession,
   Booking,
+  TeachingSlot,
 } from './live.models.js';
 
 // 35-38: CRM & Events
@@ -102,5 +103,7 @@ export {
   Tax,
   FraudRecord,
   InfrastructureStatus,
+  PlatformSetting,
+  InstructorRegistrationFee,
 } from './governance.models.js';
 

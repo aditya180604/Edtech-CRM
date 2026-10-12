@@ -92,8 +92,29 @@ export interface QuestionItem {
 export interface CourseReviewItem {
   _id: string;
   rating: number;
+  title?: string;
+  comment?: string;
   review?: string;
   createdAt?: string;
+  studentName?: string;
+  studentAvatar?: string;
+  isVerifiedPurchase?: boolean;
+  helpfulVotesCount?: number;
+}
+
+export interface CourseReviewsResponse {
+  reviews: CourseReviewItem[];
+  metrics: {
+    avgRating: number;
+    totalReviews: number;
+    breakdown: Record<string, number>;
+  };
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
 }
 
 export interface TopicItem {
@@ -161,7 +182,15 @@ export const coursesApi = {
   },
 
   // 6. Course Reviews & Ratings
-  async getMyReview(slug: string): Promise<{ success: boolean; data: CourseReviewItem | null }> {
+  async getCourseReviews(
+    slug: string,
+    params?: { rating?: number; page?: number; limit?: number }
+  ): Promise<{ success: boolean; data: CourseReviewsResponse }> {
+    const res = await apiClient.get(`/courses/${slug}/reviews`, { params });
+    return res.data;
+  },
+
+  async getMyReview(slug: string): Promise<{ success: boolean; data: { review: CourseReviewItem | null; isEligible: boolean } | CourseReviewItem | null }> {
     const res = await apiClient.get(`/courses/${slug}/review/my-review`);
     return res.data;
   },
@@ -169,8 +198,18 @@ export const coursesApi = {
   async submitReview(
     slug: string,
     body: { rating: number; comment?: string; title?: string }
-  ): Promise<{ success: boolean; data: CourseReviewItem }> {
+  ): Promise<{ success: boolean; data: { review: CourseReviewItem; avgRating: number; reviewCount: number } }> {
     const res = await apiClient.post(`/courses/${slug}/review`, body);
+    return res.data;
+  },
+
+  async voteHelpfulReview(reviewId: string): Promise<{ success: boolean; data: { helpfulVotesCount: number; hasVoted: boolean } }> {
+    const res = await apiClient.post(`/courses/reviews/${reviewId}/vote`);
+    return res.data;
+  },
+
+  async flagReview(reviewId: string, body?: { reason?: string }): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.post(`/courses/reviews/${reviewId}/flag`, body || {});
     return res.data;
   },
 

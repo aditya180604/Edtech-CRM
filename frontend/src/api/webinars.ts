@@ -116,6 +116,13 @@ export interface LiveRoomState {
   raisedHands: RaisedHandItem[];
   userNotes?: string;
   livekitServerUrl?: string;
+  hostStreamState?: {
+    cameraEnabled?: boolean;
+    micEnabled?: boolean;
+    screenShareActive?: boolean;
+    isInstructorSpeaking?: boolean;
+    audioLevel?: number;
+  };
 }
 
 export interface LiveKitTokenResponse {
@@ -217,6 +224,41 @@ export const webinarsApi = {
 
   async leaveRoom(roomCode: string): Promise<{ success: boolean }> {
     const res = await apiClient.post(`/webinars/room/${roomCode}/leave`);
+    return res.data;
+  },
+
+  async updateBroadcastState(
+    roomCode: string,
+    state: {
+      cameraEnabled?: boolean;
+      micEnabled?: boolean;
+      screenShareActive?: boolean;
+      isInstructorSpeaking?: boolean;
+      audioLevel?: number;
+    }
+  ): Promise<{ success: boolean; data: any }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/broadcast-state`, state);
+    return res.data;
+  },
+
+  async sendSignal(roomCode: string, signal: any): Promise<{ success: boolean }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/signal`, signal);
+    return res.data;
+  },
+
+  async getSignals(
+    roomCode: string,
+    since = 0,
+    excludeSenderId?: string
+  ): Promise<{ success: boolean; data: { signals: any[] } }> {
+    const res = await apiClient.get(`/webinars/room/${roomCode}/signal`, {
+      params: { since, excludeSenderId },
+    });
+    return res.data;
+  },
+
+  async reopenOrRejoinRoom(roomCode: string): Promise<{ success: boolean; data?: any }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/reopen`);
     return res.data;
   },
 };

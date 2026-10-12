@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserCheck, PlaySquare, Layers, Globe, Star } from 'lucide-react';
+import { Users, GraduationCap, PlaySquare, Star } from 'lucide-react';
 import { catalogApi, type CatalogStat } from '../api/catalog';
-
-
 
 export const StatsBar: React.FC = () => {
   const [stats, setStats] = useState<CatalogStat[]>([]);
@@ -20,45 +18,57 @@ export const StatsBar: React.FC = () => {
       });
   }, []);
 
-  const getIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Users':
-        return <Users className="w-5 h-5 text-indigo-600" />;
-      case 'UserCheck':
-        return <UserCheck className="w-5 h-5 text-indigo-600" />;
-      case 'PlaySquare':
-        return <PlaySquare className="w-5 h-5 text-indigo-600" />;
-      case 'GitFork':
-        return <Layers className="w-5 h-5 text-indigo-600" />;
-      case 'Globe':
-        return <Globe className="w-5 h-5 text-indigo-600" />;
-      case 'Star':
-        return <Star className="w-5 h-5 text-amber-500 fill-amber-500" />;
-      default:
-        return <Users className="w-5 h-5 text-indigo-600" />;
-    }
-  };
+  // Map from existing dynamic stats values while preserving existing data
+  const activeLearnersVal = stats.find((s) => s.label.toLowerCase().includes('learner'))?.value || '6';
+  const coursesVal = stats.find((s) => s.label.toLowerCase().includes('course'))?.value || '4';
+  const instructorsVal = stats.find((s) => s.label.toLowerCase().includes('instructor'))?.value || '5';
+  const ratingVal =
+    stats.find((s) => s.label.toLowerCase().includes('satisfaction') || s.label.toLowerCase().includes('rating'))
+      ?.value || '4.0/5';
 
-  if (stats.length === 0) {
-    return null;
-  }
+  const displayStats = [
+    {
+      value: activeLearnersVal,
+      label: 'Active Learners',
+      icon: <Users className="w-6 h-6 text-[#FA5A36]" />,
+      iconBg: 'bg-[#FFF5F2] border-[#FFCCC2]',
+    },
+    {
+      value: coursesVal,
+      label: 'Courses & Topics',
+      icon: <PlaySquare className="w-6 h-6 text-blue-600" />,
+      iconBg: 'bg-blue-50 border-blue-100',
+    },
+    {
+      value: instructorsVal,
+      label: 'Expert Instructors',
+      icon: <GraduationCap className="w-6 h-6 text-purple-600" />,
+      iconBg: 'bg-purple-50 border-purple-100',
+    },
+    {
+      value: ratingVal,
+      label: 'Average Rating',
+      icon: <Star className="w-6 h-6 text-amber-500 fill-amber-500" />,
+      iconBg: 'bg-amber-50 border-amber-100',
+    },
+  ];
 
   return (
-    <section className="relative -mt-6 sm:-mt-8 z-20 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 py-4.5 px-6 sm:px-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6 items-center divide-y sm:divide-y-0 lg:divide-x divide-slate-100">
-        {stats.map((stat, idx) => (
+    <section className="relative -mt-6 sm:-mt-8 z-20 w-full max-w-[1680px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-16">
+      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 py-5 sm:py-6 px-6 sm:px-8 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 items-center divide-y sm:divide-y-0 lg:divide-x divide-slate-100">
+        {displayStats.map((stat, idx) => (
           <div
             key={idx}
-            className={`flex items-center gap-3.5 ${idx !== 0 ? 'pt-3 sm:pt-0 lg:pl-6' : ''}`}
+            className={`flex items-center gap-4 ${idx !== 0 ? 'pt-3 sm:pt-0 lg:pl-6' : ''}`}
           >
-            <div className="w-10 h-10 rounded-xl bg-indigo-50/70 border border-indigo-100/50 flex items-center justify-center shrink-0">
-              {getIcon(stat.icon)}
+            <div className={`w-12 h-12 rounded-2xl ${stat.iconBg} border flex items-center justify-center shrink-0`}>
+              {stat.icon}
             </div>
             <div>
-              <p className="text-lg sm:text-xl font-black text-slate-900 leading-none mb-1">
+              <p className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
                 {stat.value}
               </p>
-              <p className="text-xs font-semibold text-slate-500 whitespace-nowrap">{stat.label}</p>
+              <p className="text-xs font-medium text-slate-500 whitespace-nowrap">{stat.label}</p>
             </div>
           </div>
         ))}

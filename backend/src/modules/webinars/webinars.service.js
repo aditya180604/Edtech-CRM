@@ -1,7 +1,19 @@
 import mongoose from 'mongoose';
 import { AccessToken } from 'livekit-server-sdk';
-import { Webinar, User } from '../../models/index.js';
+import { Webinar, User, Booking } from '../../models/index.js';
 import { runWebinarExpiryCheck } from './webinarExpiry.cron.js';
+
+// In-memory heartbeat presence map for rooms: roomCode -> Map(userIdString, lastSeenTimestamp)
+const roomPresenceHeartbeatMap = new Map();
+
+// In-memory room broadcast state: roomCode -> { cameraEnabled, micEnabled, screenShareActive }
+const roomBroadcastStateMap = new Map();
+
+// In-memory WebRTC signaling queue: roomCode -> Array<{ senderId, senderRole, type, data, timestamp }>
+const roomSignalQueueMap = new Map();
+
+// In-memory latest offer map: roomCode -> { signal, senderId, timestamp }
+const roomLatestOfferMap = new Map();
 
 export class WebinarsService {
   /**
@@ -14,6 +26,18 @@ export class WebinarsService {
       ? { $or: [{ _id: identifier }, { roomCode: identifier }, { webinarId: identifier }, { slug: identifier }] }
       : { $or: [{ roomCode: identifier }, { webinarId: identifier }, { slug: identifier }] };
     return await Webinar.findOne(query);
+  }
+
+  /**
+   * Helper: Resolve consultation booking document by meetingRoomCode, bookingCode, or _id
+   */
+  static async findBookingDoc(identifier) {
+    if (!identifier) return null;
+    const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
+    const query = isObjectId
+      ? { $or: [{ meetingRoomCode: identifier }, { bookingCode: identifier }, { _id: identifier }] }
+      : { $or: [{ meetingRoomCode: identifier }, { bookingCode: identifier }] };
+    return await Booking.findOne(query).populate('userId instructorId');
   }
 
   /**
@@ -226,6 +250,10 @@ export class WebinarsService {
   static async getLiveRoomState(roomCodeOrId, userId = null) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        return this.getConsultationRoomState(booking, userId);
+      }
       throw new Error('Webinar room not found');
     }
 
@@ -477,6 +505,206 @@ export class WebinarsService {
       raisedHands,
       userNotes,
       livekitServerUrl: process.env.LIVEKIT_URL || 'wss://edtech-livekit.internal',
+      hostStreamState: roomBroadcastStateMap.get(populated.roomCode) || {
+        cameraEnabled: true,
+        micEnabled: true,
+        screenShareActive: false,
+      },
+    };
+  }
+
+  /**
+   * Real-Time 1-on-1 Consultation Classroom Room State
+   */
+  static async getConsultationRoomState(booking, userId = null) {
+    let isHost = false;
+    let isStudent = false;
+    let isSuperAdmin = false;
+    let currentUser = null;
+
+    if (userId) {
+      const user = await User.findById(userId).lean();
+      if (user) {
+        currentUser = {
+          id: user._id.toString(),
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          email: user.email,
+          avatar: user.profilePhoto || null,
+          role: user.role,
+        };
+        isSuperAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+        const instructorIdStr = (booking.instructorId?._id || booking.instructorId)?.toString();
+        const studentIdStr = (booking.userId?._id || booking.userId)?.toString();
+        isHost = isSuperAdmin || Boolean(instructorIdStr && instructorIdStr === userId.toString());
+        isStudent = Boolean(studentIdStr && studentIdStr === userId.toString());
+      }
+    }
+
+    const instructor = booking.instructorId || {};
+    const student = booking.userId || {};
+    const instructorName = `${instructor.firstName || 'Mentor'} ${instructor.lastName || ''}`.trim();
+    const studentName = `${student.firstName || 'Student'} ${student.lastName || ''}`.trim();
+
+    // Session is already paid and confirmed: grant immediate direct access
+    const hasAccess = true;
+
+    if (!currentUser) {
+      currentUser = isHost
+        ? {
+            id: instructor._id?.toString() || 'mentor',
+            name: instructorName,
+            email: instructor.email || '',
+            avatar: instructor.profilePhoto || null,
+            role: 'HOST',
+          }
+        : {
+            id: student._id?.toString() || 'student',
+            name: studentName,
+            email: student.email || '',
+            avatar: student.profilePhoto || null,
+            role: 'STUDENT',
+          };
+    }
+
+    const roomCode = booking.meetingRoomCode;
+    const instructorIdStr = (booking.instructorId?._id || booking.instructorId)?.toString() || 'mentor';
+    const studentIdStr = (booking.userId?._id || booking.userId)?.toString() || 'student';
+
+    // Heartbeat tracking: register this user as currently online in this consultation room
+    if (userId) {
+      if (!roomPresenceHeartbeatMap.has(roomCode)) {
+        roomPresenceHeartbeatMap.set(roomCode, new Map());
+      }
+      roomPresenceHeartbeatMap.get(roomCode).set(userId.toString(), Date.now());
+      if (isHost) {
+        roomPresenceHeartbeatMap.get(roomCode).set('HOST', Date.now());
+      }
+      if (isStudent) {
+        roomPresenceHeartbeatMap.get(roomCode).set('STUDENT', Date.now());
+      }
+    }
+
+    const roomPresence = roomPresenceHeartbeatMap.get(roomCode);
+    const now = Date.now();
+    const PRESENCE_TIMEOUT_MS = 15000; // 15 seconds heartbeat window (clients poll every 4s)
+
+    const instructorActive = Boolean(
+      isHost ||
+      (roomPresence && (
+        (roomPresence.has(instructorIdStr) && now - roomPresence.get(instructorIdStr) < PRESENCE_TIMEOUT_MS) ||
+        (roomPresence.has('HOST') && now - roomPresence.get('HOST') < PRESENCE_TIMEOUT_MS)
+      ))
+    );
+
+    const studentActive = Boolean(
+      isStudent ||
+      (roomPresence && (
+        (roomPresence.has(studentIdStr) && now - roomPresence.get(studentIdStr) < PRESENCE_TIMEOUT_MS) ||
+        (roomPresence.has('STUDENT') && now - roomPresence.get('STUDENT') < PRESENCE_TIMEOUT_MS)
+      ))
+    );
+
+    const attendees = [
+      {
+        userId: instructorIdStr,
+        userName: instructorName,
+        userAvatar: instructor.profilePhoto || null,
+        role: 'HOST',
+        isOnline: instructorActive,
+      },
+      {
+        userId: studentIdStr,
+        userName: studentName,
+        userAvatar: student.profilePhoto || null,
+        role: 'STUDENT',
+        isOnline: studentActive,
+      },
+    ];
+
+    const onlineCount = (instructorActive ? 1 : 0) + (studentActive ? 1 : 0) || 1;
+
+    // Strict slot time window validation based on scheduled date & time
+    const nowMs = Date.now();
+    const startTimeMs = booking.startTime ? new Date(booking.startTime).getTime() : nowMs;
+    const endTimeMs = booking.endTime ? new Date(booking.endTime).getTime() : startTimeMs + 45 * 60000;
+
+    const isPastScheduledEndTime = nowMs > endTimeMs;
+    const isWithinSlotTime = nowMs <= endTimeMs;
+
+    let status = 'LIVE';
+    let canRejoin = false;
+
+    if (isPastScheduledEndTime) {
+      // Scheduled time and date have ended -> strictly COMPLETED and no rejoining allowed
+      status = 'COMPLETED';
+      canRejoin = false;
+      if (booking.status !== 'ATTENDED') {
+        Booking.updateOne({ _id: booking._id }, { $set: { status: 'ATTENDED', actualEndedAt: booking.endTime } }).catch(() => {});
+      }
+    } else {
+      // Within scheduled date & time -> active and allows rejoining
+      status = 'LIVE';
+      canRejoin = true;
+      if (booking.status === 'ATTENDED') {
+        Booking.updateOne({ _id: booking._id }, { $set: { status: 'CONFIRMED', actualEndedAt: null } }).catch(() => {});
+      }
+    }
+
+    return {
+      id: booking._id.toString(),
+      _id: booking._id.toString(),
+      roomCode: booking.meetingRoomCode,
+      title: `1-on-1 Mentorship: ${instructorName} & ${studentName}`,
+      description: booking.notes || `Private 1-on-1 Consultation session with ${instructorName}`,
+      category: '1-on-1 Mentorship',
+      startTime: booking.startTime ? new Date(booking.startTime).toISOString() : new Date().toISOString(),
+      endTime: booking.endTime ? new Date(booking.endTime).toISOString() : new Date(Date.now() + 45 * 60000).toISOString(),
+      actualStartedAt: booking.actualStartedAt
+        ? new Date(booking.actualStartedAt).toISOString()
+        : booking.startTime
+        ? new Date(booking.startTime).toISOString()
+        : new Date().toISOString(),
+      actualEndedAt: status === 'COMPLETED' ? (booking.actualEndedAt ? new Date(booking.actualEndedAt).toISOString() : new Date().toISOString()) : null,
+      status,
+      canRejoin,
+      isWithinSessionWindow: isWithinSlotTime,
+      price: booking.fee || 0,
+      currency: booking.currency || 'INR',
+      capacity: 2,
+      registrationsCount: 2,
+      attendanceCount: 2,
+      onlineCount,
+      attendees,
+      instructor: {
+        id: instructor._id?.toString(),
+        name: instructorName,
+        avatar: instructor.profilePhoto || null,
+        headline: instructor.headline || 'Software Engineer & Mentor',
+        bio: instructor.bio || '',
+      },
+      hasAccess,
+      isHost,
+      isRegistered: true,
+      currentUser,
+      resources: [],
+      chatMessages: (booking.chatMessages || []).map((msg) => ({
+        id: msg.id || msg._id?.toString() || new mongoose.Types.ObjectId().toString(),
+        senderId: msg.senderId?.toString() || null,
+        senderName: msg.senderName || 'Participant',
+        senderRole: msg.senderRole || 'STUDENT',
+        senderAvatar: msg.senderAvatar || null,
+        message: msg.message,
+        createdAt: msg.createdAt || new Date(),
+      })),
+      qa: [],
+      raisedHands: [],
+      userNotes: booking.notes || '',
+      livekitServerUrl: process.env.LIVEKIT_URL || 'wss://edtech-livekit.internal',
+      hostStreamState: roomBroadcastStateMap.get(booking.meetingRoomCode) || {
+        cameraEnabled: true,
+        micEnabled: true,
+        screenShareActive: false,
+      },
     };
   }
 
@@ -490,6 +718,10 @@ export class WebinarsService {
 
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        return this.generateConsultationLiveKitToken(booking, userId);
+      }
       throw new Error('Webinar room not found');
     }
 
@@ -603,11 +835,105 @@ export class WebinarsService {
   }
 
   /**
+   * LiveKit Token Generation for 1-on-1 Consultation Session
+   */
+  static async generateConsultationLiveKitToken(booking, userId) {
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const instructorIdStr = (booking.instructorId?._id || booking.instructorId)?.toString();
+    const studentIdStr = (booking.userId?._id || booking.userId)?.toString();
+    const isSuperAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+    const isHost = isSuperAdmin || Boolean(instructorIdStr && instructorIdStr === userId.toString());
+    const isStudent = Boolean(studentIdStr && studentIdStr === userId.toString());
+
+    if (!isHost && !isStudent && !isSuperAdmin) {
+      return {
+        allowed: false,
+        message: 'You are not authorized to join this private consultation session.',
+      };
+    }
+
+    try {
+      const apiKey = process.env.LIVEKIT_API_KEY || 'devkey';
+      const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret_livekit_key_2026_edtech';
+      const serverUrl = process.env.LIVEKIT_URL || 'wss://edtech-livekit.internal';
+
+      const roomName = booking.meetingRoomCode;
+      const identity = `user_${user._id.toString()}`;
+      const userName = `${user.firstName || 'User'} ${user.lastName || ''}`.trim();
+      const userRole = isHost ? 'HOST' : 'STUDENT';
+
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity,
+        name: userName,
+        metadata: JSON.stringify({
+          role: userRole,
+          avatar: user.profilePhoto || null,
+          name: userName,
+          bookingCode: booking.bookingCode,
+        }),
+        ttl: '6h',
+      });
+
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,
+        canPublishData: true,
+        canSubscribe: true,
+      });
+
+      const token = await at.toJwt();
+
+      const instructor = booking.instructorId || {};
+      const student = booking.userId || {};
+      const instructorName = `${instructor.firstName || 'Mentor'} ${instructor.lastName || ''}`.trim();
+      const studentName = `${student.firstName || 'Student'} ${student.lastName || ''}`.trim();
+
+      return {
+        allowed: true,
+        token,
+        serverUrl,
+        role: userRole,
+        isHost,
+        roomCode: booking.meetingRoomCode,
+        roomName: `1-on-1 Mentorship: ${instructorName} & ${studentName}`,
+        webinarStatus: 'LIVE',
+        user: {
+          id: user._id.toString(),
+          name: userName,
+          avatar: user.profilePhoto || null,
+          role: userRole,
+        },
+      };
+    } catch (err) {
+      console.error('Consultation LiveKit token generation failed:', err);
+      throw new Error(`Failed to generate consultation LiveKit token: ${err.message || 'Server error'}`);
+    }
+  }
+
+  /**
    * Host starts the webinar (Changes status to LIVE)
    */
   static async startWebinar(roomCodeOrId, userId) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
-    if (!webinar) throw new Error('Webinar not found');
+    if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        booking.actualStartedAt = new Date();
+        await booking.save();
+        return {
+          success: true,
+          status: 'LIVE',
+          actualStartedAt: booking.actualStartedAt,
+          message: 'Consultation session is LIVE',
+        };
+      }
+      throw new Error('Webinar not found');
+    }
 
     const instructorIdStr = (webinar.instructorId?._id || webinar.instructorId)?.toString();
     const user = await User.findById(userId).lean();
@@ -635,7 +961,24 @@ export class WebinarsService {
    */
   static async endWebinar(roomCodeOrId, userId) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
-    if (!webinar) throw new Error('Webinar not found');
+    if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        booking.status = 'ATTENDED';
+        booking.actualEndedAt = new Date();
+        await booking.save();
+        return {
+          success: true,
+          status: 'COMPLETED',
+          actualEndedAt: booking.actualEndedAt,
+          totalAttendees: 2,
+          totalQuestions: 0,
+          totalMessages: booking.chatMessages?.length || 0,
+          message: 'Consultation session completed successfully',
+        };
+      }
+      throw new Error('Webinar not found');
+    }
 
     const instructorIdStr = (webinar.instructorId?._id || webinar.instructorId)?.toString();
     const user = await User.findById(userId).lean();
@@ -683,7 +1026,28 @@ export class WebinarsService {
     }
 
     const webinar = await this.findWebinarDoc(roomCodeOrId);
-    if (!webinar) throw new Error('Webinar not found');
+    if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        const user = await User.findById(userId).lean();
+        const instructorIdStr = (booking.instructorId?._id || booking.instructorId)?.toString();
+        const isHost = (instructorIdStr && instructorIdStr === userId.toString()) || user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+        const newMessage = {
+          id: new mongoose.Types.ObjectId().toString(),
+          senderId: new mongoose.Types.ObjectId(userId),
+          senderName: `${user?.firstName || 'User'} ${user?.lastName || ''}`.trim(),
+          senderRole: isHost ? 'HOST' : 'STUDENT',
+          senderAvatar: user?.profilePhoto || null,
+          message: messageText.trim(),
+          createdAt: new Date(),
+        };
+        if (!Array.isArray(booking.chatMessages)) booking.chatMessages = [];
+        booking.chatMessages.push(newMessage);
+        await booking.save();
+        return newMessage;
+      }
+      throw new Error('Webinar not found');
+    }
 
     const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
@@ -900,7 +1264,15 @@ export class WebinarsService {
    */
   static async saveUserNotes(roomCodeOrId, userId, notesText) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
-    if (!webinar) throw new Error('Webinar not found');
+    if (!webinar) {
+      const booking = await this.findBookingDoc(roomCodeOrId);
+      if (booking) {
+        booking.notes = notesText || '';
+        await booking.save();
+        return { success: true, notes: booking.notes };
+      }
+      throw new Error('Webinar not found');
+    }
 
     if (!Array.isArray(webinar.userNotes)) webinar.userNotes = [];
 
@@ -927,8 +1299,14 @@ export class WebinarsService {
    * Leave room attendance log
    */
   static async recordAttendanceLeave(roomCodeOrId, userId) {
+    if (userId && roomCodeOrId && roomPresenceHeartbeatMap.has(roomCodeOrId)) {
+      roomPresenceHeartbeatMap.get(roomCodeOrId).delete(userId.toString());
+    }
     const webinar = await this.findWebinarDoc(roomCodeOrId);
-    if (!webinar || !Array.isArray(webinar.attendanceLogs)) return { success: true };
+    if (!webinar) {
+      return { success: true };
+    }
+    if (!Array.isArray(webinar.attendanceLogs)) return { success: true };
 
     const activeLog = webinar.attendanceLogs.find(
       (log) => log.userId?.toString() === userId.toString() && !log.leftAt
@@ -944,5 +1322,110 @@ export class WebinarsService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Real-time host broadcast state (camera, mic, screen) update
+   */
+  static updateBroadcastState(roomCode, state) {
+    if (!roomCode) return { success: false };
+    const current = roomBroadcastStateMap.get(roomCode) || {
+      cameraEnabled: true,
+      micEnabled: true,
+      screenShareActive: false,
+      isInstructorSpeaking: false,
+      audioLevel: 0,
+    };
+    const updated = { ...current, ...state, lastUpdatedAt: Date.now() };
+    roomBroadcastStateMap.set(roomCode, updated);
+    return { success: true, broadcastState: updated };
+  }
+
+  /**
+   * WebRTC Signaling between participants in a room
+   */
+  static sendSignal(roomCode, signalPayload, senderId, senderRole) {
+    if (!roomCode) return { success: false };
+    if (!roomSignalQueueMap.has(roomCode)) {
+      roomSignalQueueMap.set(roomCode, []);
+    }
+    const queue = roomSignalQueueMap.get(roomCode);
+    const signalItem = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      senderId: senderId || 'anon',
+      senderRole: senderRole || 'PARTICIPANT',
+      ...signalPayload,
+      timestamp: Date.now(),
+    };
+    queue.push(signalItem);
+
+    // If host sends an offer, cache it as latestOffer so joining students always receive it
+    if (signalPayload && signalPayload.type === 'offer') {
+      roomLatestOfferMap.set(roomCode, {
+        signal: signalPayload,
+        senderId: senderId || 'host',
+        timestamp: Date.now(),
+      });
+    }
+
+    if (queue.length > 50) {
+      queue.splice(0, queue.length - 50);
+    }
+    return { success: true };
+  }
+
+  static getSignals(roomCode, since = 0, excludeSenderId = null) {
+    if (!roomCode) {
+      return { success: true, signals: [] };
+    }
+    const queue = roomSignalQueueMap.get(roomCode) || [];
+    const sinceNum = Number(since) || 0;
+    let filtered = queue.filter(
+      (s) => s.timestamp > sinceNum && (!excludeSenderId || s.senderId !== excludeSenderId)
+    );
+
+    // If joining client has not seen host offer yet, inject latest offer
+    const latestOffer = roomLatestOfferMap.get(roomCode);
+    if (
+      latestOffer &&
+      (!excludeSenderId || latestOffer.senderId !== excludeSenderId) &&
+      !filtered.some((s) => s.type === 'offer') &&
+      Date.now() - latestOffer.timestamp < 30 * 60 * 1000
+    ) {
+      if (sinceNum === 0 || sinceNum <= latestOffer.timestamp) {
+        filtered = [
+          {
+            id: `cached_offer_${latestOffer.timestamp}`,
+            ...latestOffer.signal,
+            senderId: latestOffer.senderId,
+            timestamp: latestOffer.timestamp,
+          },
+          ...filtered,
+        ];
+      }
+    }
+
+    return { success: true, signals: filtered };
+  }
+
+  /**
+   * Reopen or rejoin a room (resets status to LIVE if within active window)
+   */
+  static async reopenOrRejoinRoom(roomCodeOrId, userId = null) {
+    const booking = await this.findBookingDoc(roomCodeOrId);
+    if (booking) {
+      booking.status = 'CONFIRMED';
+      booking.actualEndedAt = null;
+      await booking.save();
+      return { success: true, status: 'LIVE', message: 'Room reopened for session' };
+    }
+    const webinar = await this.findWebinarDoc(roomCodeOrId);
+    if (webinar) {
+      webinar.status = 'LIVE';
+      webinar.actualEndedAt = null;
+      await webinar.save();
+      return { success: true, status: 'LIVE', message: 'Webinar room reopened' };
+    }
+    return { success: false, message: 'Room not found' };
   }
 }

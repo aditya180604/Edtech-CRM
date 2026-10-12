@@ -74,6 +74,10 @@ const orderSchema = new mongoose.Schema(
     paymentId: { type: String },
     provider: { type: String, default: 'CASHFREE' },
     providerOrderId: { type: String, index: true },
+    confirmationEmailSent: { type: Boolean, default: false },
+    receiptNumber: { type: String, index: true, sparse: true },
+    receiptSnapshot: { type: mongoose.Schema.Types.Mixed },
+    notificationOutbox: { type: mongoose.Schema.Types.Mixed },
   },
   {
     collection: 'orders',

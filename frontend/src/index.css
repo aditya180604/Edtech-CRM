@@ -1,10 +1,109 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-doodle: 'Caveat', cursive, sans-serif;
+  --color-coral-50: #FFF5F2;
+  --color-coral-100: #FFE6E0;
+  --color-coral-200: #FFCCC2;
+  --color-coral-500: #FA5A36;
+  --color-coral-600: #E04322;
+  --color-coral-700: #C23315;
+  --color-midnight: #0B1120;
+}
+
 @layer base {
-  body {
-    @apply bg-[#f8fafc] text-[#0f172a] font-sans antialiased;
+  html, body {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply bg-[#f8fafc] text-[#0f172a] antialiased font-normal;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1 {
+    @apply font-semibold tracking-tight;
+  }
+
+  h2 {
+    @apply font-semibold tracking-tight;
+  }
+
+  h3 {
+    @apply font-medium tracking-tight;
+  }
+
+  h4, h5, h6 {
+    @apply font-medium;
   }
 }
+
+/* Continuous Smooth Animations */
+@keyframes floatContinuous {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes floatContinuousReverse {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(8px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes textSlideFade {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-float-continuous {
+  animation: floatContinuous 5s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: floatContinuous 7s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatContinuousReverse 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+.animate-text-slide {
+  animation: textSlideFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

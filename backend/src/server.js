@@ -1,6 +1,8 @@
+import { createServer } from 'node:http';
 import app from './app.js';
 import { connectDB } from './config/db.js';
 import { config } from './config/env.js';
+import { initializeRealtime } from './services/realtime.service.js';
 
 // Import all models to ensure schemas are registered with Mongoose
 import './models/index.js';
@@ -15,7 +17,9 @@ async function startServer() {
     startWebinarExpiryCron();
 
     // 3. Start Express Listener
-    const server = app.listen(config.port, () => {
+    const server = createServer(app);
+    const io = initializeRealtime(server);
+    server.listen(config.port, () => {
       console.log(`[Server] Edutech LMS backend running on port ${config.port} [${config.env}]`);
       console.log(`[Server] Health check: http://localhost:${config.port}/api/v1/health`);
     });
@@ -23,7 +27,7 @@ async function startServer() {
     const shutdown = async (signal) => {
       console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
       stopWebinarExpiryCron();
-      server.close(async () => {
+      io.close(() => {
         console.log('[Server] HTTP server closed.');
         process.exit(0);
       });

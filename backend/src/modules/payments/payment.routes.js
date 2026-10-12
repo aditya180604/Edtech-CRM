@@ -16,5 +16,11 @@ router.post('/cashfree/webhook', PaymentController.handleCashfreeWebhook);
  */
 router.get('/:orderId/status', authenticate, PaymentController.getPaymentStatus);
 
+/**
+ * 3. Authenticated Receipt Retrieval & PDF Download
+ * GET /api/v1/payments/:orderId/receipt
+ */
+router.get('/:orderId/receipt', authenticate, PaymentController.getReceipt);
+
 export const paymentRoutes = router;
 export default router;

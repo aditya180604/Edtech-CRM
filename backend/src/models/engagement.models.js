@@ -7,12 +7,27 @@ const reviewSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', index: true },
+    slotId: { type: mongoose.Schema.Types.ObjectId, ref: 'TeachingSlot', index: true },
+    reviewType: {
+      type: String,
+      enum: ['COURSE', 'INSTRUCTOR', 'SESSION'],
+      default: 'COURSE',
+      index: true,
+    },
     rating: { type: Number, required: true, min: 1, max: 5 },
-    title: { type: String },
-    comment: { type: String, required: true },
-    status: { type: String, default: 'PUBLISHED' },
+    title: { type: String, trim: true },
+    comment: { type: String, required: true, trim: true },
+    status: {
+      type: String,
+      enum: ['PUBLISHED', 'FLAGGED', 'HIDDEN'],
+      default: 'PUBLISHED',
+      index: true,
+    },
     isVerifiedPurchase: { type: Boolean, default: false },
+    helpfulVotes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    flaggedReason: { type: String },
   },
   {
     collection: 'reviews',
@@ -21,6 +36,9 @@ const reviewSchema = new mongoose.Schema(
 );
 
 reviewSchema.index({ courseId: 1, rating: -1 });
+reviewSchema.index({ instructorId: 1, rating: -1 });
+reviewSchema.index({ userId: 1, courseId: 1 }, { unique: true, sparse: true });
+reviewSchema.index({ userId: 1, slotId: 1 }, { unique: true, sparse: true });
 
 export const Review = mongoose.models.Review || mongoose.model('Review', reviewSchema);
 

@@ -17,23 +17,65 @@ import {
   InstructorEarning,
   OrderItem,
   Order,
+  PlatformSetting,
+  InstructorRegistrationFee,
+  FinancialLedger,
+  Notification,
 } from '../../models/index.js';
-import { ROLES } from '../../config/constants.js';
+import { ROLES, TRANSACTION_TYPES } from '../../config/constants.js';
+import fs from 'fs';
+import path from 'path';
 import { CashfreeService } from '../../services/cashfree.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import { ReadinessScoringService } from './readinessScoring.service.js';
 
 export class InstructorService {
+  /**
+   * Helper to resolve either a MongoDB ObjectId or unique slug/instructorId (e.g. INS-1001) to a valid ObjectId
+   */
+  static async resolveInstructorObjectId(userIdOrSlug) {
+    if (!userIdOrSlug) return null;
+    const str = String(userIdOrSlug).trim();
+    if (mongoose.Types.ObjectId.isValid(str) && String(new mongoose.Types.ObjectId(str)) === str) {
+      return new mongoose.Types.ObjectId(str);
+    }
+    const user = await User.findOne({
+      $or: [
+        { instructorId: str },
+        { instructorId: { $regex: new RegExp(`^${str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+        { email: str.toLowerCase() },
+      ],
+    }).select('_id').lean();
+    if (user) {
+      return user._id;
+    }
+    const prof = await InstructorProfile.findOne({
+      $or: [
+        { instructorId: str },
+        { instructorId: { $regex: new RegExp(`^${str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+      ],
+    }).select('userId').lean();
+    if (prof && prof.userId) {
+      return prof.userId;
+    }
+    return null;
+  }
+
   /**
    * 1. Get Live Instructor Dashboard Telemetry
    */
   static async getDashboardData(userId, timeframe = '30d') {
-    const instructorObjectId = new mongoose.Types.ObjectId(userId);
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
 
     // Fetch Instructor's courses
     const courses = await Course.find({
       $or: [
         { instructorId: instructorObjectId },
-        { instructorId: userId.toString() },
+        { instructorId: targetUserIdStr },
       ],
     })
       .sort({ updatedAt: -1 })
@@ -52,7 +94,7 @@ export class InstructorService {
           .lean(),
         Review.find({ courseId: { $in: courseIds } }).lean(),
         Webinar.find({
-          $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+          $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
         })
           .sort({ startTime: 1 })
           .lean(),
@@ -62,7 +104,7 @@ export class InstructorService {
           .populate('userId', 'firstName lastName email profilePhoto')
           .lean(),
         InstructorEarning.find({
-          $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+          $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
         }).lean(),
         mongoose.connection.db.collection('students').find({
           $or: [
@@ -190,7 +232,17 @@ export class InstructorService {
    * 2. Get All Instructor's Courses with Filters
    */
   static async getCourses(userId, { status, search, category, page = 1, limit = 20 }) {
-    const query = { instructorId: new mongoose.Types.ObjectId(userId) };
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
+    const query = {
+      $or: [
+        { instructorId: instructorObjectId },
+        { instructorId: targetUserIdStr },
+      ],
+    };
 
     if (status && status !== 'ALL') {
       query.status = status.toUpperCase();
@@ -201,9 +253,13 @@ export class InstructorService {
     }
 
     if (search && search.trim()) {
-      query.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } },
-        { shortDescription: { $regex: search.trim(), $options: 'i' } },
+      query.$and = [
+        {
+          $or: [
+            { title: { $regex: search.trim(), $options: 'i' } },
+            { shortDescription: { $regex: search.trim(), $options: 'i' } },
+          ],
+        },
       ];
     }
 
@@ -213,11 +269,11 @@ export class InstructorService {
       await Promise.all([
         Course.find(query).sort({ updatedAt: -1 }).skip(skip).limit(parseInt(limit, 10)).lean(),
         Course.countDocuments(query),
-        Course.countDocuments({ instructorId: userId }),
-        Course.countDocuments({ instructorId: userId, status: 'PUBLISHED' }),
-        Course.countDocuments({ instructorId: userId, status: 'DRAFT' }),
-        Course.countDocuments({ instructorId: userId, status: 'UNDER_REVIEW' }),
-        Course.countDocuments({ instructorId: userId, status: 'ARCHIVED' }),
+        Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }] }),
+        Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'PUBLISHED' }),
+        Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'DRAFT' }),
+        Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'UNDER_REVIEW' }),
+        Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'ARCHIVED' }),
       ]);
 
     return {
@@ -650,7 +706,14 @@ export class InstructorService {
    * 9. Get Webinars List & Metrics (Automatically ordered chronologically by exact date & time)
    */
   static async getWebinars(userId, { status, search }) {
-    const query = { instructorId: new mongoose.Types.ObjectId(userId) };
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
+    const query = {
+      $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
+    };
 
     if (status && status !== 'ALL') {
       query.status = status.toUpperCase();
@@ -666,11 +729,11 @@ export class InstructorService {
 
     const [webinars, total, upcoming, live, past, drafts] = await Promise.all([
       Webinar.find(query).sort(sortOrder).lean(),
-      Webinar.countDocuments({ instructorId: userId }),
-      Webinar.countDocuments({ instructorId: userId, status: 'SCHEDULED' }),
-      Webinar.countDocuments({ instructorId: userId, status: 'LIVE' }),
-      Webinar.countDocuments({ instructorId: userId, status: 'COMPLETED' }),
-      Webinar.countDocuments({ instructorId: userId, status: 'DRAFT' }),
+      Webinar.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }] }),
+      Webinar.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'SCHEDULED' }),
+      Webinar.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'LIVE' }),
+      Webinar.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'COMPLETED' }),
+      Webinar.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'DRAFT' }),
     ]);
 
     // Format webinars with real-time LIVE status and 2-hour edit timing cutoff
@@ -714,7 +777,9 @@ export class InstructorService {
     ).length;
 
     // Calculate dynamic average rating from instructor's reviews (or 0.0)
-    const courses = await Course.find({ instructorId: userId }).select('_id').lean();
+    const courses = await Course.find({
+      $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
+    }).select('_id').lean();
     const courseIds = courses.map((c) => c._id);
     const reviews = await Review.find({ courseId: { $in: courseIds } }).select('rating').lean();
     const averageRating = reviews.length > 0
@@ -894,7 +959,14 @@ export class InstructorService {
    * 11. Get Instructor's Enrolled Students List (100% Dynamic with Real Progress)
    */
   static async getStudents(userId, { status, courseId, search }) {
-    const courses = await Course.find({ instructorId: new mongoose.Types.ObjectId(userId) }).select('_id title').lean();
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
+    const courses = await Course.find({
+      $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
+    }).select('_id title').lean();
     const courseIds = courses.map((c) => c._id);
     const courseTitles = courses.map((c) => c.title);
 
@@ -993,7 +1065,14 @@ export class InstructorService {
    * 11b. Get Reviews & Ratings (Dynamic from Review collection)
    */
   static async getReviews(userId, { rating, search } = {}) {
-    const courses = await Course.find({ instructorId: new mongoose.Types.ObjectId(userId) }).select('_id title thumbnail').lean();
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
+    const courses = await Course.find({
+      $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
+    }).select('_id title thumbnail').lean();
     const courseIds = courses.map((c) => c._id);
 
     const filter = { courseId: { $in: courseIds } };
@@ -1061,11 +1140,15 @@ export class InstructorService {
    * 11c. Get Analytics (Dynamic metrics from courses, students, and reviews)
    */
   static async getAnalytics(userId, { timeframe = '30d' } = {}) {
-    const instructorObjectId = new mongoose.Types.ObjectId(userId);
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
     const courses = await Course.find({
       $or: [
         { instructorId: instructorObjectId },
-        { instructorId: userId.toString() },
+        { instructorId: targetUserIdStr },
       ],
     }).lean();
     const courseIds = courses.map((c) => c._id);
@@ -1074,12 +1157,12 @@ export class InstructorService {
     const [entitlements, webinars, reviews, topics, earnings, orderItems, legacyStudents] = await Promise.all([
       Entitlement.find({ courseId: { $in: courseIds }, status: 'ACTIVE' }).lean(),
       Webinar.find({
-        $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+        $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
       }).lean(),
       Review.find({ courseId: { $in: courseIds } }).lean(),
       Topic.find({ courseId: { $in: courseIds } }).lean(),
       InstructorEarning.find({
-        $or: [{ instructorId: instructorObjectId }, { instructorId: userId.toString() }],
+        $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
       }).lean(),
       OrderItem.find({
         $or: [{ courseId: { $in: courseIds } }, { productId: { $in: courseIds } }],
@@ -1196,7 +1279,14 @@ export class InstructorService {
    * 12. Get Student Questions (Q&A)
    */
   static async getQuestions(userId, { status, search }) {
-    const courses = await Course.find({ instructorId: userId }).select('_id title').lean();
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+    const targetUserIdStr = instructorObjectId.toString();
+    const courses = await Course.find({
+      $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
+    }).select('_id title').lean();
     const courseIds = courses.map((c) => c._id);
 
     const questions = await CommunityQuestion.find({ courseId: { $in: courseIds } })
@@ -1239,12 +1329,25 @@ export class InstructorService {
    * 13. Answer Student Question
    */
   static async answerQuestion(userId, questionId, { answer }) {
+    const question = await CommunityQuestion.findById(questionId);
     const ans = await Answer.create({
       questionId,
       userId,
       answer,
       isAccepted: true,
     });
+    if (question?.userId && question.userId.toString() !== userId.toString()) {
+      await Notification.create({
+        notificationId: `notif_answer_${ans._id}`,
+        userId: question.userId,
+        type: 'QUESTION_ANSWERED',
+        title: 'Your question was answered',
+        message: answer.trim().slice(0, 160),
+        entityType: 'QUESTION',
+        entityId: question._id,
+        actionUrl: '/dashboard/student',
+      }).catch((error) => console.error('[Notification Error] Question answer:', error.message));
+    }
     return ans;
   }
 
@@ -1252,9 +1355,14 @@ export class InstructorService {
    * 14. Get / Update Instructor Profile & 4-Tier Verification
    */
   static async getProfile(userId) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor not found');
+    }
+
     const [user, profile] = await Promise.all([
-      User.findById(userId).lean(),
-      InstructorProfile.findOne({ userId }).lean(),
+      User.findById(instructorObjectId).lean(),
+      InstructorProfile.findOne({ userId: instructorObjectId }).lean(),
     ]);
 
     const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Instructor';
@@ -1271,6 +1379,7 @@ export class InstructorService {
       user,
       profile: {
         ...(profile || {}),
+        instructorId: user?.instructorId || profile?.instructorId,
         fullName,
         firstName: user?.firstName || '',
         lastName: user?.lastName || '',
@@ -1284,6 +1393,20 @@ export class InstructorService {
         experience,
         qualifications,
         currentOrganization,
+        currentJobTitle: profile?.currentJobTitle || '',
+        isEmployed: profile?.isEmployed !== false,
+        linkedinUrl: profile?.linkedinUrl || '',
+        githubUrl: profile?.githubUrl || '',
+        portfolioUrl: profile?.portfolioUrl || '',
+        teachingSubjects: profile?.teachingSubjects || [],
+        governmentId: profile?.governmentId || null,
+        verificationDocuments: profile?.verificationDocuments || [],
+        readinessReport: ReadinessScoringService.getGatedReadinessReport(profile, user),
+        registrationFeePaid: Boolean(user?.registrationFeePaid || profile?.registrationFeePaid),
+        registrationFeeOrderId: profile?.registrationFeeOrderId || user?.registrationFeeOrderId || null,
+        registrationFeePaidAt: profile?.registrationFeePaidAt || user?.registrationFeePaidAt || null,
+        registrationFeeAmount: profile?.registrationFeeAmount || user?.registrationFeeAmount || 0,
+        reviewHistory: profile?.reviewHistory || [],
         identityStatus: profile?.identityStatus || 'PENDING',
         verificationStatus: profile?.verificationStatus || 'PENDING',
         rejectionReason: profile?.rejectionReason || null,
@@ -1301,6 +1424,7 @@ export class InstructorService {
       lastName,
       profilePhoto,
       phone,
+      country,
       headline,
       bio,
       expertise,
@@ -1308,6 +1432,12 @@ export class InstructorService {
       experience,
       qualifications,
       currentOrganization,
+      currentJobTitle,
+      isEmployed,
+      linkedinUrl,
+      githubUrl,
+      portfolioUrl,
+      teachingSubjects,
       userUpdates: explicitUserUpdates,
       profileUpdates: explicitProfileUpdates,
     } = body || {};
@@ -1322,6 +1452,7 @@ export class InstructorService {
     if (lastName) userUpdates.lastName = lastName;
     if (profilePhoto !== undefined) userUpdates.profilePhoto = profilePhoto;
     if (phone !== undefined) userUpdates.phone = phone;
+    if (country !== undefined) userUpdates.country = country;
     if (bio !== undefined) userUpdates.bio = bio;
     if (headline !== undefined) userUpdates.headline = headline;
 
@@ -1338,8 +1469,15 @@ export class InstructorService {
       ...(experience !== undefined ? { experience } : {}),
       ...(qualifications !== undefined ? { qualifications } : {}),
       ...(currentOrganization !== undefined ? { currentOrganization } : {}),
+      ...(currentJobTitle !== undefined ? { currentJobTitle } : {}),
+      ...(isEmployed !== undefined ? { isEmployed: Boolean(isEmployed) } : {}),
+      ...(linkedinUrl !== undefined ? { linkedinUrl } : {}),
+      ...(githubUrl !== undefined ? { githubUrl } : {}),
+      ...(portfolioUrl !== undefined ? { portfolioUrl } : {}),
+      ...(teachingSubjects !== undefined ? { teachingSubjects } : {}),
       ...(profilePhoto !== undefined ? { profilePhoto } : {}),
       ...(phone !== undefined ? { phone } : {}),
+      ...(country !== undefined ? { country } : {}),
     };
 
     const profile = await InstructorProfile.findOneAndUpdate(
@@ -1349,11 +1487,19 @@ export class InstructorService {
     );
 
     const updatedUser = await User.findById(userId).lean();
+
+    // Re-evaluate readiness report if registration fee has been paid
+    if (profile.registrationFeePaid || updatedUser.registrationFeePaid) {
+      profile.readinessReport = ReadinessScoringService.evaluateApplication(profile, updatedUser);
+      await profile.save();
+    }
+
     return { user: updatedUser, profile };
   }
 
   /**
    * 15. Complete Instructor Onboarding
+   * Supports complete professional fields, teaching subjects, and documents pre-payment
    */
   static async completeOnboarding(
     userId,
@@ -1362,11 +1508,21 @@ export class InstructorService {
       email,
       bio,
       expertise,
+      teachingSubjects,
       currentOrganization,
+      currentJobTitle,
+      isEmployed,
       workExperience,
       yearsOfExperience,
       profilePhoto,
       qualification,
+      linkedinUrl,
+      githubUrl,
+      portfolioUrl,
+      phone,
+      country,
+      governmentId,
+      verificationDocuments,
     }
   ) {
     let firstName = '';
@@ -1383,6 +1539,8 @@ export class InstructorService {
     if (firstName) userUpdates.firstName = firstName;
     if (lastName) userUpdates.lastName = lastName;
     if (profilePhoto) userUpdates.profilePhoto = profilePhoto;
+    if (phone) userUpdates.phone = phone;
+    if (country) userUpdates.country = country;
     if (qualification !== undefined) userUpdates.qualification = qualification;
 
     const user = await User.findByIdAndUpdate(userId, userUpdates, { new: true });
@@ -1397,25 +1555,63 @@ export class InstructorService {
         .filter(Boolean);
     }
 
+    let subjectsList = [];
+    if (Array.isArray(teachingSubjects)) {
+      subjectsList = teachingSubjects;
+    } else if (typeof teachingSubjects === 'string') {
+      subjectsList = teachingSubjects
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    const profilePayload = {
+      userId,
+      bio: bio || '',
+      expertise: expertiseList,
+      skills: expertiseList,
+      teachingSubjects: subjectsList,
+      currentOrganization: currentOrganization || '',
+      currentJobTitle: currentJobTitle || workExperience || '',
+      isEmployed: isEmployed !== false,
+      qualification: qualification || '',
+      workExperience: workExperience || currentJobTitle || '',
+      yearsOfExperience: String(yearsOfExperience || ''),
+      profilePhoto: profilePhoto || user.profilePhoto || '',
+      linkedinUrl: linkedinUrl || '',
+      githubUrl: githubUrl || '',
+      portfolioUrl: portfolioUrl || '',
+      phone: phone || user.phone || '',
+      country: country || user.country || '',
+      isCompleted: true,
+      verificationStatus: 'PENDING',
+      rejectionReason: null,
+      submittedAt: new Date(),
+    };
+
+    if (governmentId && typeof governmentId === 'object') {
+      profilePayload.governmentId = {
+        ...governmentId,
+        uploadedAt: new Date(),
+        status: 'PENDING',
+      };
+    }
+
+    if (Array.isArray(verificationDocuments) && verificationDocuments.length > 0) {
+      profilePayload.verificationDocuments = verificationDocuments;
+    }
+
     const profile = await InstructorProfile.findOneAndUpdate(
       { userId },
-      {
-        userId,
-        bio: bio || '',
-        expertise: expertiseList,
-        skills: expertiseList,
-        currentOrganization: currentOrganization || '',
-        qualification: qualification || '',
-        workExperience: workExperience || '',
-        yearsOfExperience: String(yearsOfExperience || ''),
-        profilePhoto: profilePhoto || user.profilePhoto || '',
-        isCompleted: true,
-        verificationStatus: 'PENDING',
-        rejectionReason: null,
-        submittedAt: new Date(),
-      },
+      profilePayload,
       { new: true, upsert: true }
     );
+
+    // If already paid, recalculate readiness score
+    if (profile.registrationFeePaid || user.registrationFeePaid) {
+      profile.readinessReport = ReadinessScoringService.evaluateApplication(profile, user);
+      await profile.save();
+    }
 
     return {
       user: {
@@ -1431,16 +1627,163 @@ export class InstructorService {
         isProfileCompleted: true,
       },
       profile,
+      readinessReport: ReadinessScoringService.getGatedReadinessReport(profile, user),
     };
   }
 
   /**
-   * 16. Submit Course for Super Admin Approval
+   * 15b. Secure Private Document Upload
+   */
+  static async uploadVerificationDocument(userId, { documentType, idType, fileName, fileType, dataUrl, fileSize, title }) {
+    const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedMimeTypes.includes(fileType)) {
+      throw new Error('Invalid file type. Only PDF, JPEG, PNG, and WebP files are supported.');
+    }
+    const maxBytes = 5 * 1024 * 1024; // 5 MB
+    if (fileSize && fileSize > maxBytes) {
+      throw new Error('File size exceeds the 5MB maximum limit.');
+    }
+
+    const uploadsDir = path.resolve('uploads/verification_docs');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const cleanName = (fileName || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const docUniqueId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const diskFileName = `${docUniqueId}_${cleanName}`;
+    const filePath = path.join(uploadsDir, diskFileName);
+
+    let base64Data = dataUrl || '';
+    if (base64Data.includes(';base64,')) {
+      base64Data = base64Data.split(';base64,')[1];
+    }
+    const buffer = Buffer.from(base64Data, 'base64');
+    if (buffer.length > maxBytes) {
+      throw new Error('File size exceeds the 5MB maximum limit.');
+    }
+    fs.writeFileSync(filePath, buffer);
+
+    const relativeUrl = `/api/v1/instructor/documents/${docUniqueId}`;
+
+    let profile = await InstructorProfile.findOne({ userId });
+    if (!profile) {
+      profile = await InstructorProfile.create({ userId, isCompleted: false, verificationStatus: 'PENDING' });
+    }
+
+    const docRecord = {
+      _id: new mongoose.Types.ObjectId(),
+      docId: docUniqueId,
+      documentType: documentType || 'RESUME_CV',
+      title: title || cleanName,
+      fileUrl: relativeUrl,
+      diskPath: diskFileName,
+      fileName: cleanName,
+      fileType,
+      fileSize: buffer.length,
+      uploadedAt: new Date(),
+      status: 'PENDING',
+    };
+
+    if (documentType === 'GOVERNMENT_ID') {
+      profile.governmentId = {
+        idType: idType || 'PASSPORT',
+        documentUrl: relativeUrl,
+        diskPath: diskFileName,
+        fileName: cleanName,
+        fileType,
+        fileSize: buffer.length,
+        uploadedAt: new Date(),
+        status: 'PENDING',
+      };
+    } else {
+      if (!Array.isArray(profile.verificationDocuments)) {
+        profile.verificationDocuments = [];
+      }
+      const existingIdx = profile.verificationDocuments.findIndex((d) => d.documentType === documentType);
+      if (existingIdx >= 0) {
+        profile.verificationDocuments[existingIdx] = docRecord;
+      } else {
+        profile.verificationDocuments.push(docRecord);
+      }
+    }
+
+    const user = await User.findById(userId);
+    if (profile.registrationFeePaid || user?.registrationFeePaid) {
+      profile.readinessReport = ReadinessScoringService.evaluateApplication(profile, user);
+    }
+
+    await profile.save();
+
+    return {
+      success: true,
+      document: docRecord,
+      governmentId: profile.governmentId,
+      verificationDocuments: profile.verificationDocuments,
+      readinessReport: ReadinessScoringService.getGatedReadinessReport(profile, user),
+    };
+  }
+
+  /**
+   * 15c. Secure Private Document Stream (Authorization Enforced)
+   */
+  static async getVerificationDocumentStream(userId, docId, isSuperAdmin = false, targetProfileId = null) {
+    let profile = null;
+    if (isSuperAdmin && targetProfileId) {
+      profile = await InstructorProfile.findOne({
+        $or: [
+          { _id: mongoose.isValidObjectId(targetProfileId) ? new mongoose.Types.ObjectId(targetProfileId) : null },
+          { userId: mongoose.isValidObjectId(targetProfileId) ? new mongoose.Types.ObjectId(targetProfileId) : null },
+        ].filter(Boolean),
+      });
+    } else {
+      profile = await InstructorProfile.findOne({ userId });
+    }
+
+    if (!profile) throw new Error('Instructor profile not found.');
+
+    let doc = null;
+    if (profile.governmentId?.documentUrl?.includes(docId) || profile.governmentId?.diskPath?.includes(docId)) {
+      doc = profile.governmentId;
+    } else if (Array.isArray(profile.verificationDocuments)) {
+      doc = profile.verificationDocuments.find(
+        (d) => d.fileUrl?.includes(docId) || d.diskPath?.includes(docId) || d._id?.toString() === docId
+      );
+    }
+
+    if (!doc || !doc.diskPath) throw new Error('Verification document not found.');
+
+    const uploadsDir = path.resolve('uploads/verification_docs');
+    const fullPath = path.join(uploadsDir, doc.diskPath);
+    if (!fs.existsSync(fullPath)) throw new Error('Document file missing on server.');
+
+    return {
+      filePath: fullPath,
+      fileName: doc.fileName || 'document',
+      fileType: doc.fileType || 'application/octet-stream',
+    };
+  }
+
+  /**
+   * 15d. Get Application Readiness Report (Gated by payment status)
+   */
+  static async getReadinessReport(userId) {
+    const [user, profile] = await Promise.all([
+      User.findById(userId),
+      InstructorProfile.findOne({ userId }),
+    ]);
+    if (!profile) throw new Error('Instructor profile not found.');
+    return ReadinessScoringService.getGatedReadinessReport(profile, user);
+  }
+
+  /**
+   * 16. Submit Course for Super Admin Approval (Zero Publishing Fee Required)
    */
   static async submitForReview(userId, courseId) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
     const course = await Course.findOne({
       _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      ...(instructorObjectId ? { instructorId: instructorObjectId } : {}),
     });
     if (!course) throw new Error('Course not found or unauthorized');
 
@@ -1452,26 +1795,13 @@ export class InstructorService {
   }
 
   /**
-   * 17. Create Cashfree Publishing Fee Order (10% Platform Fee)
-   */
-  static async createPublishingFeeOrder(userId, courseId, returnUrl) {
-    return await PaymentsService.createPublishingFeeOrder(userId, courseId, returnUrl);
-  }
-
-  /**
-   * 18. Verify Cashfree Publishing Fee Payment
-   */
-  static async verifyPublishingFee(userId, courseId, orderId) {
-    return await PaymentsService.verifyPublishingFeePayment(userId, courseId, orderId);
-  }
-
-  /**
-   * 19. Publish Course (Only when Approved and Fee Paid)
+   * 17. Publish Course (Once Approved by Super Admin)
    */
   static async publishCourse(userId, courseId) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
     const course = await Course.findOne({
       _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      ...(instructorObjectId ? { instructorId: instructorObjectId } : {}),
     });
     if (!course) throw new Error('Course not found or unauthorized');
 
@@ -1479,14 +1809,314 @@ export class InstructorService {
       throw new Error(`Course cannot be published. Current approval status: ${course.approvalStatus || 'PENDING_APPROVAL'}`);
     }
 
-    if (!course.publishingFeePaid) {
-      throw new Error('Course cannot be published until the publishing fee is paid via Cashfree.');
-    }
-
     course.status = 'PUBLISHED';
     course.publishedAt = new Date();
     await course.save();
 
     return course;
+  }
+
+  /**
+   * 18. Get Dynamic Instructor Registration Fee Info
+   */
+  static async getRegistrationFeeInfo(userId) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    
+    let user = null;
+    let profile = null;
+    if (instructorObjectId) {
+      [user, profile] = await Promise.all([
+        User.findById(instructorObjectId).lean(),
+        InstructorProfile.findOne({ userId: instructorObjectId }).lean(),
+      ]);
+    }
+
+    let setting = await PlatformSetting.findOne({ key: 'INSTRUCTOR_REGISTRATION_FEE' }).lean();
+    if (!setting) {
+      setting = {
+        instructorRegistrationFee: 1499,
+        currency: 'INR',
+        isEnabled: true,
+        title: 'Instructor Account Activation & Setup Fee',
+        description: 'One-time registration and platform access fee for newly registered instructors.',
+      };
+    }
+
+    const isPaid = !!(user?.registrationFeePaid || profile?.registrationFeePaid);
+
+    return {
+      registrationFeePaid: isPaid,
+      feeAmount: setting.isEnabled ? (Number(setting.instructorRegistrationFee) || 0) : 0,
+      currency: setting.currency || 'INR',
+      isEnabled: setting.isEnabled !== false,
+      title: setting.title || 'Instructor Account Activation & Setup Fee',
+      description: setting.description || 'One-time registration and platform access fee for newly registered instructors.',
+      paidAt: user?.registrationFeePaidAt || profile?.registrationFeePaidAt || null,
+      orderId: user?.registrationFeeOrderId || profile?.registrationFeeOrderId || null,
+    };
+  }
+
+  /**
+   * 19. Create Dynamic Cashfree Order for Instructor Registration Fee
+   */
+  static async createRegistrationFeeOrder(userId, returnUrl) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor account not found.');
+    }
+
+    const [user, profile] = await Promise.all([
+      User.findById(instructorObjectId),
+      InstructorProfile.findOne({ userId: instructorObjectId }),
+    ]);
+
+    if (!user) throw new Error('User not found.');
+
+    // Check if already paid
+    if (user.registrationFeePaid || profile?.registrationFeePaid) {
+      return {
+        alreadyPaid: true,
+        paymentStatus: 'SUCCESS',
+        message: 'Instructor registration fee has already been paid and activated.',
+      };
+    }
+
+    // Critical Business Rule: Ensure required profile details and documents are uploaded before payment
+    const readinessCheck = ReadinessScoringService.isProfileReadyForPayment(profile, user);
+    if (!readinessCheck.isReady) {
+      throw new Error(
+        `Please complete your professional profile and upload required verification documents before proceeding to payment. Missing: ${readinessCheck.missingPrerequisites.join(', ')}`
+      );
+    }
+
+    let setting = await PlatformSetting.findOne({ key: 'INSTRUCTOR_REGISTRATION_FEE' }).lean();
+    const feeAmount = setting && setting.isEnabled !== false ? Number(setting.instructorRegistrationFee) || 0 : 0;
+    const currency = setting?.currency || 'INR';
+
+    // If fee is ₹0 or disabled, activate immediately
+    if (feeAmount === 0) {
+      user.registrationFeePaid = true;
+      user.registrationFeePaidAt = new Date();
+      user.registrationFeeAmount = 0;
+      await user.save();
+
+      if (profile) {
+        profile.registrationFeePaid = true;
+        profile.registrationFeePaidAt = new Date();
+        profile.registrationFeeAmount = 0;
+        await profile.save();
+      }
+
+      return {
+        alreadyPaid: true,
+        amount: 0,
+        currency,
+        paymentStatus: 'SUCCESS',
+        message: 'Registration fee is waived (₹0). Account activated successfully.',
+      };
+    }
+
+    const orderId = `REG_${instructorObjectId.toString().slice(-6)}_${Date.now()}`;
+
+    // Create internal ledger record
+    const feeRecord = await InstructorRegistrationFee.create({
+      orderId,
+      instructorId: instructorObjectId,
+      amount: feeAmount,
+      currency,
+      paymentStatus: 'PENDING',
+    });
+
+    // Create Cashfree PG Order
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Instructor';
+    const cfOrder = await CashfreeService.createOrder({
+      orderId,
+      orderAmount: feeAmount,
+      currency,
+      customerId: `INST_${instructorObjectId.toString().slice(-6)}`,
+      customerName: fullName,
+      customerEmail: user.email || 'instructor@example.com',
+      customerPhone: user.phone || '9999999999',
+      returnUrl: returnUrl || `http://localhost:5173/dashboard/instructor`,
+      orderNote: `One-Time Instructor Registration & Account Setup Fee for ${fullName}`,
+    });
+
+    feeRecord.cashfreePaymentSessionId = cfOrder.paymentSessionId;
+    feeRecord.cashfreeOrderId = cfOrder.cfOrderId || cfOrder.orderId;
+    await feeRecord.save();
+
+    user.registrationFeeOrderId = orderId;
+    await user.save();
+
+    if (profile) {
+      profile.registrationFeeOrderId = orderId;
+      await profile.save();
+    }
+
+    return {
+      success: true,
+      orderId: cfOrder.orderId,
+      paymentSessionId: cfOrder.paymentSessionId,
+      amount: feeAmount,
+      currency,
+      paymentStatus: 'PENDING',
+      title: setting?.title || 'Instructor Account Activation & Setup Fee',
+    };
+  }
+
+  /**
+   * 20. Verify Dynamic Instructor Registration Fee Payment
+   */
+  static async verifyRegistrationFee(userId, orderId, simulation = false) {
+    const instructorObjectId = (await this.resolveInstructorObjectId(userId)) || (mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null);
+    if (!instructorObjectId) {
+      throw new Error('Instructor account not found.');
+    }
+
+    const targetOrderId = orderId;
+    if (!targetOrderId) {
+      throw new Error('Order ID is required to verify registration payment.');
+    }
+
+    const feeRecord = await InstructorRegistrationFee.findOne({ orderId: targetOrderId });
+    if (!feeRecord) {
+      throw new Error('Registration fee payment record not found.');
+    }
+
+    // Verify via Cashfree API
+    let cfOrder = null;
+    let cfPayments = [];
+    try {
+      cfOrder = await CashfreeService.getOrder(targetOrderId);
+      cfPayments = await CashfreeService.getOrderPayments(targetOrderId).catch(() => []);
+    } catch (cfErr) {
+      console.warn('[Cashfree verification error]:', cfErr.message);
+    }
+
+    let successfulPayment = Array.isArray(cfPayments)
+      ? cfPayments.find((p) => p.payment_status === 'SUCCESS')
+      : null;
+
+    let isSuccess =
+      cfOrder?.order_status === 'PAID' ||
+      cfOrder?.orderStatus === 'PAID' ||
+      !!successfulPayment ||
+      feeRecord.paymentStatus === 'SUCCESS';
+
+    let paymentMethod = successfulPayment?.payment_group || 'Cashfree PG';
+    let paymentId = successfulPayment?.cf_payment_id || successfulPayment?.payment_id || targetOrderId;
+
+    if (!isSuccess && simulation) {
+      isSuccess = true;
+      paymentId = `SIM_${Date.now()}`;
+      paymentMethod = 'Cashfree Sandbox Simulation';
+    }
+
+    if (!isSuccess) {
+      return {
+        success: false,
+        paymentStatus: feeRecord.paymentStatus || 'PENDING',
+        message: 'Payment has not been completed yet.',
+      };
+    }
+
+    // Update status to SUCCESS
+    feeRecord.paymentStatus = 'SUCCESS';
+    feeRecord.paidAt = new Date();
+    feeRecord.cashfreePaymentId = String(paymentId);
+    feeRecord.paymentMethod = paymentMethod;
+    await feeRecord.save();
+
+    const [user, profile] = await Promise.all([
+      User.findById(instructorObjectId),
+      InstructorProfile.findOne({ userId: instructorObjectId }),
+    ]);
+
+    if (user) {
+      user.registrationFeePaid = true;
+      user.registrationFeePaidAt = new Date();
+      user.registrationFeeOrderId = targetOrderId;
+      user.registrationFeePaymentId = String(paymentId);
+      user.registrationFeeAmount = feeRecord.amount;
+      await user.save();
+    }
+
+    if (profile) {
+      profile.registrationFeePaid = true;
+      profile.registrationFeePaidAt = new Date();
+      profile.registrationFeeOrderId = targetOrderId;
+      profile.registrationFeePaymentId = String(paymentId);
+      profile.registrationFeeAmount = feeRecord.amount;
+
+      // Automatically calculate and unlock readiness report upon verified payment
+      const evaluated = ReadinessScoringService.evaluateApplication(profile, user);
+      profile.readinessReport = evaluated;
+      await profile.save();
+    }
+
+    // Record in Financial Ledger
+    const existingLedger = await FinancialLedger.findOne({ referenceId: targetOrderId });
+    if (!existingLedger) {
+      await FinancialLedger.create({
+        ledgerId: `LEDG_REG_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        userId: instructorObjectId,
+        type: TRANSACTION_TYPES.PLATFORM_FEE,
+        referenceId: targetOrderId,
+        amount: feeRecord.amount,
+        currency: feeRecord.currency || 'INR',
+        direction: 'CREDIT',
+        description: `One-time instructor registration fee collected via Cashfree for instructor: ${user?.email || instructorObjectId}`,
+      }).catch((e) => console.warn('[FinancialLedger Warning]:', e.message));
+    }
+
+    // Notify Super Admins
+    const superAdmins = await User.find({ role: ROLES.SUPER_ADMIN }).select('_id').lean();
+    const instructorName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Instructor';
+    const notificationDocs = superAdmins.map((admin) => ({
+      userId: admin._id,
+      title: `Instructor Registration Fee Paid: ₹${feeRecord.amount}`,
+      message: `Instructor ${instructorName} (${user?.email}) paid the one-time registration fee (₹${feeRecord.amount}). Account activated.`,
+      type: 'PAYMENT',
+      priority: 'HIGH',
+      metadata: {
+        orderId: targetOrderId,
+        paymentId: String(paymentId),
+        amount: feeRecord.amount,
+        instructorId: instructorObjectId.toString(),
+        instructorEmail: user?.email,
+      },
+    }));
+
+    if (notificationDocs.length > 0) {
+      await Notification.insertMany(notificationDocs).catch((e) => console.warn('[Notification Warning]:', e.message));
+    }
+
+    return {
+      success: true,
+      paymentStatus: 'SUCCESS',
+      amount: feeRecord.amount,
+      orderId: targetOrderId,
+      paymentId: String(paymentId),
+      message: 'Instructor registration fee verified and account activated successfully.',
+    };
+  }
+
+  // Backward compatibility alias for deprecated course publishing fee
+  static async createPublishingFeeOrder(userId, courseId, returnUrl) {
+    return {
+      alreadyPaid: true,
+      amount: 0,
+      currency: 'INR',
+      paymentStatus: 'SUCCESS',
+      message: 'Course publishing fees have been permanently removed. Courses can be submitted directly for Super Admin review.',
+    };
+  }
+
+  static async verifyPublishingFee(userId, courseId, orderId) {
+    return {
+      success: true,
+      paymentStatus: 'SUCCESS',
+      message: 'Course publishing fee is not required.',
+    };
   }
 }

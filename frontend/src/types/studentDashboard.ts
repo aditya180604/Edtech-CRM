@@ -18,6 +18,10 @@ export interface StudentDashboardProfile {
   phone: string | null;
   profilePhoto: string | null;
   headline?: string | null;
+  bio?: string | null;
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  websiteUrl?: string | null;
   country: string | null;
   state?: string | null;
   city?: string | null;
@@ -153,4 +157,5 @@ export interface StudentDashboardData {
     recent: NotificationItem[];
   };
   recommendations: RecommendationItem[];
+  questions?: any[];
 }

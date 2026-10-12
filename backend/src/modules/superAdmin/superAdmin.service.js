@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import {
   User,
   Course,
@@ -21,8 +22,20 @@ import {
   Notification,
   PlatformFee,
   InstructorEarning,
+  PlatformSetting,
+  InstructorRegistrationFee,
 } from '../../models/index.js';
 import { ROLES } from '../../config/constants.js';
+import fs from 'fs';
+import path from 'path';
+import { InstructorService } from '../instructor/instructor.service.js';
+import { ReadinessScoringService } from '../instructor/readinessScoring.service.js';
+import {
+  sendInstructorApplicationApprovedEmail,
+  sendInstructorApplicationRejectedEmail,
+  sendInstructorChangesRequestedEmail,
+} from '../../services/email.service.js';
+import { AppError } from '../../utils/apiResponse.js';
 
 export class SuperAdminService {
   /**
@@ -227,6 +240,7 @@ export class SuperAdminService {
       users: users.map((u) => ({
         id: u._id.toString(),
         _id: u._id.toString(),
+        instructorId: u.instructorId || undefined,
         name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'User',
         email: u.email,
         role: u.role,
@@ -303,6 +317,7 @@ export class SuperAdminService {
 
   /**
    * Terminate/Suspend any user (Student, Instructor, or Admin)
+   * Revokes credentials, tokens, session, deactivates instructor profile, and archives courses
    */
   static async terminateUser(userId, { reason = 'Terminated by Super Admin', actorId }) {
     const user = await User.findById(userId);
@@ -315,7 +330,35 @@ export class SuperAdminService {
     user.status = 'TERMINATED';
     user.terminationReason = reason;
     user.terminatedAt = new Date();
+
+    // Revoke all authentication credentials, tokens, and active sessions
+    user.refreshTokenHash = undefined;
+    user.previousRefreshTokenHash = undefined;
+    user.refreshTokenRotatedAt = undefined;
+    user.previousRefreshTokenExpiresAt = undefined;
+    user.verificationToken = undefined;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
     await user.save();
+
+    // If INSTRUCTOR, immediately reject profile and archive all published courses
+    if (user.role === ROLES.INSTRUCTOR || user.instructorId) {
+      await InstructorProfile.updateMany(
+        { userId: user._id },
+        {
+          $set: {
+            verificationStatus: 'REJECTED',
+            rejectionReason: `Terminated by Super Admin: ${reason}`,
+            reviewedAt: new Date(),
+            reviewedBy: actorId,
+          },
+        }
+      );
+      await Course.updateMany(
+        { instructorId: user._id, status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] } },
+        { $set: { status: 'ARCHIVED' } }
+      );
+    }
 
     await AuditLog.create({
       actorId,
@@ -354,11 +397,21 @@ export class SuperAdminService {
 
   /**
    * Delete User permanently
+   * Cascades deletion across InstructorProfile and archives any associated courses
    */
   static async deleteUser(userId, { actorId }) {
     const user = await User.findById(userId);
     if (!user) throw new Error('User not found.');
     if (user.role === ROLES.SUPER_ADMIN) throw new Error('Cannot delete root Super Admin.');
+
+    // Remove Instructor Profile documents
+    await InstructorProfile.deleteMany({ userId: user._id });
+
+    // Archive courses owned by this instructor so they disappear from public catalog
+    await Course.updateMany(
+      { instructorId: user._id },
+      { $set: { status: 'ARCHIVED' } }
+    );
 
     await User.findByIdAndDelete(userId);
     await AuditLog.create({
@@ -524,14 +577,8 @@ export class SuperAdminService {
     course.approvedAt = new Date();
     course.approvedBy = actorId;
     course.rejectionReason = undefined;
-
-    // If publishing fee is already paid, immediately publish
-    if (course.publishingFeePaid) {
-      course.status = 'PUBLISHED';
-      course.publishedAt = new Date();
-    } else {
-      course.status = 'APPROVED'; // Waiting for publishing fee
-    }
+    course.status = 'PUBLISHED';
+    course.publishedAt = new Date();
 
     await course.save();
 
@@ -540,7 +587,7 @@ export class SuperAdminService {
       action: 'APPROVE_COURSE',
       resourceType: 'COURSE',
       resourceId: courseId,
-      newValue: { approvalStatus: 'APPROVED', status: course.status },
+      newValue: { approvalStatus: 'APPROVED', status: 'PUBLISHED' },
     });
 
     return course;
@@ -571,13 +618,14 @@ export class SuperAdminService {
    */
   static async getInstructorsList() {
     const instructors = await User.find({ role: ROLES.INSTRUCTOR, status: { $ne: 'TERMINATED' } })
-      .select('firstName lastName email profilePhoto phone bio')
+      .select('firstName lastName email profilePhoto phone bio instructorId')
       .sort({ firstName: 1 })
       .lean();
 
     return instructors.map((inst) => ({
       id: inst._id.toString(),
       _id: inst._id.toString(),
+      instructorId: inst.instructorId || undefined,
       name: `${inst.firstName || ''} ${inst.lastName || ''}`.trim() || 'Instructor',
       email: inst.email,
       avatar: inst.profilePhoto || null,
@@ -586,12 +634,64 @@ export class SuperAdminService {
   }
 
   /**
+   * 3c-0. Get Dedicated Individual Instructor Dashboard for Super Admin View
+   */
+  static async getInstructorDashboard(instructorIdOrSlug, timeframe = '30d') {
+    const instructorObjectId = (await InstructorService.resolveInstructorObjectId(instructorIdOrSlug)) || (mongoose.Types.ObjectId.isValid(instructorIdOrSlug) ? new mongoose.Types.ObjectId(instructorIdOrSlug) : null);
+    if (!instructorObjectId) {
+      throw new AppError('Instructor not found.', 404);
+    }
+
+    const instructor = await User.findById(instructorObjectId)
+      .select('-passwordHash -refreshTokenHash -verificationToken')
+      .lean();
+
+    if (!instructor) {
+      throw new AppError('Instructor not found.', 404);
+    }
+
+    if (instructor.role !== ROLES.INSTRUCTOR) {
+      throw new AppError('The specified user is not an instructor.', 400);
+    }
+
+    const profile = await InstructorProfile.findOne({ userId: instructor._id }).lean();
+    const dashboardData = await InstructorService.getDashboardData(instructorObjectId, timeframe);
+
+    return {
+      instructor: {
+        id: instructor._id.toString(),
+        _id: instructor._id.toString(),
+        instructorId: instructor.instructorId || profile?.instructorId || undefined,
+        firstName: instructor.firstName || '',
+        lastName: instructor.lastName || '',
+        name: `${instructor.firstName || ''} ${instructor.lastName || ''}`.trim() || 'Instructor',
+        email: instructor.email,
+        phone: instructor.phone || null,
+        status: instructor.status || 'ACTIVE',
+        profilePhoto: instructor.profilePhoto || profile?.profilePhoto || null,
+        joinedDate: instructor.createdAt,
+        headline: profile?.headline || instructor.headline || '',
+        bio: profile?.bio || '',
+        skills: profile?.skills || [],
+        expertise: profile?.expertise || [],
+        workExperience: profile?.workExperience || '',
+        qualification: instructor.qualification || profile?.qualification || '',
+        institution: instructor.institution || profile?.institution || '',
+        rating: profile?.rating || 4.8,
+        isVerified: profile?.isCompleted || instructor.isProfileCompleted || false,
+        verificationStatus: profile?.verificationStatus || (instructor.isProfileCompleted ? 'VERIFIED' : 'PENDING'),
+      },
+      dashboardData,
+    };
+  }
+
+  /**
    * 3c-1. Instructor Verifications Queue (Onboarding Profile Review & Approval Workflow)
    */
   static async getInstructorVerifications({ status, search, page = 1, limit = 50 } = {}) {
     // 1. Fetch all InstructorProfile documents
     const allProfiles = await InstructorProfile.find()
-      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt')
+      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt instructorId')
       .populate('reviewedBy', 'firstName lastName email')
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
@@ -615,6 +715,7 @@ export class SuperAdminService {
     const orphanProfiles = orphanInstructors.map((u) => ({
       _id: u._id,
       userId: u,
+      instructorId: u.instructorId,
       bio: u.bio || '',
       headline: u.headline || '',
       expertise: u.skills || [],
@@ -624,7 +725,7 @@ export class SuperAdminService {
       yearsOfExperience: '',
       currentOrganization: '',
       profilePhoto: u.profilePhoto || '',
-      verificationStatus: u.status === 'ACTIVE' ? 'VERIFIED' : 'PENDING',
+      verificationStatus: 'PENDING',
       isCompleted: !!u.isProfileCompleted,
       createdAt: u.createdAt,
       updatedAt: u.updatedAt,
@@ -661,10 +762,11 @@ export class SuperAdminService {
         const u = p.userId || {};
         const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
         const email = (u.email || '').toLowerCase();
+        const instId = (u.instructorId || p.instructorId || '').toLowerCase();
         const org = (p.currentOrganization || '').toLowerCase();
         const bio = (p.bio || '').toLowerCase();
         const exp = Array.isArray(p.expertise) ? p.expertise.join(' ').toLowerCase() : '';
-        return fullName.includes(s) || email.includes(s) || org.includes(s) || bio.includes(s) || exp.includes(s);
+        return fullName.includes(s) || email.includes(s) || instId.includes(s) || org.includes(s) || bio.includes(s) || exp.includes(s);
       });
     }
 
@@ -682,6 +784,7 @@ export class SuperAdminService {
           _id: p._id.toString(),
           profileId: p._id.toString(),
           userId: u._id?.toString() || (p.userId ? p.userId.toString() : p._id.toString()),
+          instructorId: u.instructorId || p.instructorId || undefined,
           name,
           firstName: u.firstName || '',
           lastName: u.lastName || '',
@@ -696,6 +799,11 @@ export class SuperAdminService {
           workExperience: p.workExperience || '',
           yearsOfExperience: p.yearsOfExperience || '',
           currentOrganization: p.currentOrganization || '',
+          currentJobTitle: p.currentJobTitle || '',
+          linkedinUrl: p.linkedinUrl || '',
+          githubUrl: p.githubUrl || '',
+          registrationFeePaid: Boolean(p.registrationFeePaid || u.registrationFeePaid),
+          readinessScore: p.readinessReport?.score ?? null,
           isCompleted: p.isCompleted !== false,
           verificationStatus: p.verificationStatus || 'PENDING',
           rejectionReason: p.rejectionReason || null,
@@ -723,7 +831,7 @@ export class SuperAdminService {
   }
 
   /**
-   * 3c-2. Detailed Instructor Profile for Modal Review
+   * 3c-2. Detailed Instructor Profile for Modal Review (With Private Documents & Readiness Report)
    */
   static async getInstructorVerificationDetails(id) {
     const profile = await InstructorProfile.findOne({
@@ -732,7 +840,7 @@ export class SuperAdminService {
         { userId: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
       ].filter(Boolean),
     })
-      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt')
+      .populate('userId', 'firstName lastName email profilePhoto phone country status role createdAt registrationFeePaid registrationFeeOrderId registrationFeeAmount registrationFeePaidAt')
       .populate('reviewedBy', 'firstName lastName email')
       .lean();
 
@@ -748,6 +856,7 @@ export class SuperAdminService {
         lastName: user.lastName || '',
         email: user.email || '',
         phone: user.phone || '',
+        country: user.country || '',
         avatar: user.profilePhoto || null,
         bio: user.bio || '',
         headline: user.headline || '',
@@ -757,6 +866,20 @@ export class SuperAdminService {
         workExperience: '',
         yearsOfExperience: '',
         currentOrganization: '',
+        currentJobTitle: '',
+        isEmployed: true,
+        linkedinUrl: '',
+        githubUrl: '',
+        portfolioUrl: '',
+        teachingSubjects: [],
+        governmentId: null,
+        verificationDocuments: [],
+        readinessReport: null,
+        registrationFeePaid: Boolean(user.registrationFeePaid),
+        registrationFeeOrderId: user.registrationFeeOrderId || null,
+        registrationFeeAmount: user.registrationFeeAmount || 0,
+        registrationFeePaidAt: user.registrationFeePaidAt || null,
+        reviewHistory: [],
         verificationStatus: 'PENDING',
         isCompleted: !!user.isProfileCompleted,
         submittedAt: user.createdAt,
@@ -764,6 +887,8 @@ export class SuperAdminService {
     }
 
     const u = profile.userId || {};
+    const readinessReport = profile.readinessReport || ReadinessScoringService.getGatedReadinessReport(profile, u);
+
     return {
       id: profile._id.toString(),
       _id: profile._id.toString(),
@@ -774,6 +899,7 @@ export class SuperAdminService {
       lastName: u.lastName || '',
       email: u.email || '',
       phone: u.phone || profile.phone || '',
+      country: u.country || profile.country || '',
       avatar: u.profilePhoto || profile.profilePhoto || null,
       headline: profile.headline || 'Instructor',
       bio: profile.bio || '',
@@ -783,6 +909,20 @@ export class SuperAdminService {
       workExperience: profile.workExperience || '',
       yearsOfExperience: profile.yearsOfExperience || '',
       currentOrganization: profile.currentOrganization || '',
+      currentJobTitle: profile.currentJobTitle || '',
+      isEmployed: profile.isEmployed !== false,
+      linkedinUrl: profile.linkedinUrl || '',
+      githubUrl: profile.githubUrl || '',
+      portfolioUrl: profile.portfolioUrl || '',
+      teachingSubjects: Array.isArray(profile.teachingSubjects) ? profile.teachingSubjects : [],
+      governmentId: profile.governmentId || null,
+      verificationDocuments: Array.isArray(profile.verificationDocuments) ? profile.verificationDocuments : [],
+      readinessReport,
+      registrationFeePaid: Boolean(profile.registrationFeePaid || u.registrationFeePaid),
+      registrationFeeOrderId: profile.registrationFeeOrderId || u.registrationFeeOrderId || null,
+      registrationFeeAmount: profile.registrationFeeAmount || u.registrationFeeAmount || 0,
+      registrationFeePaidAt: profile.registrationFeePaidAt || u.registrationFeePaidAt || null,
+      reviewHistory: Array.isArray(profile.reviewHistory) ? profile.reviewHistory : [],
       isCompleted: profile.isCompleted !== false,
       verificationStatus: profile.verificationStatus || 'PENDING',
       rejectionReason: profile.rejectionReason || null,
@@ -795,7 +935,7 @@ export class SuperAdminService {
   }
 
   /**
-   * 3c-3. Approve Instructor Verification (Unlocks Instructor Dashboard)
+   * 3c-3. Approve Instructor Verification (Unlocks Instructor Dashboard + Sends Approval Email)
    */
   static async approveInstructorVerification(id, actorId) {
     let profile = await InstructorProfile.findOne({
@@ -805,8 +945,9 @@ export class SuperAdminService {
       ].filter(Boolean),
     });
 
+    let user = null;
     if (!profile) {
-      const user = await User.findById(id);
+      user = await User.findById(id);
       if (!user) throw new Error('Instructor not found.');
       profile = await InstructorProfile.create({
         userId: user._id,
@@ -818,15 +959,35 @@ export class SuperAdminService {
         reviewedBy: actorId,
       });
     } else {
+      user = await User.findById(profile.userId);
       profile.verificationStatus = 'VERIFIED';
       profile.reviewedAt = new Date();
       profile.reviewedBy = actorId;
       profile.rejectionReason = undefined;
-      await profile.save();
     }
 
+    if (user) {
+      user.status = 'ACTIVE';
+      user.isProfileCompleted = true;
+      await user.save();
+    }
+
+    // Persist review history record with unique event idempotency
+    const idempotencyKey = `APPROVE_${profile._id}_${Date.now()}`;
+    profile.reviewHistory = profile.reviewHistory || [];
+    const historyItem = {
+      decision: 'APPROVED',
+      reason: 'Application approved by Super Admin',
+      reviewedBy: actorId,
+      reviewedAt: new Date(),
+      notificationSent: false,
+      idempotencyKey,
+    };
+    profile.reviewHistory.push(historyItem);
+    await profile.save();
+
+    // Send in-app system notification
     if (profile.userId) {
-      await User.findByIdAndUpdate(profile.userId, { status: 'ACTIVE', isProfileCompleted: true });
       try {
         await Notification.create({
           userId: profile.userId,
@@ -842,6 +1003,25 @@ export class SuperAdminService {
       }
     }
 
+    // Send official decision email to registered email
+    const recipientEmail = user?.email;
+    const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
+    if (recipientEmail) {
+      try {
+        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const emailRes = await sendInstructorApplicationApprovedEmail({
+          to: recipientEmail,
+          instructorName: recipientName,
+          actionUrl: `${appOrigin}/dashboard/instructor`,
+        });
+        historyItem.notificationSent = true;
+        historyItem.notificationMessageId = emailRes?.messageId;
+        await profile.save();
+      } catch (emailErr) {
+        console.warn('[Approval Email Error (transient)]:', emailErr.message);
+      }
+    }
+
     await AuditLog.create({
       actorId,
       action: 'APPROVE_INSTRUCTOR_VERIFICATION',
@@ -854,9 +1034,13 @@ export class SuperAdminService {
   }
 
   /**
-   * 3c-4. Reject Instructor Verification
+   * 3c-4. Reject Instructor Verification (Records Reason + Sends Rejection Email)
    */
   static async rejectInstructorVerification(id, { reason, actorId }) {
+    if (!reason || !reason.trim()) {
+      throw new Error('A specific rejection reason is required to provide constructive feedback.');
+    }
+
     let profile = await InstructorProfile.findOne({
       $or: [
         { _id: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
@@ -866,10 +1050,25 @@ export class SuperAdminService {
 
     if (!profile) throw new Error('Instructor profile not found.');
 
+    const user = await User.findById(profile.userId);
+
     profile.verificationStatus = 'REJECTED';
-    profile.rejectionReason = reason || 'Your application could not be verified with the provided details.';
+    profile.rejectionReason = reason.trim();
     profile.reviewedAt = new Date();
     profile.reviewedBy = actorId;
+
+    // Record review history
+    const idempotencyKey = `REJECT_${profile._id}_${Date.now()}`;
+    profile.reviewHistory = profile.reviewHistory || [];
+    const historyItem = {
+      decision: 'REJECTED',
+      reason: reason.trim(),
+      reviewedBy: actorId,
+      reviewedAt: new Date(),
+      notificationSent: false,
+      idempotencyKey,
+    };
+    profile.reviewHistory.push(historyItem);
     await profile.save();
 
     if (profile.userId) {
@@ -877,7 +1076,7 @@ export class SuperAdminService {
         await Notification.create({
           userId: profile.userId,
           title: 'Instructor Application Update',
-          message: `Your instructor application was not approved. Feedback: ${reason || 'Details required revision.'}. Please update your profile and re-submit.`,
+          message: `Your instructor application was not approved. Feedback: ${reason.trim()}. Please update your profile and re-submit.`,
           type: 'SYSTEM',
           category: 'SYSTEM',
           status: 'UNREAD',
@@ -885,6 +1084,26 @@ export class SuperAdminService {
         });
       } catch (e) {
         console.warn('Notification create warning:', e.message);
+      }
+    }
+
+    // Send official rejection email
+    const recipientEmail = user?.email;
+    const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
+    if (recipientEmail) {
+      try {
+        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const emailRes = await sendInstructorApplicationRejectedEmail({
+          to: recipientEmail,
+          instructorName: recipientName,
+          reason: reason.trim(),
+          resubmitUrl: `${appOrigin}/instructor/onboarding`,
+        });
+        historyItem.notificationSent = true;
+        historyItem.notificationMessageId = emailRes?.messageId;
+        await profile.save();
+      } catch (emailErr) {
+        console.warn('[Rejection Email Error (transient)]:', emailErr.message);
       }
     }
 
@@ -897,6 +1116,96 @@ export class SuperAdminService {
     });
 
     return profile;
+  }
+
+  /**
+   * 3c-5. Request Changes on Instructor Application
+   */
+  static async requestChangesInstructorVerification(id, { feedback, actorId }) {
+    if (!feedback || !feedback.trim()) {
+      throw new Error('Please specify what changes or documents are required from the instructor.');
+    }
+
+    let profile = await InstructorProfile.findOne({
+      $or: [
+        { _id: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+        { userId: mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : null },
+      ].filter(Boolean),
+    });
+
+    if (!profile) throw new Error('Instructor profile not found.');
+
+    const user = await User.findById(profile.userId);
+
+    profile.verificationStatus = 'CHANGES_REQUESTED';
+    profile.rejectionReason = feedback.trim();
+    profile.reviewedAt = new Date();
+    profile.reviewedBy = actorId;
+
+    const idempotencyKey = `CHANGES_REQ_${profile._id}_${Date.now()}`;
+    profile.reviewHistory = profile.reviewHistory || [];
+    const historyItem = {
+      decision: 'CHANGES_REQUESTED',
+      reason: feedback.trim(),
+      reviewedBy: actorId,
+      reviewedAt: new Date(),
+      notificationSent: false,
+      idempotencyKey,
+    };
+    profile.reviewHistory.push(historyItem);
+    await profile.save();
+
+    if (profile.userId) {
+      try {
+        await Notification.create({
+          userId: profile.userId,
+          title: 'Revisions Requested for Verification',
+          message: `The review team requested adjustments on your application: "${feedback.trim()}". Please update your details and re-submit.`,
+          type: 'SYSTEM',
+          category: 'SYSTEM',
+          status: 'UNREAD',
+          actionUrl: '/instructor/onboarding',
+        });
+      } catch (e) {
+        console.warn('Notification create warning:', e.message);
+      }
+    }
+
+    const recipientEmail = user?.email;
+    const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
+    if (recipientEmail) {
+      try {
+        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const emailRes = await sendInstructorChangesRequestedEmail({
+          to: recipientEmail,
+          instructorName: recipientName,
+          feedback: feedback.trim(),
+          resubmitUrl: `${appOrigin}/instructor/onboarding`,
+        });
+        historyItem.notificationSent = true;
+        historyItem.notificationMessageId = emailRes?.messageId;
+        await profile.save();
+      } catch (emailErr) {
+        console.warn('[Changes-Requested Email Error (transient)]:', emailErr.message);
+      }
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'REQUEST_CHANGES_INSTRUCTOR_VERIFICATION',
+      resourceType: 'INSTRUCTOR_PROFILE',
+      resourceId: profile._id,
+      newValue: { verificationStatus: 'CHANGES_REQUESTED', feedback },
+    });
+
+    return profile;
+  }
+
+  /**
+   * 3c-6. Securely Stream Verification Document for Super Admin Review
+   */
+  static async getInstructorDocumentStream(profileId, docId) {
+    return InstructorService.getVerificationDocumentStream(null, docId, true, profileId);
   }
 
   /**
@@ -1830,5 +2139,314 @@ export class SuperAdminService {
       ];
     }
     return frauds;
+  }
+
+  /**
+   * 12. GET INSTRUCTOR DASHBOARD (For Super Admin direct inspection)
+   */
+  static async getInstructorDashboard(instructorId, timeframe = '30d') {
+    if (!instructorId) {
+      throw new AppError('Instructor ID is required.', 400);
+    }
+
+    let targetUser = null;
+    if (mongoose.Types.ObjectId.isValid(instructorId) && String(new mongoose.Types.ObjectId(instructorId)) === instructorId) {
+      targetUser = await User.findById(instructorId).lean();
+    }
+    if (!targetUser) {
+      targetUser = await User.findOne({
+        role: ROLES.INSTRUCTOR,
+        $or: [{ instructorId: instructorId.trim() }, { email: instructorId.trim().toLowerCase() }],
+      }).lean();
+    }
+
+    if (!targetUser) {
+      throw new AppError('Instructor not found.', 404);
+    }
+
+    const dashboardData = await InstructorService.getDashboardData(targetUser._id.toString(), timeframe);
+    const profile = await InstructorService.getProfile(targetUser._id.toString());
+
+    return {
+      instructor: {
+        _id: targetUser._id,
+        id: targetUser._id,
+        instructorId: targetUser.instructorId || profile?.profile?.instructorId,
+        name: `${targetUser.firstName || ''} ${targetUser.lastName || ''}`.trim() || 'Instructor',
+        firstName: targetUser.firstName,
+        lastName: targetUser.lastName,
+        email: targetUser.email,
+        phone: targetUser.phone,
+        profilePhoto: targetUser.profilePhoto || profile?.profile?.profilePhoto,
+        role: targetUser.role,
+        status: targetUser.status,
+        joinedDate: targetUser.createdAt ? new Date(targetUser.createdAt).toLocaleDateString() : 'Recently',
+      },
+      profile: profile?.profile,
+      dashboard: dashboardData,
+    };
+  }
+
+  /**
+   * 13. DYNAMIC INSTRUCTOR REGISTRATION FEE SETTINGS
+   * Get active setting from Database (or initialize defaults if first time)
+   */
+  static async getRegistrationFeeSettings() {
+    let setting = await PlatformSetting.findOne({ key: 'INSTRUCTOR_REGISTRATION_FEE' }).lean();
+    if (!setting) {
+      setting = await PlatformSetting.create({
+        key: 'INSTRUCTOR_REGISTRATION_FEE',
+        instructorRegistrationFee: 1499,
+        currency: 'INR',
+        isEnabled: true,
+        title: 'Instructor Account Activation & Setup Fee',
+        description: 'One-time registration and platform access fee for newly registered instructors.',
+      });
+    }
+
+    return {
+      key: setting.key,
+      instructorRegistrationFee: Number(setting.instructorRegistrationFee) || 0,
+      currency: setting.currency || 'INR',
+      isEnabled: setting.isEnabled !== false,
+      title: setting.title || 'Instructor Account Activation & Setup Fee',
+      description: setting.description || 'One-time registration and platform access fee for newly registered instructors.',
+      updatedAt: setting.updatedAt,
+    };
+  }
+
+  /**
+   * 14. UPDATE INSTRUCTOR REGISTRATION FEE SETTINGS (Super Admin Editable Rate)
+   */
+  static async updateRegistrationFeeSettings({
+    instructorRegistrationFee,
+    currency = 'INR',
+    isEnabled = true,
+    title,
+    description,
+    actorId,
+  }) {
+    const feeAmount = Math.max(0, Number(instructorRegistrationFee) || 0);
+
+    const updated = await PlatformSetting.findOneAndUpdate(
+      { key: 'INSTRUCTOR_REGISTRATION_FEE' },
+      {
+        instructorRegistrationFee: feeAmount,
+        currency,
+        isEnabled: !!isEnabled,
+        ...(title ? { title } : {}),
+        ...(description ? { description } : {}),
+        updatedBy: actorId ? new mongoose.Types.ObjectId(actorId) : undefined,
+      },
+      { new: true, upsert: true }
+    );
+
+    if (actorId) {
+      await AuditLog.create({
+        actorId,
+        action: 'UPDATE_REGISTRATION_FEE',
+        resourceType: 'PLATFORM_SETTING',
+        resourceId: updated._id.toString(),
+        newValue: {
+          instructorRegistrationFee: feeAmount,
+          currency,
+          isEnabled,
+        },
+      }).catch((e) => console.warn('[AuditLog Warning]:', e.message));
+    }
+
+    const instructors = await User.find({ role: ROLES.INSTRUCTOR }).select('_id').lean();
+    await Notification.insertMany(
+      instructors.map((instructor) => ({
+        notificationId: `registration_fee_${randomUUID()}`,
+        userId: instructor._id,
+        type: 'PLATFORM_FEE_UPDATED',
+        title: 'Instructor registration fee updated',
+        message: `The instructor registration fee is now ${currency} ${feeAmount}${updated.isEnabled ? '' : ' (currently disabled)'}.`,
+        actionUrl: '/dashboard/instructor',
+        entityType: 'PLATFORM_SETTING',
+        entityId: updated._id,
+      }))
+    ).catch((error) => console.error('[Notification Error] Registration fee update:', error.message));
+
+    return {
+      key: updated.key,
+      instructorRegistrationFee: updated.instructorRegistrationFee,
+      currency: updated.currency,
+      isEnabled: updated.isEnabled,
+      title: updated.title,
+      description: updated.description,
+      updatedAt: updated.updatedAt,
+    };
+  }
+
+  /**
+   * 15. INSTRUCTOR REGISTRATION FEES AUDIT LEDGER
+   * Replaces old 10% course fee ledger with full transaction records of instructor setup fees
+   */
+  static async getRegistrationFeesLedger({ search, status, page = 1, limit = 50 }) {
+    const query = {};
+    if (status && status !== 'ALL') {
+      query.paymentStatus = status;
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.max(1, parseInt(limit, 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Fetch from InstructorRegistrationFee collection
+    const [allFeesMetrics, rawFees, totalCount, activeSetting] = await Promise.all([
+      InstructorRegistrationFee.find({}, 'amount paymentStatus').lean(),
+      InstructorRegistrationFee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+      InstructorRegistrationFee.countDocuments(query),
+      this.getRegistrationFeeSettings(),
+    ]);
+
+    const instructorIds = [...new Set(rawFees.map((f) => f.instructorId).filter(Boolean))];
+    const users = await User.find({ _id: { $in: instructorIds } }, 'firstName lastName email profilePhoto avatar instructorId').lean();
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    let fees = rawFees.map((f) => {
+      const instructor = f.instructorId ? userMap.get(f.instructorId.toString()) : null;
+      return {
+        id: f._id.toString(),
+        orderId: f.orderId,
+        amount: f.amount,
+        currency: f.currency || 'INR',
+        paymentStatus: f.paymentStatus,
+        cashfreePaymentId: f.cashfreePaymentId || f.cashfreeOrderId || '—',
+        paymentMethod: f.paymentMethod || 'Cashfree PG',
+        instructor: {
+          id: f.instructorId?.toString() || '',
+          instructorId: instructor?.instructorId || undefined,
+          name: instructor ? `${instructor.firstName || ''} ${instructor.lastName || ''}`.trim() : 'Instructor',
+          email: instructor?.email || '—',
+          avatar: instructor?.profilePhoto || instructor?.avatar,
+        },
+        createdAt: f.createdAt,
+        paidAt: f.paidAt,
+        errorMessage: f.errorMessage,
+      };
+    });
+
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      fees = fees.filter((f) => {
+        const orderMatch = f.orderId?.toLowerCase().includes(q);
+        const cfMatch = f.cashfreePaymentId?.toLowerCase().includes(q);
+        const nameMatch = f.instructor?.name?.toLowerCase().includes(q);
+        const emailMatch = f.instructor?.email?.toLowerCase().includes(q);
+        const insIdMatch = f.instructor?.instructorId?.toLowerCase().includes(q);
+        return orderMatch || cfMatch || nameMatch || emailMatch || insIdMatch;
+      });
+    }
+
+    const successFees = allFeesMetrics.filter((f) => f.paymentStatus === 'SUCCESS');
+    const pendingFees = allFeesMetrics.filter((f) => f.paymentStatus === 'PENDING');
+    const failedFees = allFeesMetrics.filter((f) => ['FAILED', 'USER_DROPPED', 'EXPIRED'].includes(f.paymentStatus));
+    const totalCollected = successFees.reduce((sum, f) => sum + (f.amount || 0), 0);
+
+    return {
+      settings: activeSetting,
+      fees,
+      metrics: {
+        totalCollected: Number(totalCollected.toFixed(2)) || 0,
+        successfulTransactions: successFees.length,
+        pendingTransactions: pendingFees.length,
+        failedTransactions: failedFees.length,
+        totalTransactions: allFeesMetrics.length,
+      },
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum) || 1,
+      },
+    };
+  }
+
+  /**
+   * 16. Verify & Settle Registration Fee Order by Super Admin
+   */
+  static async verifyRegistrationFeeOrder(orderId, forceMarkPaid = false) {
+    const feeRecord = await InstructorRegistrationFee.findOne({ orderId });
+    if (!feeRecord) {
+      throw new Error(`Registration fee record not found for order ${orderId}`);
+    }
+
+    let isSuccess = feeRecord.paymentStatus === 'SUCCESS';
+    let paymentId = feeRecord.cashfreePaymentId || orderId;
+    let paymentMethod = feeRecord.paymentMethod || 'Cashfree PG';
+
+    if (!isSuccess) {
+      try {
+        const { CashfreeService } = await import('../../services/cashfree.service.js');
+        const cfOrder = await CashfreeService.getOrder(orderId);
+        const cfPayments = await CashfreeService.getOrderPayments(orderId).catch(() => []);
+        const successfulPayment = Array.isArray(cfPayments)
+          ? cfPayments.find((p) => p.payment_status === 'SUCCESS')
+          : null;
+
+        if (cfOrder?.order_status === 'PAID' || cfOrder?.orderStatus === 'PAID' || !!successfulPayment) {
+          isSuccess = true;
+          paymentId = successfulPayment?.cf_payment_id || successfulPayment?.payment_id || orderId;
+          paymentMethod = successfulPayment?.payment_group || 'Cashfree PG';
+        }
+      } catch (e) {
+        console.warn('[SuperAdmin verify registration error]:', e.message);
+      }
+    }
+
+    if (!isSuccess && forceMarkPaid) {
+      isSuccess = true;
+      paymentId = `ADMIN_VERIFIED_${Date.now()}`;
+      paymentMethod = 'Super Admin Manual Settle';
+    }
+
+    if (!isSuccess) {
+      return {
+        success: false,
+        paymentStatus: feeRecord.paymentStatus,
+        message: 'Order has not been marked as paid in Cashfree PG yet.',
+      };
+    }
+
+    feeRecord.paymentStatus = 'SUCCESS';
+    feeRecord.paidAt = feeRecord.paidAt || new Date();
+    feeRecord.cashfreePaymentId = String(paymentId);
+    feeRecord.paymentMethod = paymentMethod;
+    await feeRecord.save();
+
+    // Update User and Instructor Profile
+    const [user, profile] = await Promise.all([
+      User.findById(feeRecord.instructorId),
+      InstructorProfile.findOne({ userId: feeRecord.instructorId }),
+    ]);
+
+    if (user) {
+      user.registrationFeePaid = true;
+      user.registrationFeePaidAt = feeRecord.paidAt;
+      user.registrationFeeOrderId = orderId;
+      user.registrationFeePaymentId = String(paymentId);
+      user.registrationFeeAmount = feeRecord.amount;
+      await user.save();
+    }
+
+    if (profile) {
+      profile.registrationFeePaid = true;
+      profile.registrationFeePaidAt = feeRecord.paidAt;
+      profile.registrationFeeOrderId = orderId;
+      profile.registrationFeePaymentId = String(paymentId);
+      profile.registrationFeeAmount = feeRecord.amount;
+      await profile.save();
+    }
+
+    return {
+      success: true,
+      paymentStatus: 'SUCCESS',
+      orderId,
+      amount: feeRecord.amount,
+      message: `Registration fee ${orderId} successfully verified and settled.`,
+    };
   }
 }

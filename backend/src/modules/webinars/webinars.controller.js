@@ -123,4 +123,32 @@ export class WebinarsController {
     }
     return ApiResponse.success(res, { success: true }, 'Attendance logged.');
   });
+
+  static updateBroadcastState = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const result = WebinarsService.updateBroadcastState(roomCode, req.body);
+    return ApiResponse.success(res, result, 'Broadcast state updated.');
+  });
+
+  static sendSignal = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const senderId = req.user?.userId || req.body.senderId || 'anon';
+    const senderRole = req.user?.role || req.body.senderRole || 'PARTICIPANT';
+    const result = WebinarsService.sendSignal(roomCode, req.body, senderId, senderRole);
+    return ApiResponse.success(res, result, 'Signal sent.');
+  });
+
+  static getSignals = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const { since, excludeSenderId } = req.query;
+    const result = WebinarsService.getSignals(roomCode, since, excludeSenderId);
+    return ApiResponse.success(res, result, 'Signals retrieved.');
+  });
+
+  static reopenOrRejoinRoom = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const userId = req.user?.userId || null;
+    const result = await WebinarsService.reopenOrRejoinRoom(roomCode, userId);
+    return ApiResponse.success(res, result, 'Room reopened successfully.');
+  });
 }

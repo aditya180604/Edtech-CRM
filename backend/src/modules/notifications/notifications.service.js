@@ -1,7 +1,37 @@
 import mongoose from 'mongoose';
 import { Notification, Webinar } from '../../models/index.js';
+import { randomUUID } from 'node:crypto';
 
 export class NotificationsService {
+  static async notifyUser({
+    userId,
+    type,
+    title,
+    message,
+    actionUrl,
+    entityType,
+    entityId,
+    metadata,
+  }) {
+    if (!userId || !type || !title || !message) {
+      throw new Error('Notification recipient, type, title, and message are required.');
+    }
+
+    return Notification.create({
+      notificationId: `notif_${randomUUID()}`,
+      userId,
+      type,
+      title,
+      message,
+      status: 'UNREAD',
+      actionUrl,
+      entityType,
+      entityId,
+      metadata,
+      isRead: false,
+    });
+  }
+
   /**
    * Get user notifications & auto-sync "Started" notifications for live webinars
    */

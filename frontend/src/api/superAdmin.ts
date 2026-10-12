@@ -67,6 +67,7 @@ export interface SuperAdminDashboardOverview {
 export interface SuperAdminUser {
   id: string;
   _id: string;
+  instructorId?: string;
   name: string;
   email: string;
   role: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN' | 'SUPER_ADMIN';
@@ -137,6 +138,7 @@ export interface SuperAdminInstructorVerification {
   _id: string;
   profileId: string;
   userId: string;
+  instructorId?: string;
   name: string;
   firstName: string;
   lastName: string;
@@ -151,8 +153,64 @@ export interface SuperAdminInstructorVerification {
   workExperience?: string;
   yearsOfExperience?: string;
   currentOrganization?: string;
+  currentJobTitle?: string;
+  isEmployed?: boolean;
+  qualification?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  teachingSubjects?: string[];
+  governmentId?: {
+    idType: string;
+    documentUrl: string;
+    fileName?: string;
+    fileType?: string;
+    fileSize?: number;
+    uploadedAt?: string;
+    status?: string;
+  } | null;
+  verificationDocuments?: Array<{
+    _id?: string;
+    id?: string;
+    documentType: string;
+    title: string;
+    fileUrl: string;
+    fileName?: string;
+    fileType?: string;
+    fileSize?: number;
+    uploadedAt?: string;
+    status?: string;
+    rejectionReason?: string;
+  }>;
+  readinessReport?: {
+    score: number;
+    breakdown?: {
+      coreProfile: { score: number; maxScore: number; passed: boolean };
+      skillsAndSubjects: { score: number; maxScore: number; passed: boolean };
+      experienceAndBio: { score: number; maxScore: number; passed: boolean };
+      professionalLinks: { score: number; maxScore: number; passed: boolean };
+      governmentId: { score: number; maxScore: number; passed: boolean };
+      supportingDocuments: { score: number; maxScore: number; passed: boolean };
+    };
+    missingItems?: string[];
+    recommendations?: string[];
+    scoringRuleVersion?: string;
+    calculatedAt?: string;
+    revision?: number;
+  } | null;
+  registrationFeePaid?: boolean;
+  registrationFeeOrderId?: string | null;
+  registrationFeeAmount?: number;
+  registrationFeePaidAt?: string | null;
+  reviewHistory?: Array<{
+    decision: string;
+    reason?: string;
+    reviewedBy?: string;
+    reviewedAt?: string;
+    notificationSent?: boolean;
+  }>;
   isCompleted: boolean;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'VERIFIED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'VERIFIED' | 'REJECTED' | 'CHANGES_REQUESTED';
   rejectionReason?: string | null;
   submittedAt: string;
   reviewedAt?: string | null;
@@ -433,16 +491,69 @@ export const superAdminApi = {
     return res.data;
   },
 
-  // 12. Platform Fees Ledger & Oversight
-  async getPlatformFees(params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{
+  async requestChangesInstructorVerification(id: string, feedback: string): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/instructor-verifications/${id}/request-changes`, { feedback, reason: feedback });
+    return res.data;
+  },
+
+  // 12. Instructor Registration Fee Management & Dynamic Rate Settings
+  async getRegistrationFeeSettings(): Promise<{
     success: boolean;
     data: {
+      key: string;
+      instructorRegistrationFee: number;
+      currency: string;
+      isEnabled: boolean;
+      title: string;
+      description: string;
+      updatedAt?: string;
+    };
+  }> {
+    const res = await apiClient.get('/super-admin/registration-fee/settings');
+    return res.data;
+  },
+
+  async updateRegistrationFeeSettings(payload: {
+    instructorRegistrationFee: number;
+    currency?: string;
+    isEnabled?: boolean;
+    title?: string;
+    description?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      key: string;
+      instructorRegistrationFee: number;
+      currency: string;
+      isEnabled: boolean;
+      title: string;
+      description: string;
+      updatedAt?: string;
+    };
+    message?: string;
+  }> {
+    const res = await apiClient.put('/super-admin/registration-fee/settings', payload);
+    return res.data;
+  },
+
+  async getRegistrationFees(params?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    data: {
+      settings: {
+        instructorRegistrationFee: number;
+        currency: string;
+        isEnabled: boolean;
+        title: string;
+        description: string;
+      };
       fees: Array<{
         id: string;
         orderId: string;
-        courseId: string;
-        courseTitle: string;
-        coursePrice: number;
         amount: number;
         currency: string;
         paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'USER_DROPPED' | 'EXPIRED';
@@ -450,6 +561,7 @@ export const superAdminApi = {
         paymentMethod: string;
         instructor: {
           id: string;
+          instructorId?: string;
           name: string;
           email: string;
           avatar?: string;
@@ -473,7 +585,62 @@ export const superAdminApi = {
       };
     };
   }> {
-    const res = await apiClient.get('/super-admin/platform-fees', { params });
+    const res = await apiClient.get('/super-admin/registration-fees', { params });
+    return res.data;
+  },
+
+  // Backward compatibility alias for platform fees
+  async getPlatformFees(params?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    const res = await apiClient.get('/super-admin/registration-fees', { params });
+    return res.data;
+  },
+
+  async verifyRegistrationFeeOrder(orderId: string, forceMarkPaid?: boolean): Promise<{ success: boolean; data: any; message: string }> {
+    const res = await apiClient.post(`/super-admin/registration-fees/${orderId}/verify`, { forceMarkPaid });
+    return res.data;
+  },
+
+  // 13. Individual Instructor Dashboard for Super Admin View
+  async getInstructorDashboard(
+    instructorId: string,
+    timeframe?: string
+  ): Promise<{
+    success: boolean;
+    data: {
+      instructor: {
+        id: string;
+        _id: string;
+        name: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        phone?: string | null;
+        status: string;
+        profilePhoto?: string | null;
+        joinedDate: string;
+        headline?: string;
+        bio?: string;
+        skills?: string[];
+        expertise?: string[];
+        workExperience?: string;
+        qualification?: string;
+        institution?: string;
+        rating?: number;
+        isVerified: boolean;
+        verificationStatus: string;
+      };
+      dashboardData: any;
+    };
+  }> {
+    const res = await apiClient.get(`/super-admin/instructors/${instructorId}/dashboard`, {
+      params: { timeframe },
+    });
     return res.data;
   },
 };
+

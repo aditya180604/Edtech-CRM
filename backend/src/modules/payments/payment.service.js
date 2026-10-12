@@ -11,7 +11,11 @@ import {
   TopicCredit,
   CourseUpgrade,
   Cart,
+  User,
+  Course,
+  Notification,
 } from '../../models/index.js';
+import { generateReceiptPdfBuffer } from '../../services/receipt.service.js';
 import { CashfreeService } from './providers/cashfree/cashfree.service.js';
 import {
   PAYMENT_STATUS,
@@ -331,6 +335,178 @@ export class PaymentService {
 
     console.log(`[Payment Finalization] Order ${order.orderId} successfully finalized. Entitlements granted.`);
 
+    // 11. Generate Immutable Receipt Snapshot & Trigger Confirmation Email
+    const todayDateStr = new Date(order.createdAt || Date.now()).toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const generatedReceiptNumber = order.receiptNumber || `REC-${todayDateStr}-${randomSuffix}`;
+    order.receiptNumber = generatedReceiptNumber;
+
+    // Resolve Student Details
+    let studentName = 'Student';
+    let studentEmail = null;
+    try {
+      const studentUser = await User.findById(order.userId).select('firstName lastName email').lean();
+      if (studentUser) {
+        studentName = `${studentUser.firstName || ''} ${studentUser.lastName || ''}`.trim() || 'Student';
+        studentEmail = studentUser.email;
+      }
+    } catch (uErr) {
+      console.warn('[Receipt] Could not resolve student user:', uErr.message);
+    }
+
+    // Resolve Courses & Instructors
+    const populatedItems = [];
+    for (const item of itemsToProvision) {
+      let instructorName = 'EduTechCRM Faculty';
+      let courseTitle = item.title || 'Course Enrollment';
+      const courseId = item.courseId || (item.productType === PRODUCT_TYPES.COURSE ? item.productId : null);
+      let instructorId = item.instructorId;
+      if (courseId) {
+        try {
+          const courseDoc = await Course.findById(courseId).select('title instructorId').lean();
+          if (courseDoc) {
+            if (courseDoc.title) courseTitle = courseDoc.title;
+            instructorId = instructorId || courseDoc.instructorId;
+            if (courseDoc.instructorId) {
+              const instructorDoc = await User.findById(courseDoc.instructorId).select('firstName lastName').lean();
+              if (instructorDoc) {
+                instructorName = `${instructorDoc.firstName || ''} ${instructorDoc.lastName || ''}`.trim() || instructorName;
+              }
+            }
+          }
+        } catch (cErr) {
+          console.warn('[Receipt] Could not resolve instructor info:', cErr.message);
+        }
+      }
+
+      populatedItems.push({
+        title: courseTitle,
+        instructorName,
+        productType: item.productType || 'COURSE',
+        price: item.price || item.unitPrice || 0,
+        finalPrice: item.finalPrice ?? item.unitPrice ?? item.price ?? 0,
+        productId: item.productId,
+        courseId,
+        instructorId,
+      });
+    }
+
+    const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resolvedProviderPaymentId = providerPaymentId || order.paymentId || 'Verified';
+
+    order.receiptSnapshot = {
+      receiptNumber: generatedReceiptNumber,
+      orderId: order.orderId,
+      orderMongoId: order._id,
+      studentId: order.userId,
+      studentName,
+      studentEmail: studentEmail || '',
+      items: populatedItems,
+      subtotal: order.subtotal || order.finalAmount,
+      discount: order.discount || 0,
+      couponCode: order.couponCode || null,
+      couponDiscount: order.couponDiscount || 0,
+      credit: order.credit || 0,
+      tax: order.tax || 0,
+      finalAmount: order.finalAmount,
+      currency: order.currency || 'INR',
+      provider: provider || order.provider || 'CASHFREE',
+      providerOrderId: providerOrderId || order.providerOrderId,
+      providerPaymentId: resolvedProviderPaymentId,
+      paymentMethod: paymentMethod || 'CASHFREE',
+      paidAt: new Date(),
+      generatedAt: new Date(),
+      courseUrl: `${appOrigin}/dashboard/student`,
+    };
+
+    // Generate Official PDF Receipt Buffer
+    let pdfBuffer = null;
+    try {
+      pdfBuffer = await generateReceiptPdfBuffer(order.receiptSnapshot);
+    } catch (pdfErr) {
+      console.error('[Receipt PDF Warning] Failed to generate PDF buffer:', pdfErr.message);
+    }
+
+    // Trigger Idempotent Confirmation Email to Student with PDF Attachment
+    if (!order.confirmationEmailSent && studentEmail) {
+      try {
+        const courseTitles = populatedItems.map((i) => i.title).join(', ');
+        const leadInstructor = populatedItems[0]?.instructorName || 'EduTechCRM Faculty';
+
+        const { sendCoursePurchaseEmail } = await import('../../services/email.service.js');
+        await sendCoursePurchaseEmail({
+          studentEmail,
+          studentName,
+          courseTitle: courseTitles,
+          instructorName: leadInstructor,
+          receiptNumber: generatedReceiptNumber,
+          providerPaymentId: resolvedProviderPaymentId,
+          paymentMethod: paymentMethod || 'Cashfree Gateway',
+          amount: order.finalAmount,
+          subtotal: order.subtotal || order.finalAmount,
+          discount: (order.discount || 0) + (order.couponDiscount || 0),
+          couponCode: order.couponCode,
+          credit: order.credit || 0,
+          currency: order.currency || 'INR',
+          orderId: order.orderId,
+          orderDate: order.createdAt || new Date(),
+          courseUrl: `${appOrigin}/dashboard/student`,
+          pdfBuffer,
+        });
+
+        order.confirmationEmailSent = true;
+        order.notificationOutbox = {
+          status: 'SENT',
+          dispatchedAt: new Date(),
+          recipient: studentEmail,
+          receiptNumber: generatedReceiptNumber,
+        };
+        console.log(`[EmailService] Course purchase confirmation email & PDF receipt dispatched to ${studentEmail}`);
+      } catch (emailErr) {
+        console.error('[EmailService Warning] Failed to dispatch purchase confirmation email:', emailErr.message);
+        order.notificationOutbox = {
+          status: 'FAILED',
+          error: emailErr.message,
+          attemptedAt: new Date(),
+          recipient: studentEmail,
+        };
+      }
+    }
+
+    await order.save();
+
+    const recipientNotifications = [
+      {
+        notificationId: `purchase_${order._id}_student`,
+        userId: order.userId,
+        type: 'COURSE_PURCHASED',
+        title: 'Purchase complete',
+        message: `Your order ${order.orderId} is complete. Your learning content is ready in your dashboard.`,
+        actionUrl: '/dashboard/student',
+        entityType: 'ORDER',
+        entityId: order._id,
+      },
+      ...[
+        ...new Map(
+          populatedItems
+            .filter((item) => item.instructorId)
+            .map((item) => [item.instructorId.toString(), item])
+        ).values(),
+      ].map((item) => ({
+        notificationId: `purchase_${order._id}_instructor_${item.instructorId}`,
+        userId: item.instructorId,
+        type: 'COURSE_SOLD',
+        title: 'New course purchase',
+        message: `A student purchased "${item.title}".`,
+        actionUrl: '/dashboard/instructor',
+        entityType: 'ORDER',
+        entityId: order._id,
+      })),
+    ];
+    await Notification.insertMany(recipientNotifications).catch((error) =>
+      console.error('[Notification Error] Course purchase:', error.message)
+    );
+
     return {
       success: true,
       order,
@@ -492,5 +668,142 @@ export class PaymentService {
     }
 
     return { received: true, success: true };
+  }
+
+  /**
+   * 4. SECURE RECEIPT RETRIEVAL & PDF DOWNLOAD
+   * Allows authorized student or admin to fetch verified receipt data and PDF.
+   */
+  static async getReceipt({ orderId, requestingUserId, userRole = 'student', generatePdf = false }) {
+    if (!orderId) {
+      const error = new Error('Order ID is required to fetch receipt.');
+      error.status = 400;
+      throw error;
+    }
+
+    const orderQuery = mongoose.isValidObjectId(orderId)
+      ? { $or: [{ _id: orderId }, { orderId }] }
+      : { orderId };
+
+    const order = await Order.findOne(orderQuery);
+    if (!order) {
+      const error = new Error(`Order ${orderId} not found.`);
+      error.status = 404;
+      throw error;
+    }
+
+    // Authorization check
+    const isOwner = requestingUserId && order.userId && order.userId.toString() === requestingUserId.toString();
+    const normalizedRole = (userRole || '').toUpperCase();
+    const isAdmin = ['ADMIN', 'SUPERADMIN', 'SUPER_ADMIN'].includes(normalizedRole);
+
+    if (!isOwner && !isAdmin) {
+      const error = new Error('Access denied: You are not authorized to view this purchase receipt.');
+      error.status = 403;
+      throw error;
+    }
+
+    // Payment verification check
+    if (order.paymentStatus !== PAYMENT_STATUS.SUCCESS && order.orderStatus !== ORDER_STATUS.PAID && order.orderStatus !== ORDER_STATUS.COMPLETED) {
+      const error = new Error('Receipt is only generated for completed and verified purchases.');
+      error.status = 400;
+      throw error;
+    }
+
+    // If receipt snapshot does not exist, lazily generate and persist it
+    if (!order.receiptSnapshot || !order.receiptNumber) {
+      const todayDateStr = new Date(order.createdAt || Date.now()).toISOString().slice(0, 10).replace(/-/g, '');
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const generatedReceiptNumber = order.receiptNumber || `REC-${todayDateStr}-${randomSuffix}`;
+      order.receiptNumber = generatedReceiptNumber;
+
+      let studentName = 'Student';
+      let studentEmail = '';
+      try {
+        const studentUser = await User.findById(order.userId).select('firstName lastName email').lean();
+        if (studentUser) {
+          studentName = `${studentUser.firstName || ''} ${studentUser.lastName || ''}`.trim() || 'Student';
+          studentEmail = studentUser.email || '';
+        }
+      } catch (err) {
+        console.warn('[Receipt] Could not resolve student details:', err.message);
+      }
+
+      const populatedItems = [];
+      const orderItems = (await OrderItem.find({ orderId: order._id })) || [];
+      const itemsToInspect = orderItems.length > 0 ? orderItems : order.items || [];
+
+      for (const item of itemsToInspect) {
+        let instructorName = 'EduTechCRM Faculty';
+        let courseTitle = item.title || 'Course Enrollment';
+        const courseId = item.courseId || (item.productType === PRODUCT_TYPES.COURSE ? item.productId : null);
+        if (courseId) {
+          try {
+            const courseDoc = await Course.findById(courseId).select('title instructorId').lean();
+            if (courseDoc) {
+              if (courseDoc.title) courseTitle = courseDoc.title;
+              if (courseDoc.instructorId) {
+                const instructorDoc = await User.findById(courseDoc.instructorId).select('firstName lastName').lean();
+                if (instructorDoc) {
+                  instructorName = `${instructorDoc.firstName || ''} ${instructorDoc.lastName || ''}`.trim() || instructorName;
+                }
+              }
+            }
+          } catch (cErr) {
+            console.warn('[Receipt] Could not resolve instructor info:', cErr.message);
+          }
+        }
+
+        populatedItems.push({
+          title: courseTitle,
+          instructorName,
+          productType: item.productType || 'COURSE',
+          price: item.price || item.unitPrice || 0,
+          finalPrice: item.finalPrice ?? item.unitPrice ?? item.price ?? 0,
+          productId: item.productId,
+          courseId,
+        });
+      }
+
+      const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || process.env.FRONTEND_URL || 'http://localhost:5173';
+
+      order.receiptSnapshot = {
+        receiptNumber: generatedReceiptNumber,
+        orderId: order.orderId,
+        orderMongoId: order._id,
+        studentId: order.userId,
+        studentName,
+        studentEmail,
+        items: populatedItems,
+        subtotal: order.subtotal || order.finalAmount,
+        discount: order.discount || 0,
+        couponCode: order.couponCode || null,
+        couponDiscount: order.couponDiscount || 0,
+        credit: order.credit || 0,
+        tax: order.tax || 0,
+        finalAmount: order.finalAmount,
+        currency: order.currency || 'INR',
+        provider: order.provider || 'CASHFREE',
+        providerOrderId: order.providerOrderId,
+        providerPaymentId: order.paymentId || 'Verified',
+        paymentMethod: 'CASHFREE',
+        paidAt: order.updatedAt || order.createdAt || new Date(),
+        generatedAt: new Date(),
+        courseUrl: `${appOrigin}/dashboard/student`,
+      };
+
+      await order.save();
+    }
+
+    let pdfBuffer = null;
+    if (generatePdf) {
+      pdfBuffer = await generateReceiptPdfBuffer(order.receiptSnapshot);
+    }
+
+    return {
+      receiptNumber: order.receiptNumber,
+      receipt: order.receiptSnapshot,
+      pdfBuffer,
+    };
   }
 }

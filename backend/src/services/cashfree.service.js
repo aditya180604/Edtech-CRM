@@ -110,7 +110,49 @@ export class CashfreeService {
   }
 
   /**
-   * 4. Verify Cashfree Webhook Signature (HMAC-SHA256)
+   * 4. Get Order Payment Status
+   */
+  static async getOrderPaymentStatus(orderId) {
+    try {
+      const payments = await this.getOrderPayments(orderId);
+      if (!payments || payments.length === 0) {
+        const orderData = await this.getOrder(orderId);
+        if (orderData?.order_status === 'PAID') {
+          return { status: 'SUCCESS', paymentId: orderData.cf_order_id };
+        }
+        return { status: 'PENDING', paymentId: null };
+      }
+
+      const successfulPayment = Array.isArray(payments)
+        ? payments.find((p) => (p.payment_status || '').toUpperCase() === 'SUCCESS')
+        : null;
+
+      if (successfulPayment) {
+        return {
+          status: 'SUCCESS',
+          paymentId: successfulPayment.cf_payment_id?.toString() || String(successfulPayment.payment_id || ''),
+          amount: successfulPayment.payment_amount,
+        };
+      }
+
+      const latest = Array.isArray(payments) ? payments[payments.length - 1] : payments;
+      return {
+        status: (latest?.payment_status || 'PENDING').toUpperCase(),
+        paymentId: latest?.cf_payment_id?.toString() || null,
+        failureReason: latest?.payment_message || null,
+      };
+    } catch (err) {
+      console.warn('[Cashfree getOrderPaymentStatus fallback to getOrder]:', err.message);
+      const orderData = await this.getOrder(orderId);
+      if (orderData?.order_status === 'PAID') {
+        return { status: 'SUCCESS', paymentId: orderData.cf_order_id };
+      }
+      return { status: 'PENDING', paymentId: null };
+    }
+  }
+
+  /**
+   * 5. Verify Cashfree Webhook Signature (HMAC-SHA256)
    */
   static verifyWebhookSignature(signature, rawBody, timestamp) {
     if (!signature || !rawBody || !timestamp) {

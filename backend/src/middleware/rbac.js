@@ -56,3 +56,8 @@ export const authorizeAdmin = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
  * Instructor only authorization guard
  */
 export const authorizeInstructor = authorize(ROLES.INSTRUCTOR);
+
+/**
+ * Flexible authorizeRole alias that accepts array or spread arguments
+ */
+export const authorizeRole = (...roles) => authorize(...roles.flat());

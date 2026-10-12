@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { GraduationCap, Eye, EyeOff, Lock, Mail, User, Phone, ArrowLeft, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { EduLogo } from '../components/ui/EduLogo';
 import {
   validateEmail,
   validateFullName,
@@ -98,7 +99,7 @@ export const RegisterPage: React.FC = () => {
     setLoading(false);
 
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted, result.instructorId);
       navigate(redirectPath);
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');
@@ -106,11 +107,11 @@ export const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/70 flex flex-col justify-center items-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50/70 flex flex-col justify-center items-center py-10 px-4 sm:px-6 lg:px-8 relative selection:bg-[#FA5A36] selection:text-white">
       {/* Back to Home link */}
       <Link
         to="/"
-        className="absolute top-6 left-6 inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
+        className="absolute top-6 left-6 inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-slate-500 hover:text-[#FA5A36] transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>Back to Home</span>
@@ -120,15 +121,10 @@ export const RegisterPage: React.FC = () => {
       <div className="w-full max-w-md bg-white rounded-3xl p-7 sm:p-9 shadow-xl shadow-slate-200/60 border border-slate-100 my-4">
         {/* Brand Logo */}
         <div className="flex flex-col items-center mb-5">
-          <Link to="/" className="flex items-center gap-2 group mb-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900">
-              Edu<span className="text-indigo-600">Tech</span>
-            </span>
-          </Link>
-          <h2 className="text-2xl font-bold text-slate-900">Create Your Account</h2>
+          <div className="mb-2.5">
+            <EduLogo size="lg" to="/" />
+          </div>
+          <h2 className="text-2xl font-semibold text-slate-900">Create Your Account</h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5 text-center">
             Join thousands of learners and instructors today.
           </p>
@@ -147,9 +143,9 @@ export const RegisterPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('STUDENT')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-150 cursor-pointer ${
               selectedRole === 'STUDENT'
-                ? 'bg-white text-indigo-600 shadow-xs'
+                ? 'bg-white text-[#FA5A36] shadow-xs'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -158,9 +154,9 @@ export const RegisterPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('INSTRUCTOR')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${
+            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-150 cursor-pointer ${
               selectedRole === 'INSTRUCTOR'
-                ? 'bg-white text-indigo-600 shadow-xs'
+                ? 'bg-white text-[#FA5A36] shadow-xs'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -190,7 +186,7 @@ export const RegisterPage: React.FC = () => {
                 className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                   fieldErrors.fullName
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                 }`}
               />
             </div>
@@ -222,7 +218,7 @@ export const RegisterPage: React.FC = () => {
                 className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                   fieldErrors.email
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                 }`}
               />
             </div>
@@ -253,7 +249,7 @@ export const RegisterPage: React.FC = () => {
                 className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                   fieldErrors.phone
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                 }`}
               />
             </div>
@@ -285,7 +281,7 @@ export const RegisterPage: React.FC = () => {
                 className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                   fieldErrors.password
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                 }`}
               />
               <button
@@ -370,7 +366,7 @@ export const RegisterPage: React.FC = () => {
                 className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border transition-all focus:outline-none focus:bg-white focus:ring-2 ${
                   fieldErrors.confirmPassword
                     ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
-                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+                    : 'border-slate-200 focus:border-[#FA5A36] focus:ring-[#FA5A36]/10'
                 }`}
               />
               <button
@@ -392,7 +388,7 @@ export const RegisterPage: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-600/25 transition-all mt-2 disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
+            className="w-full py-3 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-sm rounded-xl shadow-xs shadow-[#FA5A36]/25 transition-all mt-2 disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
@@ -446,7 +442,7 @@ export const RegisterPage: React.FC = () => {
         {/* Footer */}
         <p className="text-center text-xs text-slate-500 mt-4">
           Already have an account?{' '}
-          <Link to="/login" className="font-bold text-indigo-600 hover:text-indigo-700">
+          <Link to="/login" className="font-semibold text-[#FA5A36] hover:text-[#E04322] underline underline-offset-2">
             Sign in
           </Link>
         </p>

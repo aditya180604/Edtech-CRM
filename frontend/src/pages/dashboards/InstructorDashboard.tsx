@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import {
   LayoutDashboard,
   BookOpen,
@@ -15,6 +16,7 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  Menu,
   Plus,
   Upload,
   CheckCircle2,
@@ -63,12 +65,15 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { EduLogo } from '../../components/ui/EduLogo';
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
 import { useToast } from '../../context/ToastContext';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
 import { InstructorQuizStudio } from '../../components/quiz/InstructorQuizStudio';
+import { InstructorSlotsManager } from '../../components/slots/InstructorSlotsManager';
+import { InstructorConsultationsManager } from '../../components/consultations/InstructorConsultationsManager';
 
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -76,8 +81,10 @@ export const InstructorDashboard: React.FC = () => {
   const { success, error: toastError, info } = useToast();
 
   // Navigation Sub-tab state
+  const isMobile = useIsMobile(500);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<
-    'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'webinars' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
+    'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'webinars' | 'consultations' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
   >('dashboard');
 
   // Dashboard Telemetry Data
@@ -123,6 +130,7 @@ export const InstructorDashboard: React.FC = () => {
   const [isSubmittingCourse, setIsSubmittingCourse] = useState<boolean>(false);
 
   // Webinars Tab State
+  const [liveSectionTab, setLiveSectionTab] = useState<'webinars' | 'slots' | 'consultations'>('webinars');
   const [webinarsTab, setWebinarsTab] = useState('ALL');
   const [webinarSearch, setWebinarSearch] = useState('');
   const [webinarsList, setWebinarsList] = useState<any[]>([]);
@@ -584,8 +592,7 @@ export const InstructorDashboard: React.FC = () => {
   }, [user, navigate]);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/');
+    await logout('/');
   };
 
   const toggleModuleAccordion = (modId: string) => {
@@ -1420,19 +1427,14 @@ export const InstructorDashboard: React.FC = () => {
       {/* =========================================================================
           LEFT SIDEBAR NAVIGATION (Docked Edge-to-Edge Full Height)
          ========================================================================= */}
-      <aside className="w-64 shrink-0 bg-white border-r border-slate-200 min-h-screen p-5 flex flex-col justify-between sticky top-0 h-screen z-30 shadow-xs">
+      <aside className="hidden min-[501px]:flex w-64 shrink-0 bg-white border-r border-slate-200 min-h-screen p-5 flex-col justify-between sticky top-0 h-screen z-30 shadow-xs">
         <div>
           {/* Logo Badge in Sidebar */}
-          <div className="flex items-center gap-3 px-2 py-2 mb-6 border-b border-slate-100">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center text-white font-bold shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-extrabold text-slate-900 tracking-tight text-lg">
-                Edu<span className="text-indigo-600">Tech</span>
-              </span>
-              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Instructor Studio</p>
-            </div>
+          <div className="px-2 py-2 mb-6 border-b border-slate-100 flex flex-col gap-1.5">
+            <EduLogo size="md" to="/dashboard/instructor" />
+            <span className="self-start px-2 py-0.5 rounded-md bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-semibold uppercase tracking-wider border border-[#FFCCC2]">
+              Instructor Studio
+            </span>
           </div>
 
           {/* Sidebar Navigation Items */}
@@ -1443,6 +1445,7 @@ export const InstructorDashboard: React.FC = () => {
               { id: 'create-course', label: 'Create Course', icon: PlusCircle },
               { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
               { id: 'webinars', label: 'Webinars', icon: Video },
+              { id: 'consultations', label: '1-on-1 Mentorship', icon: Calendar },
               { id: 'students', label: 'Students', icon: Users },
               { id: 'reviews', label: 'Reviews & Ratings', icon: Star },
               { id: 'qa', label: 'Questions (Q&A)', icon: MessageSquare },
@@ -1457,7 +1460,7 @@ export const InstructorDashboard: React.FC = () => {
                   onClick={() => setActiveNav(item.id as any)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/25'
+                      ? 'bg-[#FA5A36] text-white font-bold shadow-md shadow-[#FA5A36]/25'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -1472,7 +1475,7 @@ export const InstructorDashboard: React.FC = () => {
         {/* Quick Profile Capsule & Sign Out at bottom of Sidebar */}
         <div className="pt-4 border-t border-slate-100 space-y-2">
           <div className="flex items-center gap-3 px-2 py-2 bg-slate-50 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
               {instructorName[0] || 'I'}
             </div>
             <div className="overflow-hidden flex-1">
@@ -1491,18 +1494,105 @@ export const InstructorDashboard: React.FC = () => {
         </div>
       </aside>
 
+      {/* Mobile Slide-Over Navigation Drawer (<= 500px) */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 min-[501px]:hidden flex animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileDrawerOpen(false)}
+          />
+          <div className="relative w-72 max-w-[85vw] bg-white h-full p-4 flex flex-col justify-between shadow-2xl z-10 border-r border-slate-200">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                <EduLogo size="sm" to="/dashboard/instructor" />
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <nav className="space-y-1 overflow-y-auto max-h-[calc(100vh-160px)]">
+                {[
+                  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+                  { id: 'courses', label: 'My Courses', icon: BookOpen },
+                  { id: 'create-course', label: 'Create Course', icon: PlusCircle },
+                  { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
+                  { id: 'webinars', label: 'Webinars', icon: Video },
+                  { id: 'consultations', label: '1-on-1 Mentorship', icon: Calendar },
+                  { id: 'students', label: 'Students', icon: Users },
+                  { id: 'reviews', label: 'Reviews & Ratings', icon: Star },
+                  { id: 'qa', label: 'Questions (Q&A)', icon: MessageSquare },
+                  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+                  { id: 'profile', label: 'Profile & Verification', icon: ShieldCheck },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveNav(item.id as any);
+                        setMobileDrawerOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${
+                        isActive ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className="pt-3 border-t border-slate-100">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================================
           MAIN CONTENT AREA (Edge-to-Edge Responsive, No Side Margins)
          ========================================================================= */}
-      <main className="flex-1 p-6 sm:p-8 space-y-6 min-w-0 overflow-y-auto">
-        {/* Top Search & Actions Bar (Image 1 Header) */}
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+      <main className="flex-1 p-3.5 sm:p-6 lg:p-8 pb-24 min-[501px]:pb-8 space-y-4 sm:space-y-6 min-w-0 overflow-y-auto w-full">
+        {/* Mobile Top Header Bar (<= 500px) */}
+        <div className="flex min-[501px]:hidden items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="p-1.5 text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <EduLogo size="sm" to="/dashboard/instructor" />
+          </div>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
+              {instructorName[0] || 'I'}
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Top Search & Actions Bar (> 500px) */}
+        <div className="hidden min-[501px]:flex bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs flex-col sm:flex-row items-center justify-between gap-4">
           <div className="relative w-full sm:w-96">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
               placeholder="Search courses, students, webinars..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all font-medium"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition-all font-medium"
             />
           </div>
 
@@ -1510,7 +1600,7 @@ export const InstructorDashboard: React.FC = () => {
             <NotificationBell />
 
             <div className="flex items-center gap-2.5 pl-3 border-l border-slate-100">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white font-bold text-xs flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
                 {instructorName[0] || 'I'}
               </div>
               <div className="text-left hidden sm:block">
@@ -1527,7 +1617,7 @@ export const InstructorDashboard: React.FC = () => {
         {/* Global Loading Spinner for Initial Data Fetch */}
         {loading && !dashboardData ? (
           <div className="py-32 flex flex-col items-center justify-center space-y-4">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#FA5A36] border-t-transparent"></div>
             <p className="text-xs font-bold text-slate-500">Loading your instructor studio...</p>
           </div>
         ) : (
@@ -1549,7 +1639,7 @@ export const InstructorDashboard: React.FC = () => {
                 <select
                   value={timeframe}
                   onChange={(e) => setTimeframe(e.target.value)}
-                  className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:border-indigo-500"
+                  className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs focus:outline-none focus:border-[#FA5A36]"
                 >
                   <option value="30d">Last 30 Days</option>
                   <option value="90d">Last 90 Days</option>
@@ -1563,72 +1653,72 @@ export const InstructorDashboard: React.FC = () => {
                   className="p-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 shadow-xs cursor-pointer"
                   title="Refresh Data"
                 >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#FA5A36]' : ''}`} />
                 </button>
               </div>
             </div>
 
-            {/* 4 Live Telemetry Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 4 Live Telemetry Metric Cards (2-column on <= 500px) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* 1. My Courses */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-indigo-100 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
-                  <BookOpen className="w-6 h-6" />
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-[#FFCCC2] transition-all">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center mb-2.5 sm:mb-3">
+                  <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <p className="text-2xl font-black text-slate-900">{dashboardData?.metrics.totalCourses ?? 0}</p>
-                <p className="text-xs font-semibold text-slate-500">My Courses</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">{dashboardData?.metrics.totalCourses ?? 0}</p>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">My Courses</p>
                 <button
                   onClick={() => setActiveNav('courses')}
-                  className="mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
+                  className="mt-2 text-[11px] sm:text-xs font-bold text-[#FA5A36] hover:text-[#E04322] inline-flex items-center gap-1 cursor-pointer"
                 >
                   View Courses <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
               {/* 2. Total Topics */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-emerald-100 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
-                  <Layers className="w-6 h-6" />
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-emerald-100 transition-all">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2.5 sm:mb-3">
+                  <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <p className="text-2xl font-black text-slate-900">{dashboardData?.metrics.totalTopics ?? 0}</p>
-                <p className="text-xs font-semibold text-slate-500">Total Topics</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">{dashboardData?.metrics.totalTopics ?? 0}</p>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">Total Topics</p>
                 <button
                   onClick={() => setActiveNav('courses')}
-                  className="mt-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1 cursor-pointer"
+                  className="mt-2 text-[11px] sm:text-xs font-bold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1 cursor-pointer"
                 >
                   View Topics <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
               {/* 3. Total Students */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-blue-100 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-                  <Users className="w-6 h-6" />
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-blue-100 transition-all">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2.5 sm:mb-3">
+                  <Users className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <p className="text-2xl font-black text-slate-900">
+                <p className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
                   {(dashboardData?.metrics.totalStudents ?? 0).toLocaleString()}
                 </p>
-                <p className="text-xs font-semibold text-slate-500">Total Students</p>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">Total Students</p>
                 <button
                   onClick={() => setActiveNav('students')}
-                  className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 cursor-pointer"
+                  className="mt-2 text-[11px] sm:text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 cursor-pointer"
                 >
                   View Students <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
 
               {/* 4. Average Rating */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-amber-100 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
-                  <Star className="w-6 h-6 fill-amber-400" />
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-100 shadow-xs hover:border-amber-100 transition-all">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center mb-2.5 sm:mb-3">
+                  <Star className="w-5 h-5 sm:w-6 sm:h-6 fill-amber-400" />
                 </div>
-                <p className="text-2xl font-black text-slate-900">
+                <p className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
                   {dashboardData?.metrics.averageRating ? dashboardData.metrics.averageRating.toFixed(1) : '0.0'}
                 </p>
-                <p className="text-xs font-semibold text-slate-500">Average Rating</p>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">Average Rating</p>
                 <button
                   onClick={() => setActiveNav('reviews')}
-                  className="mt-2 text-xs font-bold text-amber-600 hover:text-amber-700 inline-flex items-center gap-1 cursor-pointer"
+                  className="mt-2 text-[11px] sm:text-xs font-bold text-amber-600 hover:text-amber-700 inline-flex items-center gap-1 cursor-pointer"
                 >
                   View Reviews <ArrowRight className="w-3 h-3" />
                 </button>
@@ -1664,7 +1754,7 @@ export const InstructorDashboard: React.FC = () => {
                       <div key={item.month} className="flex-1 flex flex-col items-center gap-1.5 group">
                         <div
                           style={{ height: `${heightPercent}%` }}
-                          className="w-full max-w-[20px] bg-indigo-500 group-hover:bg-indigo-600 rounded-t-md transition-all duration-300 relative"
+                          className="w-full max-w-[20px] bg-[#FFF5F2]0 group-hover:bg-[#FA5A36] rounded-t-md transition-all duration-300 relative"
                         >
                           {val > 0 && (
                             <div className="opacity-0 group-hover:opacity-100 absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap pointer-events-none transition-opacity">
@@ -1686,7 +1776,7 @@ export const InstructorDashboard: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-sm mb-3">Students by Course</h3>
                   {dashboardData?.charts.studentsByCourse && dashboardData.charts.studentsByCourse.length > 0 ? (
                     <div className="flex items-center gap-4">
-                      <div className="w-24 h-24 rounded-full border-8 border-indigo-500 border-t-cyan-400 border-r-emerald-400 border-b-amber-400 flex flex-col items-center justify-center shrink-0">
+                      <div className="w-24 h-24 rounded-full border-8 border-[#FA5A36] border-t-cyan-400 border-r-emerald-400 border-b-amber-400 flex flex-col items-center justify-center shrink-0">
                         <span className="text-xs font-black text-slate-900">{dashboardData?.metrics.totalStudents ?? 0}</span>
                         <span className="text-[9px] text-slate-400 font-semibold">Students</span>
                       </div>
@@ -1715,7 +1805,7 @@ export const InstructorDashboard: React.FC = () => {
                       setActiveNav('create-course');
                       setCreateStep(1);
                     }}
-                    className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-4 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Create New Course</span>
@@ -1728,7 +1818,7 @@ export const InstructorDashboard: React.FC = () => {
                       }}
                       className="py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-slate-100 cursor-pointer"
                     >
-                      <Video className="w-3.5 h-3.5 text-indigo-600" />
+                      <Video className="w-3.5 h-3.5 text-[#FA5A36]" />
                       <span>Create Webinar</span>
                     </button>
                     <button
@@ -1755,7 +1845,7 @@ export const InstructorDashboard: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setShowAddModuleModal(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-xs"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl cursor-pointer shadow-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Module</span>
@@ -1826,7 +1916,7 @@ export const InstructorDashboard: React.FC = () => {
                       <h3 className="font-bold text-slate-900 text-sm sm:text-base">Course Details</h3>
                       <button
                         onClick={() => setActiveNav('create-course')}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                        className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] cursor-pointer"
                       >
                         Edit
                       </button>
@@ -1947,7 +2037,7 @@ export const InstructorDashboard: React.FC = () => {
                   setActiveNav('create-course');
                   setCreateStep(1);
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create New Course</span>
@@ -1963,7 +2053,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setCourseStatusTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       courseStatusTab === tab
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -2068,7 +2158,7 @@ export const InstructorDashboard: React.FC = () => {
                       {/* Publishing Fee Status */}
                       <td className="py-3.5 px-4">
                         {c.publishingFeePaid ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF5F2] text-[#E04322] border border-[#FFCCC2]">
                             ₹499 Paid
                           </span>
                         ) : (
@@ -2087,7 +2177,7 @@ export const InstructorDashboard: React.FC = () => {
                               {!c.publishingFeePaid ? (
                                 <button
                                   onClick={() => handleOpenFeeModal(c)}
-                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
+                                  className="px-2.5 py-1 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
                                   title="Pay Cashfree Publishing Fee (₹499) to Unlock Review Submission"
                                 >
                                   <CreditCard className="w-3 h-3" />
@@ -2120,7 +2210,7 @@ export const InstructorDashboard: React.FC = () => {
 
                           <button
                             onClick={() => handleEditCourse(c._id)}
-                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg cursor-pointer transition-colors"
+                            className="px-2.5 py-1 bg-[#FFF5F2] hover:bg-[#FFECE8] text-[#E04322] font-bold rounded-lg cursor-pointer transition-colors"
                             title="Edit Course & Curriculum"
                           >
                             Edit
@@ -2610,7 +2700,7 @@ export const InstructorDashboard: React.FC = () => {
               {createStep === 2 && (
                 <div className="space-y-6 text-xs max-w-4xl mx-auto">
                   <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                    <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                       <BookOpen className="w-5 h-5" />
                     </div>
                     <div>
@@ -2627,7 +2717,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="Provide an in-depth breakdown of the syllabus, real-world case studies, and engineering practices taught..."
                         value={courseFormData.detailedOverview || courseFormData.description}
                         onChange={(e) => setCourseFormData({ ...courseFormData, detailedOverview: e.target.value })}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs leading-relaxed"
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs leading-relaxed"
                       />
                     </div>
 
@@ -2637,7 +2727,7 @@ export const InstructorDashboard: React.FC = () => {
                       {(courseFormData.targetAudience || []).length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-2">
                           {(courseFormData.targetAudience || []).map((aud, idx) => (
-                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 font-bold text-xs flex items-center gap-2 border border-indigo-100">
+                            <span key={idx} className="px-3 py-1.5 rounded-xl bg-[#FFF5F2] text-indigo-800 font-bold text-xs flex items-center gap-2 border border-[#FFCCC2]">
                               <span>• {aud}</span>
                               <button
                                 type="button"
@@ -2665,7 +2755,7 @@ export const InstructorDashboard: React.FC = () => {
                               }
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
@@ -2675,7 +2765,7 @@ export const InstructorDashboard: React.FC = () => {
                               setNewAudienceInput('');
                             }
                           }}
-                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                          className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                         >
                           + Add Audience
                         </button>
@@ -2716,7 +2806,7 @@ export const InstructorDashboard: React.FC = () => {
                               }
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
@@ -2726,7 +2816,7 @@ export const InstructorDashboard: React.FC = () => {
                               setNewGoalInput('');
                             }
                           }}
-                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                          className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                         >
                           + Add Goal
                         </button>
@@ -2741,7 +2831,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="e.g. Hands-on coding exercises, production walkthroughs, architectural diagrams"
                         value={courseFormData.teachingMethodology || ''}
                         onChange={(e) => setCourseFormData({ ...courseFormData, teachingMethodology: e.target.value })}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                       />
                     </div>
 
@@ -2756,7 +2846,7 @@ export const InstructorDashboard: React.FC = () => {
                       {courseFormData.professionalTags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
                           {courseFormData.professionalTags.map((tag, idx) => (
-                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] flex items-center gap-1.5 border border-indigo-100">
+                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-[#FFF5F2] text-[#E04322] font-bold text-[11px] flex items-center gap-1.5 border border-[#FFCCC2]">
                               🏢 {tag}
                               <button
                                 type="button"
@@ -2784,7 +2874,7 @@ export const InstructorDashboard: React.FC = () => {
                               }
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-indigo-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
@@ -2794,7 +2884,7 @@ export const InstructorDashboard: React.FC = () => {
                               setNewProfessionalTagInput('');
                             }
                           }}
-                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                          className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                         >
                           + Add Tag
                         </button>
@@ -2812,12 +2902,12 @@ export const InstructorDashboard: React.FC = () => {
                       {courseFormData.qualifications.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
                           {courseFormData.qualifications.map((q, idx) => (
-                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 font-bold text-[11px] flex items-center gap-1.5 border border-purple-100">
+                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-[#FFF5F2] text-purple-700 font-bold text-[11px] flex items-center gap-1.5 border border-[#FFCCC2]">
                               🎓 {q}
                               <button
                                 type="button"
                                 onClick={() => setCourseFormData({ ...courseFormData, qualifications: courseFormData.qualifications.filter((_, i) => i !== idx) })}
-                                className="text-purple-400 hover:text-red-500 font-bold cursor-pointer"
+                                className="text-slate-400 hover:text-red-500 font-bold cursor-pointer"
                               >
                                 ×
                               </button>
@@ -2840,7 +2930,7 @@ export const InstructorDashboard: React.FC = () => {
                               }
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
@@ -2850,7 +2940,7 @@ export const InstructorDashboard: React.FC = () => {
                               setNewQualificationInput('');
                             }
                           }}
-                          className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                          className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
                         >
                           + Add Credential
                         </button>
@@ -3024,7 +3114,7 @@ export const InstructorDashboard: React.FC = () => {
                 <div className="space-y-6 text-xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                      <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                         <Layers className="w-5 h-5" />
                       </div>
                       <div>
@@ -3116,7 +3206,7 @@ export const InstructorDashboard: React.FC = () => {
                                     <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                                       <span className="font-bold text-slate-900 text-xs">{tIdx + 1}. {top.title}</span>
                                       {top.videoUrl && (
-                                        <span className="px-2 py-0.5 rounded-md bg-purple-50 border border-purple-100 text-purple-700 text-[10px] font-bold inline-flex items-center gap-1">
+                                        <span className="px-2 py-0.5 rounded-md bg-[#FFF5F2] border border-[#FFCCC2] text-purple-700 text-[10px] font-bold inline-flex items-center gap-1">
                                           <Video className="w-3 h-3" /> Video Attached ({top.duration}m)
                                         </span>
                                       )}
@@ -3381,7 +3471,7 @@ export const InstructorDashboard: React.FC = () => {
               {createStep === 6 && (
                 <div className="space-y-6 text-xs max-w-4xl mx-auto">
                   <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-                    <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+                    <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
                       <Laptop className="w-5 h-5" />
                     </div>
                     <div>
@@ -3395,17 +3485,17 @@ export const InstructorDashboard: React.FC = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="font-bold text-slate-800 block">General Prerequisites</label>
-                        <span className="text-[10px] text-purple-600 font-semibold">Multiple items & Enter supported</span>
+                        <span className="text-[10px] text-[#FA5A36] font-semibold">Multiple items & Enter supported</span>
                       </div>
                       {(courseFormData.requirements || []).length > 0 && (
                         <div className="space-y-1.5 mb-2 max-h-48 overflow-y-auto">
                           {(courseFormData.requirements || []).map((req, idx) => (
-                            <div key={idx} className="p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs font-semibold">
-                              <span className="text-purple-950 leading-relaxed">• {req}</span>
+                            <div key={idx} className="p-2.5 bg-[#FFF5F2]/50 rounded-xl border border-[#FFCCC2] flex items-center justify-between text-xs font-semibold">
+                              <span className="text-slate-900 leading-relaxed">• {req}</span>
                               <button
                                 type="button"
                                 onClick={() => setCourseFormData({ ...courseFormData, requirements: (courseFormData.requirements || []).filter((_, i) => i !== idx) })}
-                                className="text-purple-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
+                                className="text-slate-400 hover:text-red-500 font-bold p-1 cursor-pointer shrink-0"
                                 title="Remove prerequisite"
                               >
                                 ✕
@@ -3426,12 +3516,12 @@ export const InstructorDashboard: React.FC = () => {
                               handleAddPrerequisites();
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
                           onClick={handleAddPrerequisites}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
                         >
                           + Add
                         </button>
@@ -3473,12 +3563,12 @@ export const InstructorDashboard: React.FC = () => {
                               handleAddHardwareReqs();
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
                           onClick={handleAddHardwareReqs}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
                         >
                           + Add
                         </button>
@@ -3520,12 +3610,12 @@ export const InstructorDashboard: React.FC = () => {
                               handleAddSoftwareReqs();
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
                           onClick={handleAddSoftwareReqs}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
                         >
                           + Add
                         </button>
@@ -3567,12 +3657,12 @@ export const InstructorDashboard: React.FC = () => {
                               handleAddRequiredAccounts();
                             }
                           }}
-                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none shadow-2xs"
+                          className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <button
                           type="button"
                           onClick={handleAddRequiredAccounts}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
+                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
                         >
                           + Add
                         </button>
@@ -3814,7 +3904,7 @@ export const InstructorDashboard: React.FC = () => {
                               maxEnrollmentLimit: val === '' ? '' : Math.max(1, parseInt(val, 10)),
                             }));
                           }}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 text-base focus:border-indigo-500 focus:outline-none shadow-2xs"
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 text-base focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                         />
                         <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                           Restrict maximum student signups. Once active enrollments hit this limit, the course automatically locks with a <strong>"Sold Out / Course Full"</strong> badge.
@@ -3853,7 +3943,7 @@ export const InstructorDashboard: React.FC = () => {
                       <p className="text-[11px] font-semibold text-slate-500">Atomic Topics</p>
                     </div>
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                      <p className="text-lg font-black text-purple-600">
+                      <p className="text-lg font-black text-[#FA5A36]">
                         {courseFormData.modules.reduce(
                           (acc, m) => acc + m.topics.reduce((tAcc, t) => tAcc + (t.duration || 30), 0),
                           0
@@ -3884,7 +3974,7 @@ export const InstructorDashboard: React.FC = () => {
                         {/* Top Bar: Schedule & Deadline + Actionable Icons */}
                         <div className="p-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 truncate">
-                            <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <Clock className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                             <span className="truncate">{courseFormData.schedule || 'Flexible Self-Paced Schedule'}</span>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -3897,7 +3987,7 @@ export const InstructorDashboard: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-[#FA5A36] hover:border-[#FFCCC2] transition-colors cursor-pointer"
                               title="Bookmark"
                             >
                               <Bookmark className="w-3.5 h-3.5" />
@@ -3929,7 +4019,7 @@ export const InstructorDashboard: React.FC = () => {
                           </div>
 
                           {courseFormData.maxEnrollmentLimit && (
-                            <span className="absolute bottom-3 right-3 px-2.5 py-1 bg-indigo-900/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-lg border border-indigo-500/30">
+                            <span className="absolute bottom-3 right-3 px-2.5 py-1 bg-slate-900/90 backdrop-blur-md text-white text-[10px] font-extrabold rounded-lg border border-[#FA5A36]/30">
                               Seat Limit: {courseFormData.maxEnrollmentLimit}
                             </span>
                           )}
@@ -3973,11 +4063,11 @@ export const InstructorDashboard: React.FC = () => {
                           {/* Education & Qualifications (Optional - Omitted if empty) */}
                           {courseFormData.qualifications && courseFormData.qualifications.length > 0 && (
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              <GraduationCap className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <GraduationCap className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                               {courseFormData.qualifications.map((q, idx) => (
                                 <span
                                   key={idx}
-                                  className="px-2 py-0.5 bg-purple-50 text-purple-800 text-[10px] font-bold rounded-md border border-purple-200/60"
+                                  className="px-2 py-0.5 bg-[#FFF5F2] text-slate-800 text-[10px] font-bold rounded-md border border-[#FFCCC2]/60"
                                 >
                                   {q}
                                 </span>
@@ -3988,7 +4078,7 @@ export const InstructorDashboard: React.FC = () => {
                           {/* Structural Content Badges Row */}
                           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
                             <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2">
-                              <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <BookOpen className="w-3.5 h-3.5 text-[#FA5A36] shrink-0" />
                               <div className="truncate">
                                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Sessions</p>
                                 <p className="text-[11px] font-extrabold text-slate-800 truncate">
@@ -4040,7 +4130,7 @@ export const InstructorDashboard: React.FC = () => {
                         </div>
                         <button
                           type="button"
-                          className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                          className="px-4 py-2 bg-[#FA5A36] text-white font-bold text-xs rounded-xl shadow-xs"
                         >
                           Enroll Now
                         </button>
@@ -4409,22 +4499,67 @@ export const InstructorDashboard: React.FC = () => {
            ========================================================================= */}
         {activeNav === 'webinars' && (
           <div className="bg-white rounded-3xl border border-slate-100 p-6 sm:p-8 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-black text-slate-900">My Webinars</h2>
-                <p className="text-xs text-slate-500 font-medium">Create, manage and host live workshops and sessions.</p>
-              </div>
+            {/* Live Sub-Section Switcher */}
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-4">
               <button
-                onClick={() => setShowCreateWebinarModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm cursor-pointer"
+                type="button"
+                onClick={() => setLiveSectionTab('webinars')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  liveSectionTab === 'webinars'
+                    ? 'bg-[#FA5A36] text-white shadow-2xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
               >
-                <Plus className="w-4 h-4" />
-                <span>Create Webinar</span>
+                Webinars & Workshops
+              </button>
+              <button
+                type="button"
+                onClick={() => setLiveSectionTab('slots')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  liveSectionTab === 'slots'
+                    ? 'bg-[#FA5A36] text-white shadow-2xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Teaching Slots & Availability</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLiveSectionTab('consultations')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  liveSectionTab === 'consultations'
+                    ? 'bg-[#FA5A36] text-white shadow-2xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>1-on-1 Consultations</span>
               </button>
             </div>
 
+            {liveSectionTab === 'slots' ? (
+              <InstructorSlotsManager />
+            ) : liveSectionTab === 'consultations' ? (
+              <InstructorConsultationsManager />
+            ) : (
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">My Webinars</h2>
+                    <p className="text-xs text-slate-500 font-medium">Create, manage and host live workshops and sessions.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateWebinarModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-sm cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create Webinar</span>
+                  </button>
+                </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-purple-700">
                 <p className="text-2xl font-black">{webinarCounts.all ?? 0}</p>
                 <p className="font-semibold text-slate-600">Total Webinars</p>
               </div>
@@ -4454,7 +4589,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setWebinarsTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       webinarsTab === tab
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -4522,7 +4657,7 @@ export const InstructorDashboard: React.FC = () => {
                               Expiry: {new Date(endMs).toLocaleDateString()} {new Date(endMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-indigo-600">
+                          <td className="py-3.5 px-4 font-bold text-[#FA5A36]">
                             {Math.max(w.registrationsCount ?? 0, w.registrations?.length ?? 0, w.attendanceCount ?? 0, w.attendance?.length ?? 0)}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 100}</td>
@@ -4554,7 +4689,7 @@ export const InstructorDashboard: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => navigate(w.meetingUrl)}
-                                  className="text-indigo-600 hover:text-indigo-800 underline font-bold max-w-[140px] truncate block text-left cursor-pointer text-xs"
+                                  className="text-[#FA5A36] hover:text-indigo-800 underline font-bold max-w-[140px] truncate block text-left cursor-pointer text-xs"
                                 >
                                   In-Platform Room ↗
                                 </button>
@@ -4563,7 +4698,7 @@ export const InstructorDashboard: React.FC = () => {
                                   href={w.meetingUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-indigo-600 hover:text-indigo-800 underline font-semibold max-w-[140px] truncate block text-xs"
+                                  className="text-[#FA5A36] hover:text-indigo-800 underline font-semibold max-w-[140px] truncate block text-xs"
                                 >
                                   External Link ↗
                                 </a>
@@ -4584,7 +4719,7 @@ export const InstructorDashboard: React.FC = () => {
                                       window.open(w.meetingUrl, '_blank');
                                     }
                                   }}
-                                  className="px-2.5 py-1 bg-indigo-600 text-white font-extrabold rounded-lg hover:bg-indigo-700 transition cursor-pointer text-[11px] flex items-center gap-1 shadow-xs"
+                                  className="px-2.5 py-1 bg-[#FA5A36] text-white font-extrabold rounded-lg hover:bg-[#E04322] transition cursor-pointer text-[11px] flex items-center gap-1 shadow-xs"
                                 >
                                   <Video className="w-3 h-3" />
                                   <span>Host Room</span>
@@ -4632,6 +4767,17 @@ export const InstructorDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* =========================================================================
+            VIEW: 1-ON-1 MENTORSHIP & CONSULTATIONS
+           ========================================================================= */}
+        {activeNav === 'consultations' && (
+          <div className="space-y-6">
+            <InstructorConsultationsManager />
           </div>
         )}
 
@@ -4654,7 +4800,7 @@ export const InstructorDashboard: React.FC = () => {
                 <p className="text-2xl font-black">{studentCounts.active ?? 0}</p>
                 <p className="font-semibold text-slate-600">Active Students</p>
               </div>
-              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-purple-700">
                 <p className="text-2xl font-black">{studentCounts.completed ?? 0}</p>
                 <p className="font-semibold text-slate-600">Completed</p>
               </div>
@@ -4673,7 +4819,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setStudentsTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       studentsTab === tab
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -4708,7 +4854,7 @@ export const InstructorDashboard: React.FC = () => {
                   {studentsList.map((s) => (
                     <tr key={s._id} className="hover:bg-slate-50">
                       <td className="py-3.5 px-4 flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px]">
+                        <div className="w-7 h-7 rounded-full bg-[#FA5A36] text-white font-bold flex items-center justify-center text-[10px]">
                           {s.name[0]}
                         </div>
                         <div>
@@ -4720,7 +4866,7 @@ export const InstructorDashboard: React.FC = () => {
                       <td className="py-3.5 px-4 w-40">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div style={{ width: `${s.progress}%` }} className="h-full bg-indigo-600 rounded-full" />
+                            <div style={{ width: `${s.progress}%` }} className="h-full bg-[#FA5A36] rounded-full" />
                           </div>
                           <span className="font-bold text-slate-700 text-[11px]">{s.progress}%</span>
                         </div>
@@ -4761,7 +4907,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setQaTab(tab)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                       qaTab === tab
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -4789,7 +4935,7 @@ export const InstructorDashboard: React.FC = () => {
               {questionsList.map((q) => (
                 <div key={q._id} className="p-5 rounded-2xl border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-indigo-600">{q.courseTitle}</span>
+                    <span className="font-bold text-[#FA5A36]">{q.courseTitle}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                       q.status === 'Answered' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
                     }`}>
@@ -4824,7 +4970,7 @@ export const InstructorDashboard: React.FC = () => {
                         </button>
                         <button
                           onClick={() => handleAnswerSubmit(q._id)}
-                          className="px-4 py-1.5 bg-indigo-600 text-white font-bold text-xs rounded-lg cursor-pointer"
+                          className="px-4 py-1.5 bg-[#FA5A36] text-white font-bold text-xs rounded-lg cursor-pointer"
                         >
                           Submit Answer
                         </button>
@@ -4837,7 +4983,7 @@ export const InstructorDashboard: React.FC = () => {
                           setAnsweringQuestionId(q._id);
                           setAnswerText('');
                         }}
-                        className="px-4 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-lg cursor-pointer"
+                        className="px-4 py-1.5 bg-[#FFF5F2] hover:bg-[#FFECE8] text-[#FA5A36] font-bold text-xs rounded-lg cursor-pointer"
                       >
                         {q.status === 'Answered' ? 'Edit Answer' : 'Answer Question'}
                       </button>
@@ -4874,7 +5020,7 @@ export const InstructorDashboard: React.FC = () => {
                 </div>
                 <p className="font-semibold text-slate-600">Average Rating</p>
               </div>
-              <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-[#E04322]">
                 <p className="text-2xl font-black">{reviewsMetrics.totalReviews ?? 0}</p>
                 <p className="font-semibold text-slate-600">Total Reviews</p>
               </div>
@@ -4882,7 +5028,7 @@ export const InstructorDashboard: React.FC = () => {
                 <p className="text-2xl font-black">{reviewsMetrics.verifiedPurchases ?? 0}</p>
                 <p className="font-semibold text-slate-600">Verified Enrollees</p>
               </div>
-              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700 flex flex-col justify-center gap-1">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-purple-700 flex flex-col justify-center gap-1">
                 {[5, 4, 3, 2, 1].map((stars) => {
                   const count = reviewsMetrics.distribution?.[stars] || 0;
                   const pct =
@@ -4910,7 +5056,7 @@ export const InstructorDashboard: React.FC = () => {
                   onClick={() => setReviewRatingFilter(null)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                     reviewRatingFilter === null
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-[#FA5A36] text-white'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
@@ -4923,7 +5069,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setReviewRatingFilter(rating)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 ${
                       reviewRatingFilter === rating
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#FA5A36] text-white'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -4960,12 +5106,12 @@ export const InstructorDashboard: React.FC = () => {
                   <div key={rev._id} className="p-4 rounded-2xl border border-slate-100 hover:border-slate-200 transition bg-slate-50/50 space-y-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-full bg-[#FA5A36] text-white font-bold text-xs flex items-center justify-center">
                           {rev.user?.name?.[0] || 'S'}
                         </div>
                         <div>
                           <p className="font-bold text-xs text-slate-900">{rev.user?.name || 'Student'}</p>
-                          <p className="text-[10px] text-indigo-600 font-semibold">{rev.course?.title || 'Enrolled Course'}</p>
+                          <p className="text-[10px] text-[#FA5A36] font-semibold">{rev.course?.title || 'Enrolled Course'}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -5018,7 +5164,7 @@ export const InstructorDashboard: React.FC = () => {
                     onClick={() => setAnalyticsTimeframe(tf)}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       analyticsTimeframe === tf
-                        ? 'bg-indigo-600 text-white shadow-xs'
+                        ? 'bg-[#FA5A36] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -5030,7 +5176,7 @@ export const InstructorDashboard: React.FC = () => {
 
             {/* Analytics Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-700">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-[#E04322]">
                 <p className="text-2xl font-black">
                   ₹{(
                     (analyticsData?.courses || analyticsData?.coursePerformance)?.length > 0
@@ -5066,7 +5212,7 @@ export const InstructorDashboard: React.FC = () => {
                 </p>
                 <p className="font-semibold text-slate-600">Active Students</p>
               </div>
-              <div className="p-4 rounded-2xl bg-purple-50 text-purple-700">
+              <div className="p-4 rounded-2xl bg-[#FFF5F2] text-purple-700">
                 <p className="text-2xl font-black">
                   {analyticsData?.metrics?.activeCourses ?? analyticsData?.metrics?.totalCourses ?? analyticsData?.activeCourses ?? analyticsData?.totalCourses ?? 0}
                 </p>
@@ -5143,7 +5289,7 @@ export const InstructorDashboard: React.FC = () => {
                 type="button"
                 onClick={handleSaveProfile}
                 disabled={isSavingProfile}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 self-start sm:self-auto"
+                className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 self-start sm:self-auto"
               >
                 {isSavingProfile ? (
                   <>
@@ -5163,7 +5309,7 @@ export const InstructorDashboard: React.FC = () => {
               {/* Left Column: Personal Information & Profile Photo */}
               <div className="lg:col-span-4 space-y-5 bg-slate-50/70 p-6 rounded-3xl border border-slate-200/80">
                 <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  <User className="w-4 h-4 text-indigo-600" />
+                  <User className="w-4 h-4 text-[#FA5A36]" />
                   <span>Personal Information</span>
                 </h3>
 
@@ -5173,10 +5319,10 @@ export const InstructorDashboard: React.FC = () => {
                     <img
                       src={profileData.profilePhoto}
                       alt={profileData.fullName || instructorName}
-                      className="w-24 h-24 rounded-2xl object-cover border-2 border-indigo-200 shadow-md"
+                      className="w-24 h-24 rounded-2xl object-cover border-2 border-[#FFCCC2] shadow-md"
                     />
                   ) : (
-                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white font-black text-3xl flex items-center justify-center shadow-md shadow-indigo-600/20">
+                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-[#FA5A36] via-[#FF6E4A] to-[#FF8A65] text-white font-black text-3xl flex items-center justify-center shadow-md shadow-indigo-600/20">
                       {(profileData.fullName || instructorName)[0] || 'I'}
                     </div>
                   )}
@@ -5190,7 +5336,7 @@ export const InstructorDashboard: React.FC = () => {
                       placeholder="https://.../photo.jpg"
                       value={profileData.profilePhoto || ''}
                       onChange={(e) => setProfileData({ ...profileData, profilePhoto: e.target.value })}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-medium text-slate-800 focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -5202,7 +5348,7 @@ export const InstructorDashboard: React.FC = () => {
                       type="text"
                       value={profileData.fullName || instructorName}
                       onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                     />
                   </div>
 
@@ -5213,7 +5359,7 @@ export const InstructorDashboard: React.FC = () => {
                       placeholder="e.g. Senior Technology Lead & Cloud Architect"
                       value={profileData.headline || ''}
                       onChange={(e) => setProfileData({ ...profileData, headline: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                     />
                   </div>
 
@@ -5234,7 +5380,7 @@ export const InstructorDashboard: React.FC = () => {
                       placeholder="+91 98765 43210"
                       value={profileData.phone || ''}
                       onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                     />
                   </div>
                 </div>
@@ -5243,7 +5389,7 @@ export const InstructorDashboard: React.FC = () => {
               {/* Middle Column: Professional Bio, Experience & Expertise */}
               <div className="lg:col-span-5 space-y-5 bg-slate-50/70 p-6 rounded-3xl border border-slate-200/80">
                 <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-purple-600" />
+                  <BookOpen className="w-4 h-4 text-[#FA5A36]" />
                   <span>Professional Details</span>
                 </h3>
 
@@ -5260,7 +5406,7 @@ export const InstructorDashboard: React.FC = () => {
                       placeholder="Write a compelling bio highlighting your engineering career, teaching philosophy, and specializations..."
                       value={profileData.bio || ''}
                       onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-medium text-slate-800 focus:border-indigo-500 focus:outline-none shadow-2xs leading-relaxed"
+                      className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-medium text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs leading-relaxed"
                     />
                   </div>
 
@@ -5270,7 +5416,7 @@ export const InstructorDashboard: React.FC = () => {
                       {(profileData.expertise || []).map((exp: string, idx: number) => (
                         <span
                           key={idx}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] border border-indigo-100 flex items-center gap-1.5"
+                          className="px-2.5 py-1 rounded-lg bg-[#FFF5F2] text-[#E04322] font-bold text-[11px] border border-[#FFCCC2] flex items-center gap-1.5"
                         >
                           <span>{exp}</span>
                           <button
@@ -5305,7 +5451,7 @@ export const InstructorDashboard: React.FC = () => {
                             }
                           }
                         }}
-                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                       />
                       <button
                         type="button"
@@ -5318,7 +5464,7 @@ export const InstructorDashboard: React.FC = () => {
                             setNewExpertiseInput('');
                           }
                         }}
-                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-2xs cursor-pointer"
+                        className="px-3 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl text-xs shadow-2xs cursor-pointer"
                       >
                         Add
                       </button>
@@ -5333,7 +5479,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="e.g. Tech Solutions Pvt Ltd"
                         value={profileData.currentOrganization || ''}
                         onChange={(e) => setProfileData({ ...profileData, currentOrganization: e.target.value })}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                       />
                     </div>
 
@@ -5344,7 +5490,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="e.g. 8+ Years"
                         value={profileData.experience || ''}
                         onChange={(e) => setProfileData({ ...profileData, experience: e.target.value })}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-indigo-500 focus:outline-none shadow-2xs"
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs"
                       />
                     </div>
                   </div>
@@ -5424,7 +5570,7 @@ export const InstructorDashboard: React.FC = () => {
                     placeholder="e.g. Module 3: Docker & Containers"
                     value={newModuleTitle}
                     onChange={(e) => setNewModuleTitle(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
@@ -5437,7 +5583,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm"
+                    className="px-5 py-2.5 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-sm"
                   >
                     Add Module
                   </button>
@@ -5468,7 +5614,7 @@ export const InstructorDashboard: React.FC = () => {
                     placeholder="e.g. Introduction to JavaScript (Numbering added automatically)"
                     value={wizardModuleTitle}
                     onChange={(e) => setWizardModuleTitle(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 font-medium">
@@ -5484,7 +5630,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer shadow-sm"
+                    className="px-5 py-2.5 bg-[#FA5A36] text-white font-bold rounded-xl cursor-pointer shadow-sm"
                   >
                     Add Module
                   </button>
@@ -5529,7 +5675,7 @@ export const InstructorDashboard: React.FC = () => {
                     placeholder="e.g. Asynchronous JS & Promises"
                     value={wizardTopicForm.title}
                     onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, title: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                   />
                 </div>
 
@@ -5542,23 +5688,23 @@ export const InstructorDashboard: React.FC = () => {
                     placeholder="Comprehensive description of concepts, skills, and outcomes covered in this topic... (Mandatory)"
                     value={wizardTopicForm.description}
                     onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, description: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none leading-relaxed"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:bg-white focus:border-[#FA5A36] focus:outline-none leading-relaxed"
                   />
                 </div>
 
                 {/* 3. Video / Lesson Upload & Embed (Mandatory) */}
-                <div className="p-3.5 bg-purple-50/60 border border-purple-100 rounded-2xl space-y-3">
+                <div className="p-3.5 bg-[#FFF5F2]/60 border border-[#FFCCC2] rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
-                      <Video className="w-4 h-4 text-purple-600" />
+                    <span className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                      <Video className="w-4 h-4 text-[#FA5A36]" />
                       <span>Topic Video / Lesson Content *</span>
                     </span>
-                    <div className="flex rounded-lg bg-white p-0.5 border border-purple-200 text-[10px] font-bold">
+                    <div className="flex rounded-lg bg-white p-0.5 border border-[#FFCCC2] text-[10px] font-bold">
                       <button
                         type="button"
                         onClick={() => setWizardTopicForm({ ...wizardTopicForm, videoSourceTab: 'url' })}
                         className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                          wizardTopicForm.videoSourceTab === 'url' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600'
+                          wizardTopicForm.videoSourceTab === 'url' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600'
                         }`}
                       >
                         Video URL
@@ -5567,7 +5713,7 @@ export const InstructorDashboard: React.FC = () => {
                         type="button"
                         onClick={() => setWizardTopicForm({ ...wizardTopicForm, videoSourceTab: 'device' })}
                         className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                          wizardTopicForm.videoSourceTab === 'device' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600'
+                          wizardTopicForm.videoSourceTab === 'device' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600'
                         }`}
                       >
                         Upload Video
@@ -5584,13 +5730,13 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="https://www.youtube.com/watch?v=... or https://.../video.mp4"
                         value={wizardTopicForm.videoUrl}
                         onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, videoUrl: e.target.value })}
-                        className="w-full p-2.5 bg-white border border-purple-200 rounded-xl text-xs font-medium focus:border-purple-500 focus:outline-none"
+                        className="w-full p-2.5 bg-white border border-[#FFCCC2] rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none"
                       />
                     </div>
                   ) : (
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">Select Video File (.mp4, .webm) *</label>
-                      <label className="flex items-center justify-center gap-2 p-3 bg-white border border-dashed border-purple-300 rounded-xl font-bold text-xs text-purple-700 hover:bg-purple-50 cursor-pointer transition-colors">
+                      <label className="flex items-center justify-center gap-2 p-3 bg-white border border-dashed border-[#FFCCC2] rounded-xl font-bold text-xs text-purple-700 hover:bg-[#FFF5F2] cursor-pointer transition-colors">
                         <Upload className="w-4 h-4" />
                         <span>{wizardTopicForm.videoUrl ? 'Video File Selected ✓' : 'Choose Video from Device...'}</span>
                         <input
@@ -5628,7 +5774,7 @@ export const InstructorDashboard: React.FC = () => {
                       className={`w-full p-2.5 rounded-xl font-bold focus:outline-none transition-all ${
                         wizardTopicForm.isFree
                           ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:border-indigo-500'
+                          : 'bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:border-[#FA5A36]'
                       }`}
                     />
                   </div>
@@ -5640,7 +5786,7 @@ export const InstructorDashboard: React.FC = () => {
                       required
                       value={wizardTopicForm.duration || ''}
                       onChange={(e) => setWizardTopicForm({ ...wizardTopicForm, duration: Math.max(1, Number(e.target.value)) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -5658,7 +5804,7 @@ export const InstructorDashboard: React.FC = () => {
                         price: isChecked ? 0 : (wizardTopicForm.price || 99),
                       });
                     }}
-                    className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                    className="w-4 h-4 text-[#FA5A36] rounded cursor-pointer"
                   />
                   <span>Mark as Free Preview Topic (Resets price to ₹0 and locks price field)</span>
                 </label>
@@ -5676,7 +5822,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-md shadow-indigo-600/20 transition-all"
+                    className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl cursor-pointer shadow-md shadow-indigo-600/20 transition-all"
                   >
                     {editingTopicIndex !== null ? 'Update Topic & Video' : 'Add Topic & Video'}
                   </button>
@@ -5713,7 +5859,7 @@ export const InstructorDashboard: React.FC = () => {
                       placeholder="e.g. Masterclass on Kubernetes Architecture"
                       value={newWebinar.title}
                       onChange={(e) => setNewWebinar({ ...newWebinar, title: e.target.value })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
                   </div>
 
@@ -5759,20 +5905,20 @@ export const InstructorDashboard: React.FC = () => {
                           }
                           setNewWebinar({ ...newWebinar, startTime: startVal, endTime: autoEnd });
                         }}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                       />
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="font-bold text-slate-700 block">Expiry / End Time *</label>
-                        <span className="text-[10px] text-indigo-600 font-semibold">Auto 2h default</span>
+                        <span className="text-[10px] text-[#FA5A36] font-semibold">Auto 2h default</span>
                       </div>
                       <input
                         type="datetime-local"
                         required
                         value={newWebinar.endTime}
                         onChange={(e) => setNewWebinar({ ...newWebinar, endTime: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -5784,20 +5930,20 @@ export const InstructorDashboard: React.FC = () => {
                       min={0}
                       value={newWebinar.price}
                       onChange={(e) => setNewWebinar({ ...newWebinar, price: Math.max(0, Number(e.target.value)) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
 
                     {/* Automatic Platform Fee & Instructor Share Calculation */}
-                    <div className="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1.5 text-xs">
+                    <div className="mt-2 p-3 rounded-xl bg-[#FFF5F2]/60 border border-[#FFCCC2] space-y-1.5 text-xs">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-500 font-medium">Platform Share (10% Fee):</span>
                         <span className="font-bold text-slate-700">
                           {newWebinar.price > 0 ? `₹${Math.round(newWebinar.price * 0.10).toLocaleString('en-IN')}` : '₹0'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-100 font-bold">
-                        <span className="text-indigo-900">Your Net Payout:</span>
-                        <span className="text-indigo-900 font-black">
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[#FFCCC2] font-bold">
+                        <span className="text-slate-900">Your Net Payout:</span>
+                        <span className="text-slate-900 font-black">
                           {newWebinar.price > 0
                             ? `₹${(newWebinar.price - Math.round(newWebinar.price * 0.10)).toLocaleString('en-IN')}`
                             : '₹0 (Free Webinar)'}
@@ -5817,12 +5963,12 @@ export const InstructorDashboard: React.FC = () => {
                         onClick={() => setNewWebinar({ ...newWebinar, meetingType: 'IN_PLATFORM' })}
                         className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
                           newWebinar.meetingType === 'IN_PLATFORM'
-                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            ? 'border-[#FA5A36] bg-[#FFF5F2]/70 text-slate-900 ring-2 ring-[#FA5A36]/20'
                             : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                         }`}
                       >
                         <span className="font-bold flex items-center gap-1.5 text-xs">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          <Sparkles className="w-3.5 h-3.5 text-[#FA5A36]" />
                           In-Platform Live Room
                         </span>
                         <span className="text-[10px] text-slate-500 font-medium leading-tight">
@@ -5834,7 +5980,7 @@ export const InstructorDashboard: React.FC = () => {
                         onClick={() => setNewWebinar({ ...newWebinar, meetingType: 'EXTERNAL' })}
                         className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
                           newWebinar.meetingType === 'EXTERNAL'
-                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            ? 'border-[#FA5A36] bg-[#FFF5F2]/70 text-slate-900 ring-2 ring-[#FA5A36]/20'
                             : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                         }`}
                       >
@@ -5850,9 +5996,9 @@ export const InstructorDashboard: React.FC = () => {
                   </div>
 
                   {newWebinar.meetingType === 'IN_PLATFORM' ? (
-                    <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl space-y-1 text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-indigo-950">
-                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div className="p-3 bg-[#FFF5F2]/80 border border-[#FFCCC2] rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                        <CheckCircle2 className="w-4 h-4 text-[#FA5A36] shrink-0" />
                         <span>Zero Setup Required</span>
                       </div>
                       <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
@@ -5870,7 +6016,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
                         value={newWebinar.meetingUrl}
                         onChange={(e) => setNewWebinar({ ...newWebinar, meetingUrl: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                       />
                       <p className="text-[11px] text-slate-400 mt-1">
                         This link becomes live for registered attendees when the scheduled time arrives.
@@ -5889,7 +6035,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
+                    className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
                   >
                     Schedule Webinar
                   </button>
@@ -5945,7 +6091,7 @@ export const InstructorDashboard: React.FC = () => {
                       required
                       value={editingWebinar.title || ''}
                       onChange={(e) => setEditingWebinar({ ...editingWebinar, title: e.target.value })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
                   </div>
 
@@ -6031,20 +6177,20 @@ export const InstructorDashboard: React.FC = () => {
                       min={0}
                       value={editingWebinar.price ?? 0}
                       onChange={(e) => setEditingWebinar({ ...editingWebinar, price: Math.max(0, Number(e.target.value)) })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                     />
 
                     {/* Automatic Platform Fee & Instructor Share Calculation */}
-                    <div className="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-1.5 text-xs">
+                    <div className="mt-2 p-3 rounded-xl bg-[#FFF5F2]/60 border border-[#FFCCC2] space-y-1.5 text-xs">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-500 font-medium">Platform Share (10% Fee):</span>
                         <span className="font-bold text-slate-700">
                           {(editingWebinar.price ?? 0) > 0 ? `₹${Math.round((editingWebinar.price ?? 0) * 0.10).toLocaleString('en-IN')}` : '₹0'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-100 font-bold">
-                        <span className="text-indigo-900">Your Net Payout:</span>
-                        <span className="text-indigo-900 font-black">
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[#FFCCC2] font-bold">
+                        <span className="text-slate-900">Your Net Payout:</span>
+                        <span className="text-slate-900 font-black">
                           {(editingWebinar.price ?? 0) > 0
                             ? `₹${((editingWebinar.price ?? 0) - Math.round((editingWebinar.price ?? 0) * 0.10)).toLocaleString('en-IN')}`
                             : '₹0 (Free Webinar)'}
@@ -6064,12 +6210,12 @@ export const InstructorDashboard: React.FC = () => {
                         onClick={() => setEditingWebinar({ ...editingWebinar, meetingType: 'IN_PLATFORM' })}
                         className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
                           (editingWebinar.meetingType || 'IN_PLATFORM') === 'IN_PLATFORM'
-                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            ? 'border-[#FA5A36] bg-[#FFF5F2]/70 text-slate-900 ring-2 ring-[#FA5A36]/20'
                             : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                         }`}
                       >
                         <span className="font-bold flex items-center gap-1.5 text-xs">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          <Sparkles className="w-3.5 h-3.5 text-[#FA5A36]" />
                           In-Platform Live Room
                         </span>
                         <span className="text-[10px] text-slate-500 font-medium leading-tight">
@@ -6081,7 +6227,7 @@ export const InstructorDashboard: React.FC = () => {
                         onClick={() => setEditingWebinar({ ...editingWebinar, meetingType: 'EXTERNAL' })}
                         className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col gap-1 ${
                           editingWebinar.meetingType === 'EXTERNAL'
-                            ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20'
+                            ? 'border-[#FA5A36] bg-[#FFF5F2]/70 text-slate-900 ring-2 ring-[#FA5A36]/20'
                             : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                         }`}
                       >
@@ -6097,9 +6243,9 @@ export const InstructorDashboard: React.FC = () => {
                   </div>
 
                   {(editingWebinar.meetingType || 'IN_PLATFORM') === 'IN_PLATFORM' ? (
-                    <div className="p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl space-y-1 text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-indigo-950">
-                        <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div className="p-3 bg-[#FFF5F2]/80 border border-[#FFCCC2] rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                        <CheckCircle2 className="w-4 h-4 text-[#FA5A36] shrink-0" />
                         <span>In-Platform Live Room Active</span>
                       </div>
                       <p className="text-[11px] text-slate-600 font-medium break-all">
@@ -6116,7 +6262,7 @@ export const InstructorDashboard: React.FC = () => {
                         placeholder="https://meet.google.com/xyz or https://zoom.us/j/..."
                         value={editingWebinar.meetingUrl || ''}
                         onChange={(e) => setEditingWebinar({ ...editingWebinar, meetingUrl: e.target.value })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-indigo-500 focus:outline-none"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:border-[#FA5A36] focus:outline-none"
                       />
                     </div>
                   )}
@@ -6135,7 +6281,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
+                    className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-xl cursor-pointer shadow-sm transition text-xs"
                   >
                     Save Changes
                   </button>
@@ -6191,7 +6337,7 @@ export const InstructorDashboard: React.FC = () => {
                     setRejectionModalCourse(null);
                     handleEditCourse(idToEdit);
                   }}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
                 >
                   Edit Course & Curriculum
                 </button>
@@ -6199,6 +6345,48 @@ export const InstructorDashboard: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Mobile Bottom Navigation Dock (<= 500px) */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 h-16 flex items-center justify-around px-2 min-[501px]:hidden shadow-lg">
+          <button
+            type="button"
+            onClick={() => setActiveNav('dashboard')}
+            className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+              activeNav === 'dashboard' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <LayoutDashboard className="w-5 h-5" />
+            <span>Dashboard</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveNav('courses')}
+            className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+              activeNav === 'courses' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span>My Courses</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveNav('students')}
+            className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+              activeNav === 'students' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Users className="w-5 h-5" />
+            <span>Students</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer transition"
+          >
+            <Menu className="w-5 h-5" />
+            <span>More</span>
+          </button>
+        </div>
       </main>
     </div>
   );

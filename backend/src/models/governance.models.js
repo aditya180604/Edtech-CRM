@@ -403,3 +403,58 @@ const infrastructureStatusSchema = new mongoose.Schema(
 export const InfrastructureStatus =
   mongoose.models.InfrastructureStatus || mongoose.model('InfrastructureStatus', infrastructureStatusSchema);
 
+// ==========================================
+// 60. PlatformSetting Model (Collection: platform_settings)
+// Dynamic Platform Business Controls (e.g. Instructor Registration Fee)
+// ==========================================
+const platformSettingSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true, default: 'INSTRUCTOR_REGISTRATION_FEE' },
+    instructorRegistrationFee: { type: Number, required: true, default: 1499 },
+    currency: { type: String, default: 'INR' },
+    isEnabled: { type: Boolean, default: true },
+    title: { type: String, default: 'Instructor Account Activation & Setup Fee' },
+    description: {
+      type: String,
+      default: 'One-time registration and platform access fee for newly registered instructors.',
+    },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  },
+  { collection: 'platform_settings', timestamps: true }
+);
+
+export const PlatformSetting =
+  mongoose.models.PlatformSetting || mongoose.model('PlatformSetting', platformSettingSchema);
+
+// ==========================================
+// 61. InstructorRegistrationFee Model (Collection: instructor_registration_fees)
+// Real-time Ledger of All Instructor Registration Payments
+// ==========================================
+const instructorRegistrationFeeSchema = new mongoose.Schema(
+  {
+    orderId: { type: String, required: true, unique: true, index: true },
+    instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    amount: { type: Number, required: true },
+    currency: { type: String, default: 'INR' },
+    paymentStatus: {
+      type: String,
+      enum: ['PENDING', 'SUCCESS', 'FAILED', 'USER_DROPPED', 'EXPIRED'],
+      default: 'PENDING',
+      index: true,
+    },
+    cashfreePaymentSessionId: { type: String },
+    cashfreeOrderId: { type: String },
+    cashfreePaymentId: { type: String },
+    paymentMethod: { type: String },
+    errorMessage: { type: String },
+    paidAt: { type: Date },
+  },
+  { collection: 'instructor_registration_fees', timestamps: true }
+);
+
+instructorRegistrationFeeSchema.index({ instructorId: 1, createdAt: -1 });
+
+export const InstructorRegistrationFee =
+  mongoose.models.InstructorRegistrationFee ||
+  mongoose.model('InstructorRegistrationFee', instructorRegistrationFeeSchema);
+

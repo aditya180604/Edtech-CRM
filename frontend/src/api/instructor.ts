@@ -43,13 +43,15 @@ export interface InstructorDashboardData {
 
 export const instructorApi = {
   // 1. Dashboard Telemetry
-  async getDashboard(timeframe = '30d'): Promise<{ success: boolean; data: InstructorDashboardData }> {
-    const res = await apiClient.get('/instructor/dashboard', { params: { timeframe } });
+  async getDashboard(timeframe = '30d', instructorId?: string): Promise<{ success: boolean; data: InstructorDashboardData }> {
+    const res = await apiClient.get('/instructor/dashboard', {
+      params: { timeframe, ...(instructorId ? { instructorId } : {}) },
+    });
     return res.data;
   },
 
   // 2. Courses
-  async getCourses(params?: { status?: string; search?: string; category?: string; page?: number; limit?: number }) {
+  async getCourses(params?: { status?: string; search?: string; category?: string; page?: number; limit?: number; instructorId?: string }) {
     const res = await apiClient.get('/instructor/courses', { params });
     return res.data;
   },
@@ -59,8 +61,10 @@ export const instructorApi = {
     return res.data;
   },
 
-  async getCourseById(courseId: string) {
-    const res = await apiClient.get(`/instructor/courses/${courseId}`);
+  async getCourseById(courseId: string, instructorId?: string) {
+    const res = await apiClient.get(`/instructor/courses/${courseId}`, {
+      params: { ...(instructorId ? { instructorId } : {}) },
+    });
     return res.data;
   },
 
@@ -101,7 +105,7 @@ export const instructorApi = {
   },
 
   // 4. Webinars
-  async getWebinars(params?: { status?: string; search?: string }) {
+  async getWebinars(params?: { status?: string; search?: string; instructorId?: string }) {
     const res = await apiClient.get('/instructor/webinars', { params });
     return res.data;
   },
@@ -127,19 +131,19 @@ export const instructorApi = {
   },
 
   // 5. Students
-  async getStudents(params?: { status?: string; courseId?: string; search?: string }) {
+  async getStudents(params?: { status?: string; courseId?: string; search?: string; instructorId?: string }) {
     const res = await apiClient.get('/instructor/students', { params });
     return res.data;
   },
 
   // 6. Reviews & Ratings
-  async getReviews(params?: { rating?: number; search?: string }) {
+  async getReviews(params?: { rating?: number; search?: string; instructorId?: string }) {
     const res = await apiClient.get('/instructor/reviews', { params });
     return res.data;
   },
 
   // 7. Q&A
-  async getQuestions(params?: { status?: string; search?: string }) {
+  async getQuestions(params?: { status?: string; search?: string; instructorId?: string }) {
     const res = await apiClient.get('/instructor/questions', { params });
     return res.data;
   },
@@ -150,14 +154,16 @@ export const instructorApi = {
   },
 
   // 8. Analytics
-  async getAnalytics(params?: { timeframe?: string }) {
+  async getAnalytics(params?: { timeframe?: string; instructorId?: string }) {
     const res = await apiClient.get('/instructor/analytics', { params });
     return res.data;
   },
 
   // 9. Profile & Onboarding
-  async getProfile() {
-    const res = await apiClient.get('/instructor/profile');
+  async getProfile(instructorId?: string) {
+    const res = await apiClient.get('/instructor/profile', {
+      params: { ...(instructorId ? { instructorId } : {}) },
+    });
     return res.data;
   },
 
@@ -171,35 +177,70 @@ export const instructorApi = {
     bio: string;
     expertise: string[];
     currentOrganization?: string;
+    currentJobTitle?: string;
+    isEmployed?: boolean;
     workExperience: string;
     yearsOfExperience: number;
     profilePhoto?: string;
     qualification?: string;
+    linkedinUrl?: string;
+    githubUrl?: string;
+    portfolioUrl?: string;
+    teachingSubjects?: string[];
+    governmentId?: {
+      idType: string;
+      documentUrl: string;
+      fileName?: string;
+      fileType?: string;
+      fileSize?: number;
+    };
   }) {
     const res = await apiClient.post('/instructor/profile/onboarding', payload);
     return res.data;
   },
 
-  // 10. Course Review & Publishing Workflow
+  async uploadDocument(file: File, documentType: string, title?: string) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentType);
+    if (title) formData.append('title', title);
+    const res = await apiClient.post('/instructor/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  async getReadinessReport(): Promise<{
+    success: boolean;
+    data: {
+      isPaid: boolean;
+      isScoreLocked: boolean;
+      score: number | null;
+      scoringRuleVersion: string;
+      breakdown?: {
+        coreProfile: { score: number; maxScore: number; passed: boolean };
+        skillsAndSubjects: { score: number; maxScore: number; passed: boolean };
+        experienceAndBio: { score: number; maxScore: number; passed: boolean };
+        professionalLinks: { score: number; maxScore: number; passed: boolean };
+        governmentId: { score: number; maxScore: number; passed: boolean };
+        supportingDocuments: { score: number; maxScore: number; passed: boolean };
+      };
+      guidance?: {
+        missingItems: string[];
+        recommendations: string[];
+        message?: string;
+      };
+      recommendations?: string[];
+      missingItems?: string[];
+    };
+  }> {
+    const res = await apiClient.get('/instructor/readiness-report');
+    return res.data;
+  },
+
+  // 10. Course Review & Publishing Workflow (No Publishing Fee)
   async submitForReview(courseId: string) {
     const res = await apiClient.post(`/instructor/courses/${courseId}/submit-for-review`);
-    return res.data;
-  },
-
-  async createPublishingFeeOrder(courseId: string, returnUrl?: string) {
-    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/create-order`, { returnUrl });
-    return res.data;
-  },
-
-  async verifyPublishingFee(courseId: string, payload: { cashfreeOrderId?: string; orderId?: string; simulation?: boolean }) {
-    const res = await apiClient.post(`/instructor/courses/${courseId}/publishing-fee/verify`, payload);
-    return res.data;
-  },
-
-  async getPublishingFeeStatus(courseId: string, orderId?: string, simulation?: boolean) {
-    const res = await apiClient.get(`/instructor/courses/${courseId}/publishing-fee/status`, {
-      params: { ...(orderId ? { orderId } : {}), ...(simulation ? { simulation: true } : {}) },
-    });
     return res.data;
   },
 
@@ -207,4 +248,94 @@ export const instructorApi = {
     const res = await apiClient.post(`/instructor/courses/${courseId}/publish`);
     return res.data;
   },
+
+  // 11. One-Time Instructor Account Registration & Activation Fee (Dynamic Rate)
+  async getRegistrationFeeInfo(): Promise<{
+    success: boolean;
+    data: {
+      registrationFeePaid: boolean;
+      feeAmount: number;
+      currency: string;
+      isEnabled: boolean;
+      title: string;
+      description: string;
+      paidAt?: string;
+      orderId?: string;
+    };
+  }> {
+    const res = await apiClient.get('/instructor/registration-fee/info');
+    return res.data;
+  },
+
+  async createRegistrationFeeOrder(returnUrl?: string): Promise<{
+    success: boolean;
+    data?: {
+      orderId?: string;
+      paymentSessionId?: string;
+      amount?: number;
+      currency?: string;
+      alreadyPaid?: boolean;
+      paymentStatus?: string;
+      title?: string;
+    };
+    orderId?: string;
+    paymentSessionId?: string;
+    amount?: number;
+    currency?: string;
+    alreadyPaid?: boolean;
+    paymentStatus?: string;
+    title?: string;
+    message?: string;
+  }> {
+    const res = await apiClient.post('/instructor/registration-fee/create-order', { returnUrl });
+    const payload = res.data?.data || res.data || {};
+    return {
+      success: res.data?.success ?? true,
+      data: payload,
+      orderId: payload.orderId || res.data?.orderId,
+      paymentSessionId: payload.paymentSessionId || res.data?.paymentSessionId,
+      amount: payload.amount || res.data?.amount,
+      currency: payload.currency || res.data?.currency,
+      alreadyPaid: payload.alreadyPaid || res.data?.alreadyPaid,
+      paymentStatus: payload.paymentStatus || res.data?.paymentStatus,
+      title: payload.title || res.data?.title,
+      message: res.data?.message || payload.message,
+    };
+  },
+
+  async verifyRegistrationFee(payload: { orderId?: string; cashfreeOrderId?: string }): Promise<{
+    success: boolean;
+    data?: any;
+    paymentStatus: string;
+    amount?: number;
+    orderId?: string;
+    paymentId?: string;
+    message?: string;
+  }> {
+    const res = await apiClient.post('/instructor/registration-fee/verify', payload);
+    const data = res.data?.data || res.data || {};
+    return {
+      success: res.data?.success ?? true,
+      data,
+      paymentStatus: data.paymentStatus || res.data?.paymentStatus,
+      amount: data.amount || res.data?.amount,
+      orderId: data.orderId || res.data?.orderId,
+      paymentId: data.paymentId || res.data?.paymentId,
+      message: res.data?.message || data.message,
+    };
+  },
+
+  // Deprecated publishing fee helper methods (kept for backwards compatibility)
+  async createPublishingFeeOrder(courseId: string, returnUrl?: string): Promise<any> {
+    return { success: true, alreadyPaid: true, amount: 0, message: 'Publishing fee is not required.', data: { alreadyPaid: true, amount: 0 } };
+  },
+
+  async verifyPublishingFee(courseId: string, payload: { cashfreeOrderId?: string; orderId?: string; simulation?: boolean }): Promise<any> {
+    return { success: true, message: 'Publishing fee waived.', data: { paymentStatus: 'SUCCESS', amount: 0 } };
+  },
+
+  async getPublishingFeeStatus(courseId: string, orderId?: string, simulation?: boolean): Promise<any> {
+    return { success: true, message: 'Publishing fee waived.', data: { paymentStatus: 'SUCCESS', amount: 0 } };
+  },
 };
+

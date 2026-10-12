@@ -58,4 +58,22 @@ export const paymentsApi = {
       redirectTarget,
     });
   },
+
+  /**
+   * 3. Download official PDF receipt
+   */
+  async downloadReceiptPdf(orderId: string): Promise<Blob> {
+    const response = await apiClient.get(`/payments/${orderId}/receipt?format=pdf`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  /**
+   * 4. Get receipt metadata
+   */
+  async getReceiptData(orderId: string): Promise<{ success: boolean; data: any }> {
+    const response = await apiClient.get(`/payments/${orderId}/receipt`);
+    return response.data;
+  },
 };

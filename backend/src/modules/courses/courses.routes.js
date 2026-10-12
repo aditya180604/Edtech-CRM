@@ -12,8 +12,11 @@ router.get('/:slug', optionalAuthenticate, CoursesController.getDetails);
 
 // Classroom Interactive Routes
 router.post('/:slug/progress', authenticate, CoursesController.updateProgress);
+router.get('/:slug/reviews', optionalAuthenticate, CoursesController.getCourseReviews);
 router.get('/:slug/review/my-review', authenticate, CoursesController.getMyReview);
 router.post('/:slug/review', authenticate, CoursesController.submitReview);
+router.post('/reviews/:reviewId/vote', authenticate, CoursesController.voteHelpfulReview);
+router.post('/reviews/:reviewId/flag', authenticate, CoursesController.flagReview);
 router.get('/:slug/qa', optionalAuthenticate, CoursesController.getQuestions);
 router.post('/:slug/qa', authenticate, CoursesController.askQuestion);
 router.post('/:slug/qa/:questionId/answer', authenticate, CoursesController.answerQuestion);

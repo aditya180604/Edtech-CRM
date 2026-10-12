@@ -4,12 +4,19 @@ export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICA
 
 export interface User {
   _id: string;
+  id?: string;
+  instructorId?: string;
   firstName?: string;
   lastName?: string;
+  name?: string;
   email: string;
   phone?: string;
   profilePhoto?: string;
   headline?: string;
+  bio?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
   institution?: string;
   qualification?: string;
   graduationYear?: number;
@@ -20,6 +27,7 @@ export interface User {
   status: UserStatus;
   emailVerified: boolean;
   isProfileCompleted?: boolean;
+  instructorProfile?: any;
   skills?: string[];
   interests?: string[];
   createdAt: string;

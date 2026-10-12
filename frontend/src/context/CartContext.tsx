@@ -306,10 +306,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useCart = () => {
+export const useCart = (): CartContextType => {
   const context = useContext(CartContext);
   if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
+    return {
+      items: [],
+      itemCount: 0,
+      subtotal: 0,
+      discount: 0,
+      credit: 0,
+      total: 0,
+      currency: 'INR',
+      appliedCoupon: null,
+      quote: null,
+      loading: false,
+      isValidatingCoupon: false,
+      addToCart: async () => ({ success: false, message: 'Cart initializing...' }),
+      removeFromCart: async () => {},
+      clearCart: async () => {},
+      isInCart: () => false,
+      applyCoupon: async () => ({ success: false, message: 'Cart initializing...' }),
+      removeCoupon: async () => {},
+      refreshQuote: async () => {},
+    };
   }
   return context;
 };

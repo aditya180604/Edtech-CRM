@@ -99,15 +99,15 @@ export const SkillPassportPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between selection:bg-indigo-500 selection:text-white font-sans">
+    <div className="min-h-screen bg-slate-50/70 text-slate-800 flex flex-col justify-between selection:bg-[#FA5A36] selection:text-white font-sans">
       <Navbar />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Top Breadcrumb & Share Navigation */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => navigate('/dashboard/student')}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition cursor-pointer"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Dashboard</span>
@@ -115,7 +115,7 @@ export const SkillPassportPage: React.FC = () => {
 
           <button
             onClick={handleCopyLink}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition cursor-pointer"
           >
             {copied ? (
               <>
@@ -124,7 +124,7 @@ export const SkillPassportPage: React.FC = () => {
               </>
             ) : (
               <>
-                <Share2 className="w-3.5 h-3.5 text-indigo-600" />
+                <Share2 className="w-3.5 h-3.5 text-[#FA5A36]" />
                 <span>Share Passport</span>
               </>
             )}
@@ -132,20 +132,20 @@ export const SkillPassportPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-xs text-center space-y-4">
-            <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm font-bold text-slate-600">Verifying and retrieving authenticated Skill Passport...</p>
+          <div className="bg-white rounded-2xl p-12 border border-slate-200/80 shadow-xs text-center space-y-4">
+            <div className="w-12 h-12 border-4 border-[#FA5A36] border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm font-semibold text-slate-600">Verifying and retrieving authenticated Skill Passport...</p>
           </div>
         ) : error || !passport ? (
-          <div className="bg-white rounded-3xl p-12 border border-rose-100 shadow-xs text-center space-y-4">
+          <div className="bg-white rounded-2xl p-12 border border-rose-100 shadow-xs text-center space-y-4">
             <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
               <ShieldCheck className="w-8 h-8" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900">Skill Passport Unavailable</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Skill Passport Unavailable</h2>
             <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">{error || 'Passport could not be found.'}</p>
             <button
               onClick={() => navigate('/dashboard/student')}
-              className="px-6 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+              className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#e04825] text-white font-semibold text-xs rounded-xl shadow-xs cursor-pointer"
             >
               Return to Student Dashboard
             </button>
@@ -153,10 +153,10 @@ export const SkillPassportPage: React.FC = () => {
         ) : (
           <div className="space-y-8">
             {/* Header Passport Credential Card */}
-            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-10 text-white border border-indigo-900/50 shadow-xl relative overflow-hidden">
+            <div className="bg-gradient-to-br from-slate-950 via-stone-950 to-slate-900 rounded-2xl p-6 sm:p-10 text-white border border-orange-500/30 shadow-xl relative overflow-hidden">
               {/* Decorative Background Elements */}
-              <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-96 h-96 bg-[#FA5A36]/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
@@ -166,10 +166,10 @@ export const SkillPassportPage: React.FC = () => {
                       <img
                         src={normalizeImageUrl(passport.profilePhoto) || ''}
                         alt={passport.fullName}
-                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-indigo-400/60 shadow-lg ring-4 ring-indigo-500/20"
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-orange-400/60 shadow-lg ring-4 ring-orange-500/20"
                       />
                     ) : (
-                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 font-black text-3xl flex items-center justify-center border-2 border-indigo-400/60 shadow-lg ring-4 ring-indigo-500/20">
+                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-tr from-[#FA5A36] to-amber-600 font-semibold text-3xl flex items-center justify-center border-2 border-orange-400/60 shadow-lg ring-4 ring-orange-500/20">
                         {passport.firstName[0]?.toUpperCase() || 'S'}
                       </div>
                     )}
@@ -180,20 +180,20 @@ export const SkillPassportPage: React.FC = () => {
 
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5">
                         <ShieldCheck className="w-3.5 h-3.5" />
                         Verified Credential
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono font-bold">
+                      <span className="px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono font-semibold">
                         {passport.studentId}
                       </span>
                     </div>
 
-                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                    <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
                       {passport.fullName}
                     </h1>
 
-                    <p className="text-sm font-semibold text-indigo-200">
+                    <p className="text-sm font-medium text-[#FFCCC2]">
                       {passport.headline}
                     </p>
 
@@ -217,14 +217,14 @@ export const SkillPassportPage: React.FC = () => {
                 </div>
 
                 {/* Right QR / Authenticity Stamp */}
-                <div className="bg-slate-900/80 border border-indigo-500/30 rounded-2xl p-4 text-center shrink-0 w-full md:w-auto">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-2">
+                <div className="bg-slate-900/80 border border-orange-500/30 rounded-2xl p-4 text-center shrink-0 w-full md:w-auto">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/20 text-[#FA5A36] flex items-center justify-center mx-auto mb-2">
                     <Award className="w-5 h-5" />
                   </div>
-                  <span className="text-[10px] font-black tracking-widest uppercase text-indigo-300 block">
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-[#FFCCC2] block">
                     EDUTECH LMS
                   </span>
-                  <span className="text-[11px] font-bold text-slate-300">
+                  <span className="text-[11px] font-semibold text-slate-300">
                     Official Recruiter Passport
                   </span>
                   <p className="text-[10px] text-slate-400 mt-1">Verified via Academic Engine</p>
@@ -234,37 +234,37 @@ export const SkillPassportPage: React.FC = () => {
               {/* Quick Metrics Bar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8 pt-6 border-t border-slate-800">
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Learning Hours</span>
-                  <span className="text-xl font-black text-white">{passport.totalLearningHours} hrs</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">Learning Hours</span>
+                  <span className="text-xl font-semibold text-white">{passport.totalLearningHours} hrs</span>
                 </div>
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Lessons Done</span>
-                  <span className="text-xl font-black text-white">{passport.completedLessonsCount}</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">Lessons Done</span>
+                  <span className="text-xl font-semibold text-white">{passport.completedLessonsCount}</span>
                 </div>
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Completed Courses</span>
-                  <span className="text-xl font-black text-white">{passport.completedCoursesCount}</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">Completed Courses</span>
+                  <span className="text-xl font-semibold text-white">{passport.completedCoursesCount}</span>
                 </div>
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Verified Skills</span>
-                  <span className="text-xl font-black text-emerald-400">{passport.skills.length}</span>
+                  <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block">Verified Skills</span>
+                  <span className="text-xl font-semibold text-emerald-400">{passport.skills.length}</span>
                 </div>
               </div>
             </div>
 
             {/* Section: Verified Skills Matrix */}
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-[#FA5A36]" />
                     Verified Skill Matrix
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Authentic competencies calculated dynamically from completed course lessons and topics.
                   </p>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-100 self-start sm:self-auto">
+                <span className="px-3 py-1 rounded-full bg-orange-50 text-[#FA5A36] text-xs font-semibold border border-orange-100 self-start sm:self-auto">
                   {passport.skills.length} Competencies
                 </span>
               </div>
@@ -274,23 +274,23 @@ export const SkillPassportPage: React.FC = () => {
                   {passport.skills.map((skill, index) => (
                     <div
                       key={index}
-                      className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2 hover:border-indigo-100 transition"
+                      className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/70 space-y-2 hover:border-orange-200 transition"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div
                             className={`w-2 h-2 rounded-full ${
-                              skill.verified ? 'bg-indigo-600' : 'bg-amber-500'
+                              skill.verified ? 'bg-[#FA5A36]' : 'bg-amber-500'
                             }`}
                           />
-                          <span className="text-xs font-bold text-slate-900">{skill.name}</span>
+                          <span className="text-xs font-semibold text-slate-900">{skill.name}</span>
                         </div>
-                        <span className="text-xs font-black text-indigo-600">{skill.proficiency}%</span>
+                        <span className="text-xs font-semibold text-[#FA5A36]">{skill.proficiency}%</span>
                       </div>
                       <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-700 ${
-                            skill.verified ? 'bg-indigo-600' : 'bg-amber-500'
+                            skill.verified ? 'bg-[#FA5A36]' : 'bg-amber-500'
                           }`}
                           style={{ width: `${Math.max(8, skill.proficiency)}%` }}
                         />
@@ -304,11 +304,11 @@ export const SkillPassportPage: React.FC = () => {
                           <span>Curriculum Module</span>
                         )}
                         {skill.verified ? (
-                          <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <span className="text-emerald-600 font-semibold flex items-center gap-1">
                             <Check className="w-3 h-3" /> Authenticated
                           </span>
                         ) : (
-                          <span className="text-amber-600 font-bold flex items-center gap-1">
+                          <span className="text-amber-600 font-semibold flex items-center gap-1">
                             <Clock className="w-3 h-3" /> In Progress
                           </span>
                         )}
@@ -319,7 +319,7 @@ export const SkillPassportPage: React.FC = () => {
               ) : (
                 <div className="text-center py-12 space-y-2 text-slate-400">
                   <Sparkles className="w-8 h-8 text-slate-300 mx-auto" />
-                  <h3 className="text-sm font-bold text-slate-700">No Course Skills Acquired Yet</h3>
+                  <h3 className="text-sm font-semibold text-slate-700">No Course Skills Acquired Yet</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
                     When this student purchases courses and completes lessons, authenticated competencies and skill mastery will appear here in real-time.
                   </p>
@@ -328,18 +328,18 @@ export const SkillPassportPage: React.FC = () => {
             </div>
 
             {/* Section: Enrolled & Completed Courses */}
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
               <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div>
-                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    <BookOpen className="w-5 h-5 text-indigo-600" />
+                  <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-[#FA5A36]" />
                     Courses & Credentials in Progress
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Programs enrolled and verified under this student credential.
                   </p>
                 </div>
-                <span className="text-xs font-bold text-slate-400">
+                <span className="text-xs font-semibold text-slate-400">
                   {passport.enrolledCourses.length} Enrolled
                 </span>
               </div>
@@ -349,7 +349,7 @@ export const SkillPassportPage: React.FC = () => {
                   {passport.enrolledCourses.map((course) => (
                     <div
                       key={course.id}
-                      className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100 flex items-center gap-4 hover:border-indigo-100 transition"
+                      className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/70 flex items-center gap-4 hover:border-orange-200 transition"
                     >
                       {course.thumbnail ? (
                         <img
@@ -358,17 +358,17 @@ export const SkillPassportPage: React.FC = () => {
                           className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200"
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <div className="w-16 h-16 rounded-xl bg-orange-100 text-[#FA5A36] flex items-center justify-center shrink-0">
                           <BookOpen className="w-7 h-7" />
                         </div>
                       )}
                       <div className="truncate">
-                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                        <span className="text-[10px] font-semibold text-[#FA5A36] uppercase tracking-wider">
                           {course.category || 'Professional Track'}
                         </span>
-                        <h4 className="font-extrabold text-slate-900 text-xs truncate mt-0.5">{course.title}</h4>
+                        <h4 className="font-semibold text-slate-900 text-xs truncate mt-0.5">{course.title}</h4>
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 mt-1">
-                          <ShieldCheck className="w-3 h-3" /> Enrolled & Verified
+                          <ShieldCheck className="w-3.5 h-3.5" /> Enrolled & Verified
                         </span>
                       </div>
                     </div>
@@ -382,16 +382,16 @@ export const SkillPassportPage: React.FC = () => {
             </div>
 
             {/* Recruiter Verification Bottom Note */}
-            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-600 text-xs">
+            <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-600 text-xs">
               <div className="flex items-center gap-3 text-center sm:text-left">
-                <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
+                <ShieldCheck className="w-5 h-5 text-[#FA5A36] shrink-0" />
                 <span>
                   This public Skill Passport is cryptographically tied to student identity <strong className="text-slate-900">{passport.studentId}</strong> on the EduTech platform.
                 </span>
               </div>
               <button
                 onClick={handleCopyLink}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shrink-0 cursor-pointer text-xs"
+                className="px-4 py-2 bg-[#FA5A36] hover:bg-[#e04825] text-white font-semibold rounded-xl shrink-0 cursor-pointer text-xs"
               >
                 Copy Link to Share
               </button>

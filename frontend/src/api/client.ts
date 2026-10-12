@@ -28,12 +28,61 @@ export const apiClient = axios.create({
   withCredentials: true, // required for HTTP-only refresh cookies
 });
 
-// Request Interceptor: Attach Access Token
+let activeInstructorOverride: string | null = null;
+
+if (typeof window !== 'undefined') {
+  try {
+    activeInstructorOverride = sessionStorage.getItem('edtech_instructor_override') || null;
+  } catch (e) {
+    // ignore
+  }
+}
+
+export const setInstructorOverride = (id: string | null) => {
+  activeInstructorOverride = id;
+  if (typeof window !== 'undefined') {
+    try {
+      if (id && id.trim()) {
+        sessionStorage.setItem('edtech_instructor_override', id.trim());
+      } else {
+        sessionStorage.removeItem('edtech_instructor_override');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+};
+
+export const getInstructorOverride = (): string | null => {
+  if (activeInstructorOverride) return activeInstructorOverride;
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = sessionStorage.getItem('edtech_instructor_override');
+      if (stored) {
+        activeInstructorOverride = stored;
+        return stored;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return null;
+};
+
+// Request Interceptor: Attach Access Token and Optional Instructor Override Header
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const override = getInstructorOverride();
+    if (override && config.headers) {
+      const url = config.url || '';
+      const isRelevantRoute = url.includes('/instructor') || url.includes('/super-admin');
+      if (isRelevantRoute) {
+        config.headers['x-instructor-id'] = override;
+      }
     }
     return config;
   },

@@ -88,6 +88,13 @@ export class SuperAdminController {
     return ApiResponse.success(res, data, 'Registered instructors list retrieved.');
   });
 
+  static getInstructorDashboard = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { timeframe } = req.query;
+    const data = await SuperAdminService.getInstructorDashboard(id, timeframe);
+    return ApiResponse.success(res, data, 'Instructor dashboard telemetry retrieved for Super Admin.');
+  });
+
   static createCourseOnBehalf = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.createCourseOnBehalf(req.user.userId, req.body);
     return ApiResponse.created(res, data, 'Course created and published on behalf of instructor.');
@@ -257,10 +264,56 @@ export class SuperAdminController {
     return ApiResponse.success(res, data, 'Instructor verification application rejected.');
   });
 
-  // 12. Platform Fees Ledger
+  static requestChangesInstructorVerification = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { feedback, reason } = req.body;
+    const data = await SuperAdminService.requestChangesInstructorVerification(id, {
+      feedback: feedback || reason,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Changes requested and notification sent to instructor.');
+  });
+
+  static getInstructorDocument = asyncHandler(async (req, res) => {
+    const { id, docId } = req.params;
+    const { stream, mimeType, fileName } = await SuperAdminService.getInstructorDocumentStream(id, docId);
+
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName || 'document'}"`);
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+
+    stream.pipe(res);
+  });
+
+  // 12. Instructor Registration Fee Management & Audit Ledger
+  static getRegistrationFeeSettings = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getRegistrationFeeSettings();
+    return ApiResponse.success(res, data, 'Registration fee settings retrieved successfully.');
+  });
+
+  static updateRegistrationFeeSettings = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.updateRegistrationFeeSettings({
+      ...req.body,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.success(res, data, 'Instructor registration fee settings updated successfully.');
+  });
+
+  static getRegistrationFees = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.getRegistrationFeesLedger(req.query);
+    return ApiResponse.success(res, data, 'Instructor registration fees ledger retrieved successfully.');
+  });
+
+  // Backward compatibility alias for platform fees
   static getPlatformFees = asyncHandler(async (req, res) => {
-    const { PaymentsService } = await import('../payments/payments.service.js');
-    const data = await PaymentsService.getPlatformFeesOverview(req.query);
+    const data = await SuperAdminService.getRegistrationFeesLedger(req.query);
     return ApiResponse.success(res, data, 'Platform fees overview retrieved successfully.');
+  });
+
+  static verifyRegistrationFeeOrder = asyncHandler(async (req, res) => {
+    const { orderId } = req.params;
+    const { forceMarkPaid } = req.body || {};
+    const data = await SuperAdminService.verifyRegistrationFeeOrder(orderId, forceMarkPaid);
+    return ApiResponse.success(res, data, data.message || 'Registration fee verified successfully.');
   });
 }

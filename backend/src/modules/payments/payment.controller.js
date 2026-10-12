@@ -57,4 +57,51 @@ export class PaymentController {
       });
     }
   }
+
+  /**
+   * GET /api/v1/payments/:orderId/receipt
+   * Query params: ?format=pdf (optional)
+   * Authenticated endpoint for retrieving verified purchase receipt / downloading PDF
+   */
+  static async getReceipt(req, res) {
+    try {
+      const { orderId } = req.params;
+      const requestingUserId = req.user?._id;
+      const userRole = req.user?.role || 'student';
+      const isPdfRequested = req.query.format === 'pdf' || req.headers.accept?.includes('application/pdf');
+
+      const result = await PaymentService.getReceipt({
+        orderId,
+        requestingUserId,
+        userRole,
+        generatePdf: isPdfRequested,
+      });
+
+      if (isPdfRequested && result.pdfBuffer) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="Receipt-${result.receiptNumber || orderId}.pdf"`
+        );
+        return res.send(result.pdfBuffer);
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          receiptNumber: result.receiptNumber,
+          receipt: result.receipt,
+        },
+      });
+    } catch (error) {
+      const statusCode = error.status || 400;
+      return res.status(statusCode).json({
+        success: false,
+        error: {
+          code: error.code || 'RECEIPT_FETCH_ERROR',
+          message: error.message,
+        },
+      });
+    }
+  }
 }

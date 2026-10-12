@@ -5,6 +5,7 @@ import { Navbar } from '../../components/Navbar';
 import { Footer } from '../../components/Footer';
 import { getStudentDashboard, toggleWishlist } from '../../api/studentDashboard';
 import { authApi } from '../../api/auth';
+import { coursesApi } from '../../api/courses';
 import type { StudentDashboardData, ActiveEnrolledCourse } from '../../types/studentDashboard';
 import { DashboardSkeleton } from '../../components/dashboard/DashboardSkeleton';
 import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
@@ -52,10 +53,17 @@ import {
   Globe,
   BellRing,
   Building,
+  Camera,
+  Upload,
+  Trash2,
+  MapPin,
+  Briefcase,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { quizzesApi, type QuizItem } from '../../api/quizzes';
 import { QuizPlayerModal } from '../../components/quiz/QuizPlayerModal';
+import { consultationsApi, type ConsultationBooking } from '../../api/consultations';
+import { useToast } from '../../context/ToastContext';
 
 type StudentTab =
   | 'dashboard'
@@ -113,6 +121,16 @@ export const StudentDashboard: React.FC = () => {
   const [studentQuizzes, setStudentQuizzes] = useState<QuizItem[]>([]);
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
 
+  // 1-on-1 Consultation State
+  const { success, error: toastError } = useToast();
+  const [studentConsultations, setStudentConsultations] = useState<ConsultationBooking[]>([]);
+  const [liveSubTab, setLiveSubTab] = useState<'webinars' | 'consultations'>('webinars');
+  const [consultationNow, setConsultationNow] = useState(Date.now());
+  const [consultationReviewDrafts, setConsultationReviewDrafts] = useState<
+    Record<string, { rating: number; review: string }>
+  >({});
+  const [submittingReviewId, setSubmittingReviewId] = useState<string | null>(null);
+
   // Course Q&A State
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
   const [selectedCourseForQuestion, setSelectedCourseForQuestion] = useState('');
@@ -123,13 +141,64 @@ export const StudentDashboard: React.FC = () => {
   const [questionsList, setQuestionsList] = useState<QnAQuestion[]>([]);
   const [replyInputMap, setReplyInputMap] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setConsultationNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const handleSubmitConsultationReview = async (bookingId: string) => {
+    const draft = consultationReviewDrafts[bookingId];
+    if (!draft || draft.rating < 1 || !draft.review.trim()) {
+      toastError('Review required', 'Choose a star rating and write a short review.');
+      return;
+    }
+
+    try {
+      setSubmittingReviewId(bookingId);
+      const consultationReview = await consultationsApi.submitReview(bookingId, {
+        rating: draft.rating,
+        review: draft.review.trim(),
+      });
+      setStudentConsultations((current) =>
+        current.map((booking) =>
+          booking.id === bookingId ? { ...booking, consultationReview } : booking
+        )
+      );
+      success('Review submitted', 'Thank you for sharing feedback with your mentor.');
+    } catch (err: any) {
+      toastError(
+        'Could not submit review',
+        err.response?.data?.message || 'Please try again.'
+      );
+    } finally {
+      setSubmittingReviewId(null);
+    }
+  };
+
+  // Profile Presets for quick avatar selection
+  const AVATAR_PRESETS = [
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
+    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=256&h=256&q=80',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&h=256&q=80',
+    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&h=256&q=80',
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&h=256&q=80',
+  ];
+
   // Profile Form Edit State
   const [profileFormData, setProfileFormData] = useState({
     firstName: '',
     lastName: '',
     phone: '',
+    headline: '',
+    bio: '',
+    city: '',
+    state: '',
     country: '',
-    timezone: '',
+    timezone: 'Asia/Kolkata',
+    githubUrl: '',
+    linkedinUrl: '',
+    websiteUrl: '',
+    profilePhoto: '',
     institution: '',
     qualification: '',
     graduationYear: '',
@@ -141,6 +210,24 @@ export const StudentDashboard: React.FC = () => {
   });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toastError('Profile image size must be under 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setProfileFormData((prev) => ({ ...prev, profilePhoto: reader.result as string }));
+        success('Photo selected! Click "Save Profile Changes" to save.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Detect route-based initial tab
   useEffect(() => {
@@ -180,8 +267,16 @@ export const StudentDashboard: React.FC = () => {
           firstName: data.profile.firstName || user?.firstName || '',
           lastName: data.profile.lastName || user?.lastName || '',
           phone: data.profile.phone || user?.phone || '',
+          headline: data.profile.headline || (user as any)?.headline || '',
+          bio: data.profile.bio || (user as any)?.bio || '',
+          city: data.profile.city || (user as any)?.city || '',
+          state: data.profile.state || (user as any)?.state || '',
           country: data.profile.country || (user as any)?.country || '',
           timezone: data.profile.timezone || (user as any)?.timezone || 'Asia/Kolkata',
+          githubUrl: data.profile.githubUrl || (user as any)?.githubUrl || '',
+          linkedinUrl: data.profile.linkedinUrl || (user as any)?.linkedinUrl || '',
+          websiteUrl: data.profile.websiteUrl || (user as any)?.websiteUrl || '',
+          profilePhoto: data.profile.profilePhoto || user?.profilePhoto || '',
           institution: data.profile.institution || (user as any)?.institution || '',
           qualification: data.profile.qualification || (user as any)?.qualification || '',
           graduationYear: data.profile.graduationYear ? String(data.profile.graduationYear) : '',
@@ -193,48 +288,11 @@ export const StudentDashboard: React.FC = () => {
         });
       }
 
-      // Initialize default QnA questions from enrolled courses
-      if (data?.activeCourses && data.activeCourses.length > 0) {
-        const primary = data.activeCourses[0];
-        const initialQ: QnAQuestion[] = [
-          {
-            id: 'qna-1',
-            courseTitle: primary.title,
-            courseId: primary.courseId,
-            topicTitle: primary.lastAccessedLesson?.title || 'Core Fundamentals',
-            questionTitle: 'How is JWT refresh token grace period handled during concurrent requests?',
-            questionBody: 'When multiple parallel requests fail with 401 at the exact same moment, how does the backend avoid invalidating the token reuse detector?',
-            createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-            status: 'ANSWERED',
-            answers: [
-              {
-                instructorName: primary.instructorName || 'Lead Instructor',
-                answerText:
-                  'We store a 30-second previousRefreshTokenHash grace window in MongoDB. When simultaneous requests hit the refresh endpoint, they are accepted within that window without triggering a revoked-token false alarm!',
-                answeredAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-              },
-            ],
-          },
-          {
-            id: 'qna-2',
-            courseTitle: primary.title,
-            courseId: primary.courseId,
-            topicTitle: 'Course Architecture',
-            questionTitle: 'Can I download certificates in signed PDF format after completing all modules?',
-            questionBody: 'Will the certificate carry the unique certificateNumber verifiable by employers on the public /verify page?',
-            createdAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-            status: 'ANSWERED',
-            answers: [
-              {
-                instructorName: 'Academic Team',
-                answerText:
-                  'Yes! Every certificate generated generates a tamper-proof verification number and signed PDF that matches your public Verified Skill Passport.',
-                answeredAt: new Date(Date.now() - 3600000 * 36).toISOString(),
-              },
-            ],
-          },
-        ];
-        setQuestionsList(initialQ);
+      // Populate student's actual asked questions (empty if student has asked none yet)
+      if (data?.questions && Array.isArray(data.questions)) {
+        setQuestionsList(data.questions);
+      } else {
+        setQuestionsList([]);
       }
 
       if (data?.activeCourses && Array.isArray(data.activeCourses)) {
@@ -287,7 +345,32 @@ export const StudentDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    consultationsApi
+      .getMyConsultations()
+      .then((list) => setStudentConsultations(list || []))
+      .catch((err) => console.warn('Consultations load warning:', err));
   }, []);
+
+  // Handle Return from Cashfree PG for Consultation Booking
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cnsOrderId = params.get('cns_order_id');
+    if (cnsOrderId) {
+      consultationsApi
+        .verifyPayment({ orderId: cnsOrderId })
+        .then((res) => {
+          if (res.success) {
+            success('Consultation Confirmed', 'Your 1-on-1 mentorship session is confirmed!');
+            setActiveTab('live-classes');
+            setLiveSubTab('consultations');
+            consultationsApi.getMyConsultations().then((list) => setStudentConsultations(list || []));
+          }
+        })
+        .catch((err) => {
+          console.warn('Payment check warning:', err);
+        });
+    }
+  }, [location.search]);
 
   // Dynamic Greeting based on local system time
   const dynamicGreeting = useMemo(() => {
@@ -347,13 +430,29 @@ export const StudentDashboard: React.FC = () => {
   };
 
   // Handle Asking New Doubt / Question
-  const handlePostQuestion = (e: React.FormEvent) => {
+  const handlePostQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuestionTitle.trim() || !newQuestionBody.trim()) return;
 
     const courseObj = dashboardData?.activeCourses?.find(
       (c) => c.courseId === selectedCourseForQuestion || c.title === selectedCourseForQuestion
     ) || dashboardData?.activeCourses?.[0];
+
+    const slug = courseObj?.slug;
+    const combinedQuestion = newQuestionTitle.trim() === newQuestionBody.trim()
+      ? newQuestionTitle.trim()
+      : `${newQuestionTitle.trim()}\n\n${newQuestionBody.trim()}`;
+
+    try {
+      if (slug) {
+        await coursesApi.askQuestion(slug, {
+          question: combinedQuestion,
+        });
+      }
+      success('Question posted to instructor successfully!');
+    } catch (err: any) {
+      console.warn('Could not post question to backend:', err);
+    }
 
     const createdQ: QnAQuestion = {
       id: `qna-${Date.now()}`,
@@ -410,7 +509,15 @@ export const StudentDashboard: React.FC = () => {
         firstName: profileFormData.firstName,
         lastName: profileFormData.lastName,
         phone: profileFormData.phone,
+        headline: profileFormData.headline,
+        bio: profileFormData.bio,
+        city: profileFormData.city,
+        state: profileFormData.state,
         country: profileFormData.country,
+        profilePhoto: profileFormData.profilePhoto || undefined,
+        githubUrl: profileFormData.githubUrl,
+        linkedinUrl: profileFormData.linkedinUrl,
+        websiteUrl: profileFormData.websiteUrl,
         timezone: profileFormData.timezone,
         institution: profileFormData.institution,
         qualification: profileFormData.qualification,
@@ -422,10 +529,12 @@ export const StudentDashboard: React.FC = () => {
       await authApi.updateMe(payload);
       updateUser(payload);
       setProfileSaveSuccess(true);
+      success('Profile and account details saved successfully!');
       setTimeout(() => setProfileSaveSuccess(false), 3000);
       fetchDashboardData();
     } catch (err) {
       console.error('Failed to update profile:', err);
+      toastError('Failed to save profile changes. Please try again.');
     } finally {
       setProfileSaving(false);
     }
@@ -479,7 +588,7 @@ export const StudentDashboard: React.FC = () => {
   }, [questionsList, qnaFilter, qnaSearch]);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col justify-between selection:bg-[#FA5A36] selection:text-white">
       <Navbar />
 
       <div className="flex-1 flex max-w-[1600px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-4 gap-5">
@@ -495,7 +604,7 @@ export const StudentDashboard: React.FC = () => {
           <div className={`flex items-center justify-between pb-4 border-b border-slate-100 w-full mb-3 ${sidebarCollapsed ? 'justify-center' : ''}`}>
             {!sidebarCollapsed && (
               <div className="flex items-center gap-2.5 px-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-[#FA5A36] text-white flex items-center justify-center font-black text-sm shadow-xs">
                   <GraduationCap className="w-4 h-4" />
                 </div>
                 <div>
@@ -527,7 +636,7 @@ export const StudentDashboard: React.FC = () => {
                   title={sidebarCollapsed ? item.label : undefined}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-xs transition cursor-pointer relative group ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20'
+                      ? 'bg-[#FA5A36] text-white shadow-xs shadow-[#FA5A36]/20'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                   } ${sidebarCollapsed ? 'justify-center px-0' : ''}`}
                 >
@@ -551,15 +660,15 @@ export const StudentDashboard: React.FC = () => {
           {primaryUpgrade && (
             <div className={`mt-auto pt-3 border-t border-slate-100 w-full ${sidebarCollapsed ? 'px-0' : ''}`}>
               {!sidebarCollapsed ? (
-                <div className="p-3.5 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100/80 space-y-2">
+                <div className="p-3.5 bg-gradient-to-br from-[#FFF5F2] to-orange-50/60 rounded-2xl border border-[#FFCCC2] space-y-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="w-6 h-6 rounded-lg bg-[#FA5A36] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Zap className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-black text-indigo-950 truncate">Upgrade Available</span>
+                    <span className="text-xs font-black text-slate-900 truncate">Upgrade Available</span>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-tight">
-                    Credit applied: <strong className="text-indigo-600 font-bold">₹{primaryUpgrade.accumulatedCredit || 0} off</strong>
+                    Credit applied: <strong className="text-[#FA5A36] font-bold">₹{primaryUpgrade.accumulatedCredit || 0} off</strong>
                   </p>
                   <button
                     onClick={async () => {
@@ -570,7 +679,7 @@ export const StudentDashboard: React.FC = () => {
                         navigate(`/course/${primaryUpgrade.courseSlug}`);
                       }
                     }}
-                    className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] rounded-xl shadow-xs transition cursor-pointer"
+                    className="w-full py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-[11px] rounded-xl shadow-xs transition cursor-pointer"
                   >
                     Upgrade Now →
                   </button>
@@ -578,7 +687,7 @@ export const StudentDashboard: React.FC = () => {
               ) : (
                 <button
                   onClick={() => setActiveTab('dashboard')}
-                  className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center hover:bg-indigo-100 transition mx-auto cursor-pointer"
+                  className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center hover:bg-[#FFF5F2] transition mx-auto cursor-pointer"
                   title="Upgrade Available"
                 >
                   <Zap className="w-4 h-4" />
@@ -595,7 +704,7 @@ export const StudentDashboard: React.FC = () => {
             <div className="relative w-72 bg-white h-full p-4 flex flex-col shadow-2xl z-10 border-r border-slate-200">
               <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm">
+                  <div className="w-8 h-8 rounded-xl bg-[#FA5A36] text-white flex items-center justify-center font-black text-sm">
                     <GraduationCap className="w-4 h-4" />
                   </div>
                   <h2 className="text-xs font-black text-slate-900">Student Portal</h2>
@@ -617,7 +726,7 @@ export const StudentDashboard: React.FC = () => {
                         setMobileMenuOpen(false);
                       }}
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl font-bold text-xs transition ${
-                        isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                        isActive ? 'bg-[#FA5A36] text-white' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -638,7 +747,7 @@ export const StudentDashboard: React.FC = () => {
         {/* ========================================================
             2. MAIN CONTENT AREA
            ======================================================== */}
-        <main className="flex-1 flex flex-col min-w-0 space-y-5">
+        <main className="flex-1 flex flex-col min-w-0 space-y-5 pb-20 min-[501px]:pb-0">
           {/* Header Bar */}
           <div className="flex items-center justify-between gap-3 bg-white p-3.5 sm:px-6 rounded-3xl border border-slate-200/80 shadow-xs">
             {/* Mobile Menu Button */}
@@ -662,7 +771,7 @@ export const StudentDashboard: React.FC = () => {
                     navigate(`/courses?search=${encodeURIComponent(searchQuery.trim())}`);
                   }
                 }}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition-all"
               />
             </div>
 
@@ -722,7 +831,7 @@ export const StudentDashboard: React.FC = () => {
                       }}
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-lg bg-[#FA5A36] text-white font-bold text-xs flex items-center justify-center shrink-0">
                       {studentName[0]?.toUpperCase() || 'S'}
                     </div>
                   )}
@@ -754,8 +863,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={async () => {
                           setProfileDropdownOpen(false);
-                          await logout();
-                          navigate('/login');
+                          await logout('/');
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 text-left transition cursor-pointer"
                       >
@@ -784,7 +892,7 @@ export const StudentDashboard: React.FC = () => {
               <div className="flex justify-center gap-3 pt-2">
                 <button
                   onClick={fetchDashboardData}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Retry Connection</span>
@@ -808,7 +916,7 @@ export const StudentDashboard: React.FC = () => {
                 <div className="space-y-6">
                   {/* Mandatory Profile Completion Alert Banner */}
                   {!user?.isProfileCompleted && (
-                    <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-indigo-50 border border-amber-200/80 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                    <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-[#FFF5F2] border border-amber-200/80 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
                           <Sparkles className="w-5 h-5" />
@@ -832,7 +940,7 @@ export const StudentDashboard: React.FC = () => {
                           setActiveTab('settings');
                           setProfileSubTab('profile');
                         }}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1.5"
+                        className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1.5"
                       >
                         <span>Complete Profile</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -841,9 +949,9 @@ export const StudentDashboard: React.FC = () => {
                   )}
 
                   {/* 1. EXPANDED WELCOME BOX WITH DYNAMIC TIME-AWARE GREETING */}
-                  <div className="bg-gradient-to-br from-indigo-50/90 via-purple-50/70 to-blue-50/90 border border-indigo-100/80 rounded-3xl p-6 sm:p-7 shadow-xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+                  <div className="bg-gradient-to-br from-[#FFF5F2] via-orange-50/60 to-amber-50/40 border border-[#FFCCC2] rounded-3xl p-6 sm:p-7 shadow-xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                     <div className="space-y-2 z-10 max-w-2xl">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-xs rounded-full border border-indigo-100 text-indigo-700 text-xs font-bold mb-1 shadow-2xs">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-xs rounded-full border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold mb-1 shadow-2xs">
                         <span>{dynamicGreeting.emoji}</span>
                         <span>{dynamicGreeting.text}</span>
                       </div>
@@ -857,7 +965,7 @@ export const StudentDashboard: React.FC = () => {
                       <div className="pt-3 flex flex-wrap items-center gap-3">
                         <button
                           onClick={() => navigate('/courses')}
-                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer flex items-center gap-1.5"
+                          className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/20 transition cursor-pointer flex items-center gap-1.5"
                         >
                           <span>Explore Courses</span>
                           <ArrowRight className="w-3.5 h-3.5" />
@@ -872,20 +980,32 @@ export const StudentDashboard: React.FC = () => {
                     </div>
 
                     {/* Right Streak Showcase Pill */}
-                    <div className="hidden sm:flex flex-col items-center justify-center p-4 bg-white/90 backdrop-blur-xs rounded-2xl border border-indigo-100 shadow-sm min-w-[140px] text-center z-10">
+                    <div className="hidden sm:flex flex-col items-center justify-center p-4 bg-white/90 backdrop-blur-xs rounded-2xl border border-[#FFCCC2] shadow-sm min-w-[140px] text-center z-10">
                       <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Current Streak</span>
                       <div className="flex items-center justify-center gap-1 my-1">
                         <span className="text-xl font-black text-slate-900">{currentStreak}</span>
                         <span className="text-base">🔥</span>
                       </div>
-                      <span className="text-[11px] text-indigo-600 font-bold">Days Active</span>
+                      <span className="text-[11px] text-[#FA5A36] font-bold">Days Active</span>
                     </div>
 
                     {/* Subtle decorative glow */}
-                    <div className="absolute -right-8 -bottom-8 w-48 h-48 bg-indigo-400/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute -right-8 -bottom-8 w-48 h-48 bg-[#FA5A36]/10 rounded-full blur-2xl pointer-events-none" />
                   </div>
 
-                  {/* 2. REDESIGNED LEARNING OVERVIEW: 4 HORIZONTAL METRIC CARDS ROW */}
+                  {/* Mobile Streak Showcase Card (<= 500px) */}
+                  <div className="flex min-[501px]:hidden items-center justify-between p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-2xl shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl">🔥</span>
+                      <div>
+                        <span className="text-xs font-black text-amber-950 block">{currentStreak} days</span>
+                        <span className="text-[10px] text-slate-500 font-medium">Current Streak</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-amber-700" />
+                  </div>
+
+                  {/* 2. REDESIGNED LEARNING OVERVIEW: 4 HORIZONTAL METRIC CARDS ROW (2-Cols on <= 500px) */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Learning Metrics</h3>
@@ -903,56 +1023,56 @@ export const StudentDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                       {/* Metric 1: Active Courses */}
-                      <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:border-indigo-200 hover:shadow-sm transition flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                          <BookOpen className="w-6 h-6" />
+                      <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs hover:border-[#FFCCC2] hover:shadow-sm transition flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0">
+                          <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <span className="text-2xl font-black text-slate-900 block leading-tight">
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
                             {stats.activeCoursesCount}
                           </span>
-                          <span className="text-xs font-bold text-slate-500">Active Courses</span>
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-500">Active Courses</span>
                         </div>
                       </div>
 
                       {/* Metric 2: Topics Owned */}
-                      <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:border-amber-200 hover:shadow-sm transition flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                          <Layers className="w-6 h-6" />
+                      <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs hover:border-amber-200 hover:shadow-sm transition flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                          <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <span className="text-2xl font-black text-slate-900 block leading-tight">
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
                             {stats.purchasedTopicsCount}
                           </span>
-                          <span className="text-xs font-bold text-slate-500">Topics Owned</span>
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-500">Topics Owned</span>
                         </div>
                       </div>
 
                       {/* Metric 3: Completed Courses */}
-                      <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:border-emerald-200 hover:shadow-sm transition flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                          <CheckCircle2 className="w-6 h-6" />
+                      <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs hover:border-emerald-200 hover:shadow-sm transition flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <span className="text-2xl font-black text-slate-900 block leading-tight">
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
                             {stats.completedCoursesCount}
                           </span>
-                          <span className="text-xs font-bold text-slate-500">Completed Courses</span>
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-500">Completed Courses</span>
                         </div>
                       </div>
 
                       {/* Metric 4: Certificates */}
-                      <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs hover:border-purple-200 hover:shadow-sm transition flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                          <Award className="w-6 h-6" />
+                      <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs hover:border-[#FFCCC2] hover:shadow-sm transition flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0">
+                          <Award className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                          <span className="text-2xl font-black text-slate-900 block leading-tight">
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 block leading-tight">
                             {stats.certificatesCount}
                           </span>
-                          <span className="text-xs font-bold text-slate-500">Certificates Earned</span>
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-500">Certificates Earned</span>
                         </div>
                       </div>
                     </div>
@@ -964,15 +1084,15 @@ export const StudentDashboard: React.FC = () => {
                     <div className="lg:col-span-7 bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                            <Play className="w-3.5 h-3.5 fill-indigo-600" />
+                          <div className="w-6 h-6 rounded-lg bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center">
+                            <Play className="w-3.5 h-3.5 fill-[#FA5A36]" />
                           </div>
                           <h3 className="font-bold text-slate-900 text-sm">Continue Learning</h3>
                         </div>
                         {dashboardData.activeCourses && dashboardData.activeCourses.length > 1 && (
                           <button
                             onClick={() => setActiveTab('my-learning')}
-                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                            className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] flex items-center gap-1 cursor-pointer"
                           >
                             View All <ArrowRight className="w-3 h-3" />
                           </button>
@@ -990,13 +1110,13 @@ export const StudentDashboard: React.FC = () => {
                               />
                             ) : (
                               <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-                                <BookOpen className="w-8 h-8 text-indigo-400" />
+                                <BookOpen className="w-8 h-8 text-[#FA5A36]" />
                               </div>
                             )}
                             <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center">
                               <button
                                 onClick={() => navigate(`/course/${primaryCourse.slug}`)}
-                                className="w-10 h-10 rounded-full bg-indigo-600/90 hover:bg-indigo-600 text-white flex items-center justify-center shadow-md transition-transform hover:scale-110 cursor-pointer"
+                                className="w-10 h-10 rounded-full bg-[#FA5A36]/90 hover:bg-[#FA5A36] text-white flex items-center justify-center shadow-md transition-transform hover:scale-110 cursor-pointer"
                               >
                                 <Play className="w-4 h-4 fill-white ml-0.5" />
                               </button>
@@ -1021,11 +1141,11 @@ export const StudentDashboard: React.FC = () => {
                             <div className="space-y-1">
                               <div className="flex items-center justify-between text-[11px] font-bold">
                                 <span className="text-slate-500">Course Progress</span>
-                                <span className="text-indigo-600 font-black">{primaryCourse.entitledProgressPercentage || 0}%</span>
+                                <span className="text-[#FA5A36] font-black">{primaryCourse.entitledProgressPercentage || 0}%</span>
                               </div>
                               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div
-                                  className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                                  className="bg-[#FA5A36] h-full rounded-full transition-all duration-500"
                                   style={{ width: `${primaryCourse.entitledProgressPercentage || 0}%` }}
                                 />
                               </div>
@@ -1033,7 +1153,7 @@ export const StudentDashboard: React.FC = () => {
 
                             <button
                               onClick={() => navigate(`/course/${primaryCourse.slug}`)}
-                              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                              className="w-full py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <span>Continue Learning</span>
                               <ArrowRight className="w-3.5 h-3.5" />
@@ -1046,7 +1166,7 @@ export const StudentDashboard: React.FC = () => {
                           <p className="text-xs text-slate-500">No active courses yet.</p>
                           <button
                             onClick={() => navigate('/courses')}
-                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl"
+                            className="px-4 py-2 bg-[#FA5A36] text-white text-xs font-bold rounded-xl"
                           >
                             Explore Courses
                           </button>
@@ -1066,7 +1186,7 @@ export const StudentDashboard: React.FC = () => {
                         {dashboardData.upcomingLiveSessions && dashboardData.upcomingLiveSessions.length > 2 && (
                           <button
                             onClick={() => setActiveTab('live-classes')}
-                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                            className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] flex items-center gap-1 cursor-pointer"
                           >
                             View All <ArrowRight className="w-3 h-3" />
                           </button>
@@ -1078,7 +1198,7 @@ export const StudentDashboard: React.FC = () => {
                           {dashboardData.upcomingLiveSessions.slice(0, 2).map((session, idx) => (
                             <div
                               key={session.sessionId || idx}
-                              className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 hover:border-indigo-100 transition"
+                              className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 hover:border-[#FFCCC2] transition"
                             >
                               <div className="space-y-0.5 truncate">
                                 <div className="flex items-center gap-1.5">
@@ -1107,7 +1227,7 @@ export const StudentDashboard: React.FC = () => {
                                 }}
                                 className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 cursor-pointer transition ${
                                   idx === 0
-                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                                    ? 'bg-[#FA5A36] hover:bg-[#E04322] text-white shadow-xs'
                                     : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                                 }`}
                               >
@@ -1137,14 +1257,14 @@ export const StudentDashboard: React.FC = () => {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                          <div className="w-6 h-6 rounded-lg bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center">
                             <BookOpen className="w-3.5 h-3.5" />
                           </div>
                           <h3 className="font-bold text-slate-900 text-sm">My Learning</h3>
                         </div>
                         <button
                           onClick={() => setActiveTab('my-learning')}
-                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                          className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] flex items-center gap-1 cursor-pointer"
                         >
                           View All <ArrowRight className="w-3 h-3" />
                         </button>
@@ -1156,7 +1276,7 @@ export const StudentDashboard: React.FC = () => {
                             <div
                               key={course.courseId}
                               onClick={() => navigate(`/course/${course.slug}`)}
-                              className="p-3 bg-slate-50 hover:bg-indigo-50/40 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 cursor-pointer transition"
+                              className="p-3 bg-slate-50 hover:bg-[#FFF5F2]/60 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 cursor-pointer transition"
                             >
                               <div className="flex items-center gap-3 truncate">
                                 {course.thumbnail ? (
@@ -1166,7 +1286,7 @@ export const StudentDashboard: React.FC = () => {
                                     className="w-9 h-9 rounded-xl object-cover shrink-0 border border-slate-100"
                                   />
                                 ) : (
-                                  <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                                  <div className="w-9 h-9 rounded-xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0">
                                     <BookOpen className="w-4 h-4" />
                                   </div>
                                 )}
@@ -1179,7 +1299,7 @@ export const StudentDashboard: React.FC = () => {
                               </div>
 
                               <div className="flex items-center gap-2.5 shrink-0">
-                                <span className="font-bold text-xs text-indigo-600">
+                                <span className="font-bold text-xs text-[#FA5A36]">
                                   {course.entitledProgressPercentage || 0}%
                                 </span>
                                 <span className="text-xs font-bold text-slate-500">Continue →</span>
@@ -1196,7 +1316,7 @@ export const StudentDashboard: React.FC = () => {
 
                     {/* Section 7: Upgrade Opportunity (Shown ONLY if upgrade opportunities exist) */}
                     {dashboardData.upgradeOpportunities && dashboardData.upgradeOpportunities.length > 0 && (
-                      <div className="lg:col-span-5 bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-3xl p-5 sm:p-6 border border-indigo-800 shadow-md space-y-3">
+                      <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-900 text-white rounded-3xl p-5 sm:p-6 border border-slate-800 shadow-md space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black uppercase">
                             Topic Credit Available
@@ -1235,7 +1355,7 @@ export const StudentDashboard: React.FC = () => {
                               navigate(`/course/${dashboardData.upgradeOpportunities[0].courseSlug}`);
                             }
                           }}
-                          className="w-full py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
+                          className="w-full py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
                         >
                           Upgrade Now →
                         </button>
@@ -1254,7 +1374,7 @@ export const StudentDashboard: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setActiveTab('certificates')}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] flex items-center gap-1 cursor-pointer"
                       >
                         View All <ArrowRight className="w-3 h-3" />
                       </button>
@@ -1324,7 +1444,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setMyLearningTab('COURSES')}
                         className={`py-1.5 px-3 rounded-lg transition ${
-                          myLearningTab === 'COURSES' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          myLearningTab === 'COURSES' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Enrolled ({stats.activeCoursesCount})
@@ -1332,7 +1452,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setMyLearningTab('TOPICS')}
                         className={`py-1.5 px-3 rounded-lg transition ${
-                          myLearningTab === 'TOPICS' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          myLearningTab === 'TOPICS' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Purchased Topics ({stats.purchasedTopicsCount})
@@ -1340,7 +1460,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setMyLearningTab('COMPLETED')}
                         className={`py-1.5 px-3 rounded-lg transition ${
-                          myLearningTab === 'COMPLETED' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          myLearningTab === 'COMPLETED' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Completed ({stats.completedCoursesCount})
@@ -1353,7 +1473,7 @@ export const StudentDashboard: React.FC = () => {
                       {dashboardData.activeCourses.map((course) => (
                         <div
                           key={course.courseId}
-                          className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden flex flex-col justify-between hover:border-indigo-200 transition group"
+                          className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden flex flex-col justify-between hover:border-[#FFCCC2] transition group"
                         >
                           <div className="aspect-video bg-slate-900 relative overflow-hidden">
                             {course.thumbnail ? (
@@ -1363,7 +1483,7 @@ export const StudentDashboard: React.FC = () => {
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-slate-800 text-indigo-400">
+                              <div className="w-full h-full flex items-center justify-center bg-slate-800 text-[#FA5A36]">
                                 <BookOpen className="w-10 h-10" />
                               </div>
                             )}
@@ -1381,11 +1501,11 @@ export const StudentDashboard: React.FC = () => {
                             <div className="space-y-1">
                               <div className="flex justify-between text-[11px] font-bold">
                                 <span className="text-slate-500">Progress</span>
-                                <span className="text-indigo-600">{course.entitledProgressPercentage || 0}%</span>
+                                <span className="text-[#FA5A36]">{course.entitledProgressPercentage || 0}%</span>
                               </div>
                               <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
                                 <div
-                                  className="bg-indigo-600 h-full rounded-full"
+                                  className="bg-[#FA5A36] h-full rounded-full"
                                   style={{ width: `${course.entitledProgressPercentage || 0}%` }}
                                 />
                               </div>
@@ -1393,7 +1513,7 @@ export const StudentDashboard: React.FC = () => {
 
                             <button
                               onClick={() => navigate(`/course/${course.slug}`)}
-                              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                              className="w-full py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
                             >
                               Resume Learning
                             </button>
@@ -1410,7 +1530,7 @@ export const StudentDashboard: React.FC = () => {
                       </p>
                       <button
                         onClick={() => navigate('/courses')}
-                        className="px-5 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                        className="px-5 py-2 bg-[#FA5A36] text-white font-bold text-xs rounded-xl shadow-xs"
                       >
                         Explore Courses
                       </button>
@@ -1420,64 +1540,301 @@ export const StudentDashboard: React.FC = () => {
               )}
 
               {/* ========================================================
-                  TAB 3: LIVE CLASSES VIEW
+                  TAB 3: LIVE CLASSES & 1-ON-1 CONSULTATIONS VIEW
                  ======================================================== */}
               {activeTab === 'live-classes' && (
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-5">
-                  <div className="pb-3 border-b border-slate-100">
-                    <h2 className="text-base font-black text-slate-900">Live Classes & Workshops</h2>
-                    <p className="text-xs text-slate-500">Join interactive live webinar sessions and get real-time instructor mentoring.</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-4">
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Live Classes & 1-on-1 Mentorship</h2>
+                      <p className="text-xs text-slate-500">Join interactive live webinar sessions and private 1-on-1 consultations with mentors.</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLiveSubTab('webinars')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          liveSubTab === 'webinars'
+                            ? 'bg-[#FA5A36] text-white shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Webinars & Workshops
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLiveSubTab('consultations')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                          liveSubTab === 'consultations'
+                            ? 'bg-[#FA5A36] text-white shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>1-on-1 Consultations</span>
+                        {studentConsultations.length > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">
+                            {studentConsultations.length}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/mentorship')}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3 text-orange-400" />
+                        <span>Find Mentor</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {dashboardData.upcomingLiveSessions && dashboardData.upcomingLiveSessions.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {dashboardData.upcomingLiveSessions.map((session, idx) => (
-                        <div
-                          key={session.sessionId || idx}
-                          className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col justify-between space-y-4"
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black rounded uppercase">
-                                Scheduled Live
-                              </span>
-                              <span className="text-[11px] text-slate-500 flex items-center gap-1 font-semibold">
-                                <Calendar className="w-3 h-3 text-slate-400" />
-                                {session.scheduledAt ? new Date(session.scheduledAt).toLocaleDateString() : 'Upcoming'}
-                              </span>
-                            </div>
-                            <h3 className="font-extrabold text-slate-900 text-sm">{session.title}</h3>
-                            <p className="text-xs text-slate-600">{session.description || 'Interactive hands-on session with live Q&A.'}</p>
-                            <p className="text-xs font-bold text-indigo-600">Instructor: {session.instructorName || 'Lead Instructor'}</p>
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
-                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{session.scheduledAt ? new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}</span>
-                            </div>
-                            <button
-                              onClick={() => {
-                                if (session.meetingUrl) {
-                                  window.open(session.meetingUrl, '_blank');
-                                } else {
-                                  navigate('/webinars');
-                                }
-                              }}
-                              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition"
+                  {liveSubTab === 'consultations' ? (
+                    <div>
+                      {studentConsultations.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {studentConsultations.map((c) => (
+                            <div
+                              key={c.id}
+                              className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
                             >
-                              Join Class
-                            </button>
-                          </div>
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase">
+                                    {c.status}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-400 font-semibold">
+                                    {c.bookingCode}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden">
+                                    {c.instructor?.profilePhoto ? (
+                                      <img
+                                        src={c.instructor.profilePhoto}
+                                        alt={c.instructor.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      c.instructor?.name?.[0] || 'M'
+                                    )}
+                                  </div>
+                                  <div className="overflow-hidden">
+                                    <h4 className="text-xs font-black text-slate-900 truncate">
+                                      {c.instructor?.name || 'Mentor'}
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 truncate font-medium">
+                                      {c.instructor?.headline || 'Working IT Professional'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
+                                  <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1 text-slate-500 font-medium">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-400" /> Date:
+                                    </span>
+                                    <span className="font-bold text-slate-800">
+                                      {new Date(c.startTime).toLocaleDateString('en-IN', {
+                                        weekday: 'short',
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1 text-slate-500 font-medium">
+                                      <Clock className="w-3.5 h-3.5 text-slate-400" /> Time:
+                                    </span>
+                                    <span className="font-bold text-slate-800">
+                                      {new Date(c.startTime).toLocaleTimeString('en-IN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}{' '}
+                                      ({c.durationMinutes} mins)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 font-medium">Fee:</span>
+                                    <span className="font-black text-slate-900">
+                                      ₹{c.fee} {c.paymentStatus === 'FREE' ? '(Free)' : '(Paid)'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {c.notes && (
+                                  <p className="text-[11px] text-slate-500 bg-slate-100/60 p-2 rounded-lg italic line-clamp-2">
+                                    " {c.notes} "
+                                  </p>
+                                )}
+                              </div>
+
+                              {(() => {
+                                const completed =
+                                  c.isCompleted ||
+                                  c.status === 'ATTENDED' ||
+                                  new Date(c.endTime).getTime() <= consultationNow;
+                                const draft = consultationReviewDrafts[c.id] || { rating: 0, review: '' };
+
+                                return (
+                                  <div className="pt-3 border-t border-slate-200/70 space-y-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className={`text-[11px] font-bold flex items-center gap-1 ${completed ? 'text-slate-600' : 'text-emerald-600'}`}>
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        {completed ? 'Session completed' : 'Confirmed'}
+                                      </span>
+                                      {!completed && c.meetingRoomCode && (
+                                        <button
+                                          onClick={() => navigate(`/webinars/live/${c.meetingRoomCode}`)}
+                                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                                        >
+                                          <Video className="w-3.5 h-3.5" />
+                                          <span>Enter Session</span>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {c.consultationReview ? (
+                                      <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 space-y-1.5">
+                                        <div className="flex items-center gap-1" aria-label={`Your rating: ${c.consultationReview.rating} out of 5`}>
+                                          {Array.from({ length: 5 }, (_, index) => (
+                                            <Star
+                                              key={index}
+                                              className={`w-4 h-4 ${index < c.consultationReview!.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                                            />
+                                          ))}
+                                          <span className="ml-1 text-[10px] font-bold text-slate-600">Your review</span>
+                                        </div>
+                                        <p className="text-xs text-slate-700">{c.consultationReview.review}</p>
+                                      </div>
+                                    ) : completed && c.status !== 'CANCELLED' ? (
+                                      <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 space-y-2.5">
+                                        <p className="text-xs font-bold text-slate-800">How was your 1-on-1 with {c.instructor?.name || 'your mentor'}?</p>
+                                        <div className="flex items-center gap-1" role="group" aria-label="Rate your consultation">
+                                          {Array.from({ length: 5 }, (_, index) => {
+                                            const rating = index + 1;
+                                            return (
+                                              <button
+                                                key={rating}
+                                                type="button"
+                                                aria-pressed={draft.rating === rating}
+                                                aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
+                                                onClick={() =>
+                                                  setConsultationReviewDrafts((current) => ({
+                                                    ...current,
+                                                    [c.id]: { ...draft, rating },
+                                                  }))
+                                                }
+                                                className="p-0.5 cursor-pointer"
+                                              >
+                                                <Star className={`w-5 h-5 ${rating <= draft.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                        <textarea
+                                          value={draft.review}
+                                          maxLength={2000}
+                                          onChange={(event) =>
+                                            setConsultationReviewDrafts((current) => ({
+                                              ...current,
+                                              [c.id]: { ...draft, review: event.target.value },
+                                            }))
+                                          }
+                                          placeholder="Share your experience with this mentor..."
+                                          rows={3}
+                                          className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-[#FA5A36]"
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={submittingReviewId === c.id || draft.rating < 1 || !draft.review.trim()}
+                                          onClick={() => handleSubmitConsultationReview(c.id)}
+                                          className="px-3.5 py-2 rounded-lg bg-[#FA5A36] text-white text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                          {submittingReviewId === c.id ? 'Submitting...' : 'Submit review'}
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="text-center py-12 space-y-3">
+                          <div className="w-12 h-12 bg-orange-50 text-[#FA5A36] rounded-2xl flex items-center justify-center mx-auto">
+                            <Calendar className="w-6 h-6" />
+                          </div>
+                          <h3 className="text-sm font-bold text-slate-800">No 1-on-1 Consultations Booked</h3>
+                          <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+                            Connect with experienced senior engineers and IT instructors for personalized code reviews, career guidance, and architecture deep dives.
+                          </p>
+                          <button
+                            onClick={() => navigate('/mentorship')}
+                            className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Browse Available Mentors</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-center py-12 space-y-2">
-                      <Video className="w-10 h-10 text-slate-300 mx-auto" />
-                      <h3 className="text-sm font-bold text-slate-800">No live classes scheduled</h3>
-                      <p className="text-xs text-slate-400">Upcoming webinars and mentor sessions will appear here.</p>
-                    </div>
+                    <>
+                      {dashboardData.upcomingLiveSessions && dashboardData.upcomingLiveSessions.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {dashboardData.upcomingLiveSessions.map((session, idx) => (
+                            <div
+                              key={session.sessionId || idx}
+                              className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col justify-between space-y-4"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black rounded uppercase">
+                                    Scheduled Live
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 flex items-center gap-1 font-semibold">
+                                    <Calendar className="w-3 h-3 text-slate-400" />
+                                    {session.scheduledAt ? new Date(session.scheduledAt).toLocaleDateString() : 'Upcoming'}
+                                  </span>
+                                </div>
+                                <h3 className="font-extrabold text-slate-900 text-sm">{session.title}</h3>
+                                <p className="text-xs text-slate-600">{session.description || 'Interactive hands-on session with live Q&A.'}</p>
+                                <p className="text-xs font-bold text-[#FA5A36]">Instructor: {session.instructorName || 'Lead Instructor'}</p>
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>{session.scheduledAt ? new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}</span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (session.meetingUrl) {
+                                      window.open(session.meetingUrl, '_blank');
+                                    } else {
+                                      navigate('/webinars');
+                                    }
+                                  }}
+                                  className="px-4 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition"
+                                >
+                                  Join Class
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 space-y-2">
+                          <Video className="w-10 h-10 text-slate-300 mx-auto" />
+                          <h3 className="text-sm font-bold text-slate-800">No live classes scheduled</h3>
+                          <p className="text-xs text-slate-400">Upcoming webinars and mentor sessions will appear here.</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -1492,7 +1849,7 @@ export const StudentDashboard: React.FC = () => {
                       <h2 className="text-base font-black text-slate-900">Assessments & Knowledge Checks</h2>
                       <p className="text-xs text-slate-500">Test your mastery of enrolled course modules with interactive checkpoints.</p>
                     </div>
-                    <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">
+                    <span className="px-3 py-1 rounded-full bg-[#FFF5F2] text-[#FA5A36] text-xs font-bold">
                       {studentQuizzes.length} Available
                     </span>
                   </div>
@@ -1506,7 +1863,7 @@ export const StudentDashboard: React.FC = () => {
                         >
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-bold text-indigo-600 truncate">
+                              <span className="text-[10px] font-bold text-[#FA5A36] truncate">
                                 {quiz.courseId?.title || 'Enrolled Course'}
                               </span>
                               {quiz.hasPassed ? (
@@ -1535,7 +1892,7 @@ export const StudentDashboard: React.FC = () => {
                             </span>
                             <button
                               onClick={() => setActiveQuizId(quiz._id)}
-                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                              className="px-3 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
                             >
                               {quiz.hasPassed ? 'Retake Quiz' : 'Start Quiz'}
                             </button>
@@ -1558,14 +1915,14 @@ export const StudentDashboard: React.FC = () => {
                  ======================================================== */}
               {activeTab === 'passport' && (
                 <div className="space-y-6">
-                  <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-indigo-900/60 shadow-xl relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-xl relative overflow-hidden flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     <div className="space-y-3 max-w-2xl z-10">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                           Verified Skill Passport
                         </span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-mono font-bold">
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#FA5A36]/20 text-[#FFCCC2] border border-[#FA5A36]/40 text-xs font-mono font-bold">
                           ID: STU-{user?._id?.toString().slice(-6).toUpperCase() || 'VERIFIED'}
                         </span>
                       </div>
@@ -1597,7 +1954,7 @@ export const StudentDashboard: React.FC = () => {
                     <div className="flex flex-col gap-3 shrink-0 z-10 w-full sm:w-auto">
                       <button
                         onClick={() => navigate(`/passport/${passportSlug}`)}
-                        className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+                        className="px-5 py-3 bg-[#FA5A36] hover:bg-[#E04322] text-white font-extrabold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <Award className="w-4 h-4" />
                         <span>View Public Passport</span>
@@ -1706,7 +2063,7 @@ export const StudentDashboard: React.FC = () => {
                             {item.thumbnail ? (
                               <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-xs">
+                              <div className="w-full h-full bg-[#FFF5F2] flex items-center justify-center text-[#FA5A36] font-bold text-xs">
                                 Course
                               </div>
                             )}
@@ -1734,7 +2091,7 @@ export const StudentDashboard: React.FC = () => {
                             <button
                               onClick={(e) => handleAddToCart(e, item.productId)}
                               disabled={addingCourseId === item.productId}
-                              className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                              className="flex-1 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl transition cursor-pointer"
                             >
                               Add to Cart
                             </button>
@@ -1749,7 +2106,7 @@ export const StudentDashboard: React.FC = () => {
                       <p className="text-xs text-slate-400">Save courses to track your upcoming learning goals.</p>
                       <button
                         onClick={() => navigate('/courses')}
-                        className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl"
+                        className="px-4 py-2 bg-[#FA5A36] text-white text-xs font-bold rounded-xl"
                       >
                         Explore Courses
                       </button>
@@ -1830,7 +2187,7 @@ export const StudentDashboard: React.FC = () => {
 
                     <button
                       onClick={() => setIsAskModalOpen(true)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                      className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Ask New Question</span>
@@ -1846,7 +2203,7 @@ export const StudentDashboard: React.FC = () => {
                         placeholder="Search your doubts and topics..."
                         value={qnaSearch}
                         onChange={(e) => setQnaSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
+                        className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36]"
                       />
                     </div>
 
@@ -1855,7 +2212,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setQnaFilter('ALL')}
                         className={`px-3 py-1 text-[11px] font-bold rounded-lg transition ${
-                          qnaFilter === 'ALL' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'
+                          qnaFilter === 'ALL' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/60'
                         }`}
                       >
                         All ({questionsList.length})
@@ -1881,10 +2238,10 @@ export const StudentDashboard: React.FC = () => {
 
                   {/* Ask Question Inline/Modal Form */}
                   {isAskModalOpen && (
-                    <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-200/80 space-y-4">
+                    <div className="p-5 bg-[#FFF5F2] rounded-2xl border border-[#FFCCC2] space-y-4">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
-                          <MessageSquare className="w-4 h-4 text-indigo-600" />
+                        <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                          <MessageSquare className="w-4 h-4 text-[#FA5A36]" />
                           <span>Post a New Question to Instructor</span>
                         </h3>
                         <button onClick={() => setIsAskModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -1899,7 +2256,7 @@ export const StudentDashboard: React.FC = () => {
                             <select
                               value={selectedCourseForQuestion}
                               onChange={(e) => setSelectedCourseForQuestion(e.target.value)}
-                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#FA5A36]"
                             >
                               {dashboardData.activeCourses && dashboardData.activeCourses.length > 0 ? (
                                 dashboardData.activeCourses.map((c) => (
@@ -1921,7 +2278,7 @@ export const StudentDashboard: React.FC = () => {
                               placeholder="e.g. Clarification on React useEffect dependency array..."
                               value={newQuestionTitle}
                               onChange={(e) => setNewQuestionTitle(e.target.value)}
-                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-indigo-500"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#FA5A36]"
                             />
                           </div>
                         </div>
@@ -1934,7 +2291,7 @@ export const StudentDashboard: React.FC = () => {
                             placeholder="Describe the doubt, expected behavior, and where you are facing the issue..."
                             value={newQuestionBody}
                             onChange={(e) => setNewQuestionBody(e.target.value)}
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-indigo-500"
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#FA5A36]"
                           />
                         </div>
 
@@ -1948,7 +2305,7 @@ export const StudentDashboard: React.FC = () => {
                           </button>
                           <button
                             type="submit"
-                            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                            className="px-5 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>Submit Question</span>
@@ -1964,12 +2321,12 @@ export const StudentDashboard: React.FC = () => {
                       {filteredQuestions.map((q) => (
                         <div
                           key={q.id}
-                          className="p-5 bg-slate-50 rounded-2xl border border-slate-200/70 hover:border-indigo-200 transition space-y-4"
+                          className="p-5 bg-slate-50 rounded-2xl border border-slate-200/70 hover:border-[#FFCCC2] transition space-y-4"
                         >
                           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-bold rounded">
+                                <span className="px-2 py-0.5 bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-bold rounded">
                                   {q.courseTitle}
                                 </span>
                                 {q.topicTitle && (
@@ -2001,17 +2358,17 @@ export const StudentDashboard: React.FC = () => {
 
                           {/* Answers Section */}
                           {q.answers && q.answers.length > 0 && (
-                            <div className="space-y-2.5 pl-3 border-l-2 border-indigo-500">
+                            <div className="space-y-2.5 pl-3 border-l-2 border-[#FA5A36]">
                               <span className="text-[11px] font-bold text-slate-500">Instructor Responses:</span>
                               {q.answers.map((ans, aIdx) => (
                                 <div key={aIdx} className="p-3 bg-white rounded-xl border border-slate-200/80 space-y-1">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
-                                      <div className="w-5 h-5 rounded-md bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
+                                      <div className="w-5 h-5 rounded-md bg-[#FA5A36] text-white font-bold text-[10px] flex items-center justify-center">
                                         {ans.instructorName[0]}
                                       </div>
                                       <span className="text-xs font-black text-slate-900">{ans.instructorName}</span>
-                                      <span className="px-1.5 py-0.2 bg-indigo-50 text-indigo-700 text-[9px] font-bold rounded">
+                                      <span className="px-1.5 py-0.2 bg-[#FFF5F2] text-[#FA5A36] text-[9px] font-bold rounded">
                                         Instructor
                                       </span>
                                     </div>
@@ -2037,11 +2394,11 @@ export const StudentDashboard: React.FC = () => {
                                   handleAddReply(q.id);
                                 }
                               }}
-                              className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-indigo-500"
+                              className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#FA5A36]"
                             />
                             <button
                               onClick={() => handleAddReply(q.id)}
-                              className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-[#FFF5F2] hover:text-[#FA5A36] text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
                             >
                               Reply
                             </button>
@@ -2056,7 +2413,7 @@ export const StudentDashboard: React.FC = () => {
                       <p className="text-xs text-slate-400">Post a question to start interacting with your instructors.</p>
                       <button
                         onClick={() => setIsAskModalOpen(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-xs"
+                        className="px-4 py-2 bg-[#FA5A36] text-white font-bold text-xs rounded-xl shadow-xs"
                       >
                         Ask Question Now
                       </button>
@@ -2083,7 +2440,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setProfileSubTab('profile')}
                         className={`py-1.5 px-3 rounded-xl transition ${
-                          profileSubTab === 'profile' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          profileSubTab === 'profile' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Personal Details
@@ -2091,7 +2448,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setProfileSubTab('academic')}
                         className={`py-1.5 px-3 rounded-xl transition ${
-                          profileSubTab === 'academic' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          profileSubTab === 'academic' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Academic & Skills
@@ -2099,7 +2456,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setProfileSubTab('preferences')}
                         className={`py-1.5 px-3 rounded-xl transition ${
-                          profileSubTab === 'preferences' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          profileSubTab === 'preferences' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Preferences
@@ -2107,7 +2464,7 @@ export const StudentDashboard: React.FC = () => {
                       <button
                         onClick={() => setProfileSubTab('security')}
                         className={`py-1.5 px-3 rounded-xl transition ${
-                          profileSubTab === 'security' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          profileSubTab === 'security' ? 'bg-[#FA5A36] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
                         Security
@@ -2124,84 +2481,348 @@ export const StudentDashboard: React.FC = () => {
 
                   {/* Profile Sub-Tab 1: Personal Details */}
                   {profileSubTab === 'profile' && (
-                    <form onSubmit={handleSaveProfile} className="space-y-5">
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {profilePhoto ? (
-                            <img
-                              src={normalizeImageUrl(profilePhoto) || ''}
-                              alt={studentName}
-                              className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-2xs"
+                    <form onSubmit={handleSaveProfile} className="space-y-6">
+                      {/* 1. Interactive Avatar & Header Card */}
+                      <div className="p-5 bg-gradient-to-r from-slate-50 to-orange-50/30 rounded-3xl border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                          {/* Avatar Circle with Camera Overlay */}
+                          <div className="relative group w-20 h-20 shrink-0">
+                            {profileFormData.profilePhoto || profilePhoto ? (
+                              <img
+                                src={normalizeImageUrl(profileFormData.profilePhoto || profilePhoto) || ''}
+                                alt={studentName}
+                                className="w-20 h-20 rounded-2xl object-cover border-2 border-white shadow-md"
+                              />
+                            ) : (
+                              <div className="w-20 h-20 rounded-2xl bg-[#FA5A36] text-white font-black text-2xl flex items-center justify-center shadow-md">
+                                {studentName[0] || 'S'}
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => avatarInputRef.current?.click()}
+                              className="absolute -bottom-1.5 -right-1.5 p-2 bg-slate-900 hover:bg-[#FA5A36] text-white rounded-xl shadow-md transition-colors cursor-pointer"
+                              title="Upload New Photo"
+                            >
+                              <Camera className="w-4 h-4" />
+                            </button>
+
+                            <input
+                              type="file"
+                              ref={avatarInputRef}
+                              accept="image/*"
+                              onChange={handleAvatarUpload}
+                              className="hidden"
                             />
-                          ) : (
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-bold text-base flex items-center justify-center">
-                              {studentName[0]}
+                          </div>
+
+                          {/* Profile Details & Photo Actions */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-black text-slate-900 text-base">{studentName}</h3>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Student
+                              </span>
                             </div>
-                          )}
-                          <div>
-                            <h3 className="font-extrabold text-slate-900 text-sm">{studentName}</h3>
-                            <p className="text-xs text-slate-500">{studentEmail}</p>
+                            <p className="text-xs text-slate-500 font-medium">{studentEmail}</p>
+
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => avatarInputRef.current?.click()}
+                                className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <Upload className="w-3 h-3 text-[#FA5A36]" />
+                                <span>Upload Photo</span>
+                              </button>
+
+                              {profileFormData.profilePhoto && (
+                                <button
+                                  type="button"
+                                  onClick={() => setProfileFormData((prev) => ({ ...prev, profilePhoto: '' }))}
+                                  className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[11px] rounded-lg transition cursor-pointer flex items-center gap-1"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Remove</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <span className="text-[11px] font-bold text-slate-500 block">Profile Completion</span>
-                          <span className="text-base font-black text-emerald-600">{completionPercentage}%</span>
+                        {/* Profile Completion Gauge */}
+                        <div className="bg-white/90 backdrop-blur-xs p-4 rounded-2xl border border-slate-200/80 shadow-2xs min-w-[200px] text-right space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-500">Profile Completion</span>
+                            <span className="text-sm font-black text-emerald-600">{completionPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                              style={{ width: `${completionPercentage}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 text-left">
+                            {completionPercentage >= 80
+                              ? 'Profile fully verified for certificates & passport'
+                              : 'Add headline, location & social links to reach 100%'}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">First Name</label>
-                          <input
-                            type="text"
-                            value={profileFormData.firstName}
-                            onChange={(e) => setProfileFormData({ ...profileFormData, firstName: e.target.value })}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
-                          />
+                      {/* Avatar Quick Presets */}
+                      <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/70 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-500">Or choose an avatar style:</span>
+                        <div className="flex flex-wrap items-center gap-3">
+                          {AVATAR_PRESETS.map((presetUrl, pIdx) => {
+                            const isSelected = (profileFormData.profilePhoto || profilePhoto) === presetUrl;
+                            return (
+                              <button
+                                key={pIdx}
+                                type="button"
+                                onClick={() => {
+                                  setProfileFormData((prev) => ({ ...prev, profilePhoto: presetUrl }));
+                                  success('Avatar preset selected!');
+                                }}
+                                className={`relative w-10 h-10 rounded-xl overflow-hidden transition-all cursor-pointer border-2 ${
+                                  isSelected ? 'border-[#FA5A36] scale-110 shadow-md ring-2 ring-[#FA5A36]/30' : 'border-slate-200 hover:border-slate-400'
+                                }`}
+                              >
+                                <img src={presetUrl} alt={`Preset ${pIdx + 1}`} className="w-full h-full object-cover" />
+                                {isSelected && (
+                                  <div className="absolute inset-0 bg-[#FA5A36]/30 flex items-center justify-center">
+                                    <Check className="w-3.5 h-3.5 text-white" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 2. Personal & Professional Identity Section */}
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <UserIcon className="w-4 h-4 text-[#FA5A36]" />
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                            Personal & Professional Identity
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              First Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={profileFormData.firstName}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, firstName: e.target.value })}
+                              placeholder="e.g. Maso"
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/20 outline-none transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                              Last Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={profileFormData.lastName}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, lastName: e.target.value })}
+                              placeholder="e.g. Sharma"
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/20 outline-none transition"
+                            />
+                          </div>
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Last Name</label>
-                          <input
-                            type="text"
-                            value={profileFormData.lastName}
-                            onChange={(e) => setProfileFormData({ ...profileFormData, lastName: e.target.value })}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
-                          />
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Professional Headline / Student Tagline
+                          </label>
+                          <div className="relative">
+                            <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={profileFormData.headline}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, headline: e.target.value })}
+                              placeholder="e.g. Computer Science Undergraduate | Aspiring Full-Stack & Cloud Developer"
+                              className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/20 outline-none transition"
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">This appears on your public Verified Skill Passport and recruiter portfolio.</p>
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
-                          <input
-                            type="text"
-                            placeholder="+91 9876543210"
-                            value={profileFormData.phone}
-                            onChange={(e) => setProfileFormData({ ...profileFormData, phone: e.target.value })}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">Country</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. India"
-                            value={profileFormData.country}
-                            onChange={(e) => setProfileFormData({ ...profileFormData, country: e.target.value })}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            About Me / Bio
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={profileFormData.bio}
+                            onChange={(e) => setProfileFormData({ ...profileFormData, bio: e.target.value })}
+                            placeholder="Tell instructors, mentors, and peers about your background, career goals, and what technologies you are passionate about..."
+                            className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/20 outline-none transition"
                           />
                         </div>
                       </div>
 
-                      <div className="flex justify-end pt-2">
+                      {/* 3. Account Credentials & Contact Section */}
+                      <div className="space-y-4 pt-2">
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <Lock className="w-4 h-4 text-[#FA5A36]" />
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                            Account & Contact Information
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Email Address - Protected / Read-only */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">Account Email Address</label>
+                              <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                Verified
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="email"
+                                disabled
+                                value={studentEmail}
+                                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 cursor-not-allowed outline-none"
+                              />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">Primary authentication login. Cannot be modified directly.</p>
+                          </div>
+
+                          {/* Phone Number */}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
+                            <input
+                              type="tel"
+                              placeholder="+91 9876543210"
+                              value={profileFormData.phone}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, phone: e.target.value })}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/20 outline-none transition"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1">Used for webinar and workshop reminders.</p>
+                          </div>
+                        </div>
+
+                        {/* Location Fields: Country, State, City */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Country</label>
+                            <div className="relative">
+                              <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="e.g. India"
+                                value={profileFormData.country}
+                                onChange={(e) => setProfileFormData({ ...profileFormData, country: e.target.value })}
+                                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">State / Province</label>
+                            <div className="relative">
+                              <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="e.g. Maharashtra / California"
+                                value={profileFormData.state}
+                                onChange={(e) => setProfileFormData({ ...profileFormData, state: e.target.value })}
+                                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">City</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Mumbai / San Francisco"
+                              value={profileFormData.city}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, city: e.target.value })}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. Professional Portfolio & Social Links */}
+                      <div className="space-y-4 pt-2">
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <Globe className="w-4 h-4 text-[#FA5A36]" />
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                            Social Profiles & Portfolio Links
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">LinkedIn Profile</label>
+                            <input
+                              type="url"
+                              placeholder="https://linkedin.com/in/username"
+                              value={profileFormData.linkedinUrl}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, linkedinUrl: e.target.value })}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">GitHub Profile</label>
+                            <input
+                              type="url"
+                              placeholder="https://github.com/username"
+                              value={profileFormData.githubUrl}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, githubUrl: e.target.value })}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Personal Portfolio / Website</label>
+                            <input
+                              type="url"
+                              placeholder="https://yourportfolio.dev"
+                              value={profileFormData.websiteUrl}
+                              onChange={(e) => setProfileFormData({ ...profileFormData, websiteUrl: e.target.value })}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none transition"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Submit Actions */}
+                      <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                         <button
                           type="submit"
                           disabled={profileSaving}
-                          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                          className="px-7 py-3 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                         >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>{profileSaving ? 'Saving Changes...' : 'Save Profile Changes'}</span>
+                          {profileSaving ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Saving Changes...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              <span>Save Profile Changes</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -2220,7 +2841,7 @@ export const StudentDashboard: React.FC = () => {
                               placeholder="e.g. Stanford University / IIT Delhi"
                               value={profileFormData.institution}
                               onChange={(e) => setProfileFormData({ ...profileFormData, institution: e.target.value })}
-                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
+                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none"
                             />
                           </div>
                         </div>
@@ -2234,7 +2855,7 @@ export const StudentDashboard: React.FC = () => {
                               placeholder="e.g. B.Tech Computer Science"
                               value={profileFormData.qualification}
                               onChange={(e) => setProfileFormData({ ...profileFormData, qualification: e.target.value })}
-                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
+                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none"
                             />
                           </div>
                         </div>
@@ -2246,7 +2867,7 @@ export const StudentDashboard: React.FC = () => {
                             placeholder="e.g. 2026"
                             value={profileFormData.graduationYear}
                             onChange={(e) => setProfileFormData({ ...profileFormData, graduationYear: e.target.value })}
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-indigo-500 outline-none"
+                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-[#FA5A36] outline-none"
                           />
                         </div>
                       </div>
@@ -2258,7 +2879,7 @@ export const StudentDashboard: React.FC = () => {
                           {profileFormData.skills.map((skill, sIdx) => (
                             <span
                               key={sIdx}
-                              className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-indigo-700 flex items-center gap-1.5 shadow-2xs"
+                              className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#FA5A36] flex items-center gap-1.5 shadow-2xs"
                             >
                               <span>{skill}</span>
                               <button
@@ -2303,7 +2924,7 @@ export const StudentDashboard: React.FC = () => {
                         <button
                           type="submit"
                           disabled={profileSaving}
-                          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                          className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                         >
                           <Save className="w-3.5 h-3.5" />
                           <span>{profileSaving ? 'Saving Changes...' : 'Save Academic Details'}</span>
@@ -2317,7 +2938,7 @@ export const StudentDashboard: React.FC = () => {
                     <div className="space-y-4">
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Globe className="w-5 h-5 text-indigo-600" />
+                          <Globe className="w-5 h-5 text-[#FA5A36]" />
                           <div>
                             <h4 className="text-xs font-bold text-slate-900">Preferred Learning Language</h4>
                             <p className="text-[11px] text-slate-500">Audio and subtitle language defaults.</p>
@@ -2336,7 +2957,7 @@ export const StudentDashboard: React.FC = () => {
 
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <BellRing className="w-5 h-5 text-indigo-600" />
+                          <BellRing className="w-5 h-5 text-[#FA5A36]" />
                           <div>
                             <h4 className="text-xs font-bold text-slate-900">Live Webinar Reminders</h4>
                             <p className="text-[11px] text-slate-500">Receive calendar alerts 15 minutes before scheduled classes.</p>
@@ -2346,7 +2967,7 @@ export const StudentDashboard: React.FC = () => {
                           type="checkbox"
                           checked={profileFormData.webinarReminders}
                           onChange={(e) => setProfileFormData({ ...profileFormData, webinarReminders: e.target.checked })}
-                          className="w-4 h-4 text-indigo-600 rounded"
+                          className="w-4 h-4 text-[#FA5A36] rounded"
                         />
                       </div>
                     </div>
@@ -2357,7 +2978,7 @@ export const StudentDashboard: React.FC = () => {
                     <div className="space-y-4">
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                         <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
-                          <Lock className="w-4 h-4 text-indigo-600" />
+                          <Lock className="w-4 h-4 text-[#FA5A36]" />
                           <span>Account Security & Session</span>
                         </div>
                         <p className="text-xs text-slate-600">
@@ -2391,7 +3012,7 @@ export const StudentDashboard: React.FC = () => {
             <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col border-l border-slate-200">
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center">
                     {activeDrawer === 'messages' ? <Mail className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
                   </div>
                   <div>
@@ -2441,7 +3062,7 @@ export const StudentDashboard: React.FC = () => {
                 <span className="text-[11px] text-slate-500 font-medium">Synced with LMS realtime server</span>
                 <button
                   onClick={() => setActiveDrawer(null)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl transition cursor-pointer"
                 >
                   Close
                 </button>
@@ -2462,6 +3083,47 @@ export const StudentDashboard: React.FC = () => {
           }}
         />
       )}
+      {/* Mobile Bottom Navigation Dock (<= 500px) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 h-16 flex items-center justify-around px-2 min-[501px]:hidden shadow-lg">
+        <button
+          type="button"
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+            activeTab === 'dashboard' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          <span>Home</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('my-learning')}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+            activeTab === 'my-learning' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <BookOpen className="w-5 h-5" />
+          <span>My Learning</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('live-classes')}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold cursor-pointer transition ${
+            activeTab === 'live-classes' ? 'text-[#FA5A36]' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <Video className="w-5 h-5" />
+          <span>Live Classes</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer transition"
+        >
+          <Menu className="w-5 h-5" />
+          <span>More</span>
+        </button>
+      </div>
 
       <Footer />
     </div>

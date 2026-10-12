@@ -216,68 +216,68 @@ export const CheckoutPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between font-sans">
       <Navbar />
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+      <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-16 py-10">
         {/* Checkout Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-xs font-medium text-[#FA5A36] uppercase tracking-wider mb-1">
             <Lock className="w-3.5 h-3.5" />
             <span>256-Bit SSL Encrypted Checkout</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl sm:text-4xl font-semibold text-slate-900 tracking-tight">
             Checkout & Access Activation
           </h1>
         </div>
 
         {checkoutError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-xs font-bold text-red-700 flex items-center gap-3">
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-medium text-rose-700 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 shrink-0" />
             <span>{checkoutError}</span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Student Details, Course Line Items & Payment Methods */}
           <div className="lg:col-span-8 space-y-6">
             {/* 1. Student Identity Account Card */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-3">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                  <div className="w-8 h-8 rounded-full bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] flex items-center justify-center font-semibold text-xs">
                     1
                   </div>
-                  <h2 className="text-sm font-bold text-slate-900">Student Account & Access Entitlement</h2>
+                  <h2 className="text-sm sm:text-base font-semibold text-slate-900">Student Account & Access Entitlement</h2>
                 </div>
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
                   <Check className="w-3.5 h-3.5" /> Verified User
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Enrolling Student</p>
-                  <p className="font-bold text-slate-900 mt-0.5">
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase">Enrolling Student</p>
+                  <p className="font-semibold text-slate-900 mt-0.5">
                     {user?.firstName} {user?.lastName}
                   </p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Email Address</p>
-                  <p className="font-bold text-slate-900 mt-0.5 font-mono">{user?.email}</p>
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-medium uppercase">Email Address</p>
+                  <p className="font-semibold text-slate-900 mt-0.5 font-mono">{user?.email}</p>
                 </div>
               </div>
             </div>
 
             {/* 2. Course Line Items with Scoped Discount Highlights */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                  <div className="w-8 h-8 rounded-full bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] flex items-center justify-center font-semibold text-xs">
                     2
                   </div>
-                  <h2 className="text-sm font-bold text-slate-900">Order Items & Line-Level Pricing</h2>
+                  <h2 className="text-sm sm:text-base font-semibold text-slate-900">Order Items & Line-Level Pricing</h2>
                 </div>
-                <span className="text-xs font-bold text-slate-500">{items.length} Course(s)</span>
+                <span className="text-xs font-medium text-slate-500">{items.length} Course(s)</span>
               </div>
 
               <div className="divide-y divide-slate-100">
@@ -285,7 +285,7 @@ export const CheckoutPage: React.FC = () => {
                   <div key={item.productId} className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-md uppercase">
+                        <span className="px-2 py-0.5 bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] text-[10px] font-bold rounded-md uppercase">
                           {item.productType}
                         </span>
                         {item.isEligibleForCoupon && (
@@ -294,8 +294,8 @@ export const CheckoutPage: React.FC = () => {
                           </span>
                         )}
                         {item.hasUpgradeCredit && (item.creditDeduction ?? 0) > 0 && (
-                          <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md flex items-center gap-1 border border-indigo-200">
-                            <Sparkles className="w-2.5 h-2.5 text-indigo-600" /> Topic Credit: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} owned)
+                          <span className="px-2 py-0.5 bg-[#FFF5F2] text-[#FA5A36] text-[10px] font-bold rounded-md flex items-center gap-1 border border-[#FFCCC2]">
+                            <Sparkles className="w-2.5 h-2.5 text-[#FA5A36]" /> Topic Credit: -₹{item.creditDeduction?.toLocaleString('en-IN')} ({item.ownedTopicCount} owned)
                           </span>
                         )}
                       </div>
@@ -309,7 +309,7 @@ export const CheckoutPage: React.FC = () => {
                           <span className="text-xs text-slate-400 line-through block">
                             ₹{item.unitPrice.toLocaleString('en-IN')}
                           </span>
-                          <span className="text-base font-black text-emerald-600">
+                          <span className="text-base font-bold text-emerald-600 block">
                             {item.finalPrice === 0 ? 'FREE' : `₹${item.finalPrice.toLocaleString('en-IN')}`}
                           </span>
                           <span className="text-[10px] font-bold text-emerald-700 block">
@@ -317,7 +317,7 @@ export const CheckoutPage: React.FC = () => {
                           </span>
                         </div>
                       ) : (
-                        <span className="text-base font-black text-slate-900">
+                        <span className="text-base font-bold text-slate-900 block">
                           {item.unitPrice === 0 ? 'FREE' : `₹${item.unitPrice.toLocaleString('en-IN')}`}
                         </span>
                       )}
@@ -328,12 +328,12 @@ export const CheckoutPage: React.FC = () => {
             </div>
 
             {/* 3. Payment Method Selection */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                <div className="w-8 h-8 rounded-full bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] flex items-center justify-center font-bold text-xs">
                   3
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Select Payment Method</h2>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900">Select Payment Method</h2>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -342,13 +342,13 @@ export const CheckoutPage: React.FC = () => {
                   onClick={() => setPaymentMethod('UPI')}
                   className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
                     paymentMethod === 'UPI'
-                      ? 'border-indigo-600 bg-indigo-50/50 shadow-xs'
+                      ? 'border-[#FA5A36] bg-[#FFF5F2]/60 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <Sparkles className="w-5 h-5 text-indigo-600" />
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'UPI' ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                    <Sparkles className="w-5 h-5 text-[#FA5A36]" />
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'UPI' ? 'border-[#FA5A36] bg-[#FA5A36]' : 'border-slate-300'}`}>
                       {paymentMethod === 'UPI' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
                   </div>
@@ -363,13 +363,13 @@ export const CheckoutPage: React.FC = () => {
                   onClick={() => setPaymentMethod('CARD')}
                   className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
                     paymentMethod === 'CARD'
-                      ? 'border-indigo-600 bg-indigo-50/50 shadow-xs'
+                      ? 'border-[#FA5A36] bg-[#FFF5F2]/60 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <CreditCard className="w-5 h-5 text-slate-700" />
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'CARD' ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'CARD' ? 'border-[#FA5A36] bg-[#FA5A36]' : 'border-slate-300'}`}>
                       {paymentMethod === 'CARD' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
                   </div>
@@ -384,13 +384,13 @@ export const CheckoutPage: React.FC = () => {
                   onClick={() => setPaymentMethod('NET_BANKING')}
                   className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
                     paymentMethod === 'NET_BANKING'
-                      ? 'border-indigo-600 bg-indigo-50/50 shadow-xs'
+                      ? 'border-[#FA5A36] bg-[#FFF5F2]/60 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <Building className="w-5 h-5 text-slate-700" />
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'NET_BANKING' ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'NET_BANKING' ? 'border-[#FA5A36] bg-[#FA5A36]' : 'border-slate-300'}`}>
                       {paymentMethod === 'NET_BANKING' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
                   </div>
@@ -404,9 +404,9 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* Right Column: Order Summary & Coupon Input */}
-          <div className="lg:col-span-4">
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-5 sticky top-24">
-              <h2 className="text-base font-black text-slate-900 pb-3 border-b border-slate-100">
+          <div className="lg:col-span-4 sticky top-24">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-xs space-y-5">
+              <h2 className="text-base font-bold text-slate-900 pb-3 border-b border-slate-100">
                 Order Summary
               </h2>
 
@@ -420,7 +420,7 @@ export const CheckoutPage: React.FC = () => {
                   <span className="flex items-center gap-1">
                     <span>Coupon Discount</span>
                     {appliedCoupon && (
-                      <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[10px] font-black font-mono">
+                      <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold font-mono">
                         {appliedCoupon.code}
                       </span>
                     )}
@@ -437,7 +437,7 @@ export const CheckoutPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={removeCoupon}
-                        className="text-red-500 hover:text-red-700 font-bold cursor-pointer text-[11px]"
+                        className="text-rose-500 hover:text-rose-700 font-bold cursor-pointer text-[11px]"
                       >
                         Remove
                       </button>
@@ -451,12 +451,12 @@ export const CheckoutPage: React.FC = () => {
                 )}
 
                 {credit > 0 && (
-                  <div className="flex justify-between items-center bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100">
-                    <span className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <div className="flex justify-between items-center bg-[#FFF5F2] p-3 rounded-xl border border-[#FFCCC2]">
+                    <span className="flex items-center gap-1.5 text-slate-800 font-bold text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-[#FA5A36]" />
                       <span>Topic Credit (Upgrade)</span>
                     </span>
-                    <span className="font-black text-indigo-700 text-xs sm:text-sm">
+                    <span className="font-bold text-[#FA5A36] text-xs sm:text-sm">
                       -₹{credit.toLocaleString('en-IN')}
                     </span>
                   </div>
@@ -467,9 +467,9 @@ export const CheckoutPage: React.FC = () => {
                   <span className="text-slate-400 font-medium">Included (₹0)</span>
                 </div>
 
-                <div className="flex justify-between text-lg font-black text-slate-900 pt-3 border-t border-slate-100">
+                <div className="flex justify-between text-lg font-bold text-slate-900 pt-3 border-t border-slate-100">
                   <span>Total Payable</span>
-                  <span className="text-indigo-600">₹{total.toLocaleString('en-IN')}</span>
+                  <span className="text-[#FA5A36] text-xl font-extrabold">₹{total.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
@@ -488,7 +488,7 @@ export const CheckoutPage: React.FC = () => {
                       maxLength={8}
                       disabled={isValidatingCoupon}
                       onChange={(e) => setCouponInput(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:border-[#FA5A36] focus:bg-white"
                     />
                   </div>
                   <button
@@ -507,7 +507,7 @@ export const CheckoutPage: React.FC = () => {
                 {couponFeedback && (
                   <p
                     className={`text-[11px] font-bold ${
-                      couponFeedback.success ? 'text-emerald-600' : 'text-red-500'
+                      couponFeedback.success ? 'text-emerald-600' : 'text-rose-500'
                     }`}
                   >
                     {couponFeedback.message}
@@ -515,12 +515,12 @@ export const CheckoutPage: React.FC = () => {
                 )}
               </form>
 
-              {/* Pay & Activate Action Button */}
+              {/* Pay & Activate Action Button (Brand Coral) */}
               <button
                 type="button"
                 onClick={handleExecuteCheckout}
                 disabled={processing}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:bg-indigo-400 text-white font-black text-sm rounded-2xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-4 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] disabled:bg-slate-300 text-white font-bold text-sm rounded-xl shadow-md shadow-[#FA5A36]/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
               >
                 {processing ? (
                   <div className="flex items-center gap-2">

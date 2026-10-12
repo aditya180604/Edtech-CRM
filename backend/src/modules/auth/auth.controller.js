@@ -118,4 +118,26 @@ export class AuthController {
       result.isNewUser ? 'User registered and linked via Firebase.' : 'Login successful via Firebase.'
     );
   });
+
+  static forgotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    const result = await AuthService.forgotPassword(email);
+    return ApiResponse.success(res, result, result.message);
+  });
+
+  static resetPassword = asyncHandler(async (req, res) => {
+    const { token, newPassword, password } = req.body;
+    const result = await AuthService.resetPassword({
+      token,
+      newPassword: newPassword || password,
+    });
+    return ApiResponse.success(res, result, result.message);
+  });
+
+  static checkAuthMethod = asyncHandler(async (req, res) => {
+    const { email } = req.query;
+    const result = await AuthService.checkAuthMethod(email);
+    return ApiResponse.success(res, result, 'Auth method retrieved.');
+  });
 }
+

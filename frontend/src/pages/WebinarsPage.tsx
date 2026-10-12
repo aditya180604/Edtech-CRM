@@ -29,10 +29,10 @@ export const WebinarsPage: React.FC = () => {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between">
+      <div className="min-h-screen bg-[#FDFBF7] flex flex-col justify-between font-sans">
         <Navbar />
-        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 flex justify-center items-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+        <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-20 flex justify-center items-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#FA5A36] border-t-transparent"></div>
         </main>
         <Footer />
       </div>
@@ -45,11 +45,15 @@ export const WebinarsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between">
+    <div className="min-h-screen bg-[#FDFBF7] flex flex-col justify-between font-sans">
       <Navbar />
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
-        <div className="mb-4">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+      <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-semibold uppercase tracking-wider mb-3">
+            <span className="w-2 h-2 rounded-full bg-[#FA5A36] animate-pulse"></span>
+            Interactive Live Sessions
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight">
             Live Webinars & Workshops
           </h1>
           <p className="text-sm sm:text-base text-slate-500 mt-1">

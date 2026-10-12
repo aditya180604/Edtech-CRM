@@ -22,10 +22,17 @@ router.delete('/courses/:id', InstructorController.deleteCourse);
 router.patch('/courses/:id/price', InstructorController.updatePrice);
 router.patch('/courses/:id/visibility', InstructorController.updateVisibility);
 router.post('/courses/:id/submit-for-review', InstructorController.submitForReview);
+router.post('/courses/:id/publish', InstructorController.publishCourse);
+
+// Dynamic Instructor Registration Fee Routes
+router.get('/registration-fee/info', InstructorController.getRegistrationFeeInfo);
+router.post('/registration-fee/create-order', InstructorController.createRegistrationFeeOrder);
+router.post('/registration-fee/verify', InstructorController.verifyRegistrationFee);
+
+// Deprecated publishing fee routes (kept for backwards compatibility)
 router.post('/courses/:id/publishing-fee/create-order', InstructorController.createPublishingFeeOrder);
 router.post('/courses/:id/publishing-fee/verify', InstructorController.verifyPublishingFee);
 router.get('/courses/:id/publishing-fee/status', InstructorController.getPublishingFeeStatus);
-router.post('/courses/:id/publish', InstructorController.publishCourse);
 
 // 3. Curriculum Hierarchy (Modules -> Topics -> Lessons)
 router.post('/courses/:id/modules', InstructorController.addModule);
@@ -56,5 +63,8 @@ router.get('/analytics', InstructorController.getAnalytics);
 router.get('/profile', InstructorController.getProfile);
 router.put('/profile', InstructorController.updateProfile);
 router.post('/profile/onboarding', InstructorController.completeOnboarding);
+router.post('/documents/upload', InstructorController.uploadDocument);
+router.get('/documents/:docId', InstructorController.getDocument);
+router.get('/readiness-report', InstructorController.getReadinessReport);
 
 export const instructorRoutes = router;

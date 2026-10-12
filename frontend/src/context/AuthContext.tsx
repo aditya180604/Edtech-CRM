@@ -5,11 +5,13 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail,
+  confirmPasswordReset,
   signOut,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
 import { authApi } from '../api/auth';
 import type { User, UserRole, LoginPayload, RegisterPayload } from '../types';
+import { disconnectRealtimeSocket } from '../realtime/socket';
 
 interface AuthContextType {
   user: User | null;
@@ -17,24 +19,30 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
-  register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
-  loginWithFirebaseEmail: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
-  registerWithFirebaseEmail: (email: string, password: string, name?: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; message?: string }>;
-  sendPasswordReset: (email: string) => Promise<{ success: boolean; message?: string }>;
-  logout: () => Promise<void>;
+  login: (payload: LoginPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; instructorId?: string; message?: string }>;
+  register: (payload: RegisterPayload) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; instructorId?: string; message?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; instructorId?: string; message?: string }>;
+  loginWithFirebaseEmail: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; instructorId?: string; message?: string }>;
+  registerWithFirebaseEmail: (email: string, password: string, name?: string) => Promise<{ success: boolean; role?: UserRole; isProfileCompleted?: boolean; instructorId?: string; message?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; message: string }>;
+  confirmResetPassword: (payload: { oobCode?: string; token?: string; newPassword: string }) => Promise<{ success: boolean; message: string }>;
+  logout: (redirectPath?: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => void;
   refreshUser: () => Promise<void>;
-  getRedirectPathForRole: (role: UserRole, isProfileCompleted?: boolean) => string;
+  getRedirectPathForRole: (role: UserRole, isProfileCompleted?: boolean, instructorId?: string) => string;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
   const [accessToken, setAccessToken] = useState<string | null>(() => {
     return localStorage.getItem('accessToken');
@@ -42,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getRedirectPathForRole = (role: UserRole, isProfileCompleted?: boolean): string => {
+  const getRedirectPathForRole = (role: UserRole, isProfileCompleted?: boolean, instructorId?: string): string => {
     switch (role) {
       case 'SUPER_ADMIN':
         return '/super-admin';
@@ -52,7 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isProfileCompleted === false) {
           return '/instructor/onboarding';
         }
-        return '/dashboard/instructor';
+        const effectiveId = instructorId || user?.instructorId || user?._id || user?.id;
+        return effectiveId ? `/dashboard/instructor/${effectiveId}` : '/dashboard/instructor';
       case 'STUDENT':
       default:
         return '/dashboard/student';
@@ -119,11 +128,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // 1. Existing Traditional Email/Password Login
+  // 1. Unified Email/Password Login with Strict Single Password Authority
   const login = async (payload: LoginPayload) => {
     setError(null);
+    const cleanEmail = payload.email.trim().toLowerCase();
+    const password = payload.password;
+
+    // Determine account authentication authority
+    let isFirebaseEnrolled = false;
     try {
-      const res = await authApi.login(payload);
+      const checkRes = await authApi.checkAuthMethod(cleanEmail);
+      if (checkRes.success && checkRes.data) {
+        isFirebaseEnrolled = checkRes.data.isFirebaseEnrolled;
+      }
+    } catch {
+      // Default to false if check fails, but backend will still enforce single authority
+    }
+
+    // Branch A: Accounts linked to Firebase Authentication
+    // Authenticate exclusively through Firebase. A failed login MUST NEVER fall back to legacy MongoDB hash!
+    if (isFirebaseEnrolled) {
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        const idToken = await userCredential.user.getIdToken();
+        const res = await authApi.firebaseLogin(idToken);
+        if (res.success && res.data) {
+          const { user: authUser, accessToken: token, refreshToken } = res.data;
+          setUser(authUser);
+          setAccessToken(token);
+          localStorage.setItem('accessToken', token);
+          if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+          localStorage.setItem('user', JSON.stringify(authUser));
+          return {
+            success: true,
+            role: authUser.role,
+            isProfileCompleted: authUser.isProfileCompleted,
+            instructorId: authUser.instructorId,
+          };
+        }
+        return { success: false, message: res.message || 'Login failed.' };
+      } catch (fbErr: any) {
+        // Enforce strict rejection for Firebase-managed accounts
+        const msg = 'Invalid email or password.';
+        setError(msg);
+        return { success: false, message: msg };
+      }
+    }
+
+    // Branch B: Unmigrated legacy accounts (not yet linked to Firebase)
+    try {
+      const res = await authApi.login({ email: cleanEmail, password });
       if (res.success && res.data) {
         const { user: authUser, accessToken: token, refreshToken } = res.data;
         setUser(authUser);
@@ -131,9 +185,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('accessToken', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+
+        // Background migration to Firebase Auth:
+        // Provision credentials in Firebase so all future password resets and logins are unified under Firebase
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password).catch(() => null);
+          if (userCredential) {
+            const idToken = await userCredential.user.getIdToken();
+            await authApi.firebaseLogin(idToken).catch(() => {});
+          }
+        } catch {
+          // Migration is best-effort and non-blocking
+        }
+
+        return {
+          success: true,
+          role: authUser.role,
+          isProfileCompleted: authUser.isProfileCompleted,
+          instructorId: authUser.instructorId,
+        };
       }
-      return { success: false, message: res.message || 'Login failed' };
+      return { success: false, message: res.message || 'Invalid email or password.' };
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Invalid email or password.';
       setError(msg);
@@ -141,10 +213,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 2. Existing Traditional Registration
+  // 2. Dual Registration (Creates in Firebase Auth for reset security + Registers in MongoDB)
   const register = async (payload: RegisterPayload) => {
     setError(null);
     try {
+      const cleanEmail = payload.email.trim().toLowerCase();
+      // Ensure user is provisioned in Firebase Auth so password resets work immediately
+      try {
+        await createUserWithEmailAndPassword(auth, cleanEmail, payload.password);
+      } catch (fbErr: any) {
+        console.warn('[Firebase Register non-fatal]', fbErr.code || fbErr.message);
+      }
+
       const res = await authApi.register(payload);
       if (res.success && res.data) {
         const { user: authUser, accessToken: token, refreshToken } = res.data;
@@ -153,7 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('accessToken', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted, instructorId: authUser.instructorId };
       }
       return { success: false, message: res.message || 'Registration failed' };
     } catch (err: any) {
@@ -177,7 +257,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('accessToken', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted, instructorId: authUser.instructorId };
       }
       return { success: false, message: res.message || 'Google authentication failed' };
     } catch (err: any) {
@@ -204,7 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('accessToken', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted, instructorId: authUser.instructorId };
       }
       return { success: false, message: res.message || 'Firebase login failed' };
     } catch (err: any) {
@@ -236,7 +316,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('accessToken', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(authUser));
-        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted };
+        return { success: true, role: authUser.role, isProfileCompleted: authUser.isProfileCompleted, instructorId: authUser.instructorId };
       }
       return { success: false, message: res.message || 'Registration failed' };
     } catch (err: any) {
@@ -249,18 +329,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 6. Firebase Password Reset
+  // 6. Seamless Password Reset (Firebase + Backend sync)
   const sendPasswordReset = async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    // 1. Try Firebase Auth Password Reset Email with redirect to our app
     try {
-      await sendPasswordResetEmail(auth, email);
-      return { success: true, message: 'Password reset email sent successfully.' };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Failed to send reset email.' };
+      const actionCodeSettings = {
+        url: `${window.location.origin}/reset-password`,
+        handleCodeInApp: true,
+      };
+      await sendPasswordResetEmail(auth, cleanEmail, actionCodeSettings);
+    } catch (fbErr: any) {
+      console.warn('[Firebase Reset with ActionCodeSettings]', fbErr.message);
+      // Fallback without actionCodeSettings if domain is not whitelisted yet
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail);
+      } catch (fbErr2: any) {
+        console.warn('[Firebase Reset basic]', fbErr2.message);
+      }
     }
+
+    // 2. Also trigger backend reset token generation
+    try {
+      await authApi.forgotPassword(cleanEmail);
+    } catch (beErr: any) {
+      console.warn('[Backend Reset]', beErr.message);
+    }
+
+    return {
+      success: true,
+      message: 'If an account exists with this email address, password reset instructions have been dispatched to your inbox.',
+    };
+  };
+
+  // 6b. Confirm Password Reset with Token or Firebase Code
+  const confirmResetPassword = async (payload: { oobCode?: string; token?: string; newPassword: string }) => {
+    const { oobCode, token, newPassword } = payload;
+    let fbDone = false;
+    let beDone = false;
+    let errorMsg = '';
+
+    // If Firebase action code provided
+    if (oobCode) {
+      try {
+        await confirmPasswordReset(auth, oobCode, newPassword);
+        fbDone = true;
+      } catch (err: any) {
+        errorMsg = err.message || 'Firebase reset code is invalid or expired.';
+      }
+    }
+
+    // If backend reset token provided
+    if (token) {
+      try {
+        await authApi.resetPassword({ token, newPassword });
+        beDone = true;
+      } catch (err: any) {
+        errorMsg = err.response?.data?.message || err.message || errorMsg || 'Reset token is invalid or expired.';
+      }
+    }
+
+    if (fbDone || beDone) {
+      return { success: true, message: 'Password reset successfully! You can now log in with your new password.' };
+    }
+
+    return { success: false, message: errorMsg || 'Failed to reset password. The link may be invalid or expired.' };
   };
 
   // 7. Logout User
-  const logout = async () => {
+  const logout = async (redirectPath: string = '/') => {
+    disconnectRealtimeSocket();
     try {
       await signOut(auth);
     } catch (e) {}
@@ -274,6 +412,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('user');
       setUser(null);
       setAccessToken(null);
+      // Explicit redirect to "/" (landing page) on logout
+      window.location.href = redirectPath;
     }
   };
 
@@ -291,6 +431,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithFirebaseEmail,
         registerWithFirebaseEmail,
         sendPasswordReset,
+        confirmResetPassword,
         logout,
         updateUser,
         refreshUser,
@@ -302,10 +443,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Return resilient default during HMR or edge-case initial tree evaluations
+    return {
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: true,
+      error: null,
+      login: async () => ({ success: false, message: 'Authentication initializing...' }),
+      register: async () => ({ success: false, message: 'Authentication initializing...' }),
+      loginWithGoogle: async () => ({ success: false, message: 'Authentication initializing...' }),
+      loginWithFirebaseEmail: async () => ({ success: false, message: 'Authentication initializing...' }),
+      registerWithFirebaseEmail: async () => ({ success: false, message: 'Authentication initializing...' }),
+      sendPasswordReset: async () => ({ success: false, message: 'Authentication initializing...' }),
+      confirmResetPassword: async () => ({ success: false, message: 'Authentication initializing...' }),
+      logout: async () => {},
+      updateUser: () => {},
+      refreshUser: async () => {},
+      getRedirectPathForRole: () => '/',
+    };
   }
   return context;
 };

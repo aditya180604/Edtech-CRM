@@ -502,9 +502,26 @@ export class CatalogService {
   /**
    * Get public instructors list from User and InstructorProfile models
    * Dynamic: real course counts, student enrollments, ratings, and course lists
+   * Strict: Only Super-Admin approved and verified instructors are shown
    */
   static async getInstructors({ search, limit = 50 } = {}) {
+    // 1. Only instructors with VERIFIED or APPROVED status in InstructorProfile are eligible for public catalog
+    const verifiedProfiles = await InstructorProfile.find({
+      verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
+    })
+      .select('userId bio expertise skills experience workExperience yearsOfExperience currentOrganization country phone verificationStatus')
+      .lean();
+
+    const verifiedUserIds = verifiedProfiles
+      .map((p) => p.userId)
+      .filter((uId) => mongoose.isValidObjectId(uId));
+
+    if (verifiedUserIds.length === 0) {
+      return [];
+    }
+
     const filter = {
+      _id: { $in: verifiedUserIds },
       role: { $in: ['INSTRUCTOR', 'Instructor', 'instructor'] },
       status: { $in: ['ACTIVE', 'Active', 'active', 'VERIFIED'] },
     };
@@ -516,19 +533,19 @@ export class CatalogService {
 
     const instructors = await User.find(filter)
       .select('firstName lastName email profilePhoto timezone country')
-      .limit(Number(limit))
       .lean();
 
-    const userIds = instructors.map((u) => u._id);
-    const [profiles, courses] = await Promise.all([
-      InstructorProfile.find({ userId: { $in: userIds } }).lean(),
-      Course.find({
-        instructorId: { $in: userIds },
-        status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
-      })
-        .select('_id title slug thumbnail category coursePrice instructorId')
-        .lean(),
-    ]);
+    if (instructors.length === 0) {
+      return [];
+    }
+
+    const activeUserIds = instructors.map((u) => u._id);
+    const courses = await Course.find({
+      instructorId: { $in: activeUserIds },
+      status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
+    })
+      .select('_id title slug thumbnail category coursePrice instructorId')
+      .lean();
 
     const courseIds = courses.map((c) => c._id);
     const [reviewsAgg, enrollmentsAgg] = await Promise.all([
@@ -542,9 +559,9 @@ export class CatalogService {
       ]),
     ]);
 
-    return instructors.map((inst) => {
+    const mappedInstructors = instructors.map((inst) => {
       const uId = inst._id.toString();
-      const profile = profiles.find((p) => p.userId?.toString() === uId);
+      const profile = verifiedProfiles.find((p) => p.userId?.toString() === uId);
       const instructorCourses = courses.filter((c) => c.instructorId?.toString() === uId);
       const instCourseIds = instructorCourses.map((c) => c._id.toString());
 
@@ -569,7 +586,7 @@ export class CatalogService {
         id: uId,
         name: name || 'Instructor',
         title: profile?.currentOrganization || profile?.experience || (primaryCategory ? `Lead ${primaryCategory} Instructor` : 'Technology Educator'),
-        avatar: inst.profilePhoto || null,
+        avatar: inst.profilePhoto || profile?.profilePhoto || null,
         bio: profile?.bio || 'Passionate industry expert dedicated to teaching practical, career-ready skills.',
         specialization: allSkills[0] || primaryCategory || 'Technology',
         expertise: allSkills.slice(0, 4),
@@ -577,6 +594,7 @@ export class CatalogService {
         rating: avgRating,
         studentCount: totalStudents,
         courseCount: instructorCourses.length,
+        isVerified: true,
         courses: instructorCourses.map((c) => ({
           id: c._id.toString(),
           title: c.title,
@@ -586,6 +604,27 @@ export class CatalogService {
         })),
       };
     });
+
+    // Dynamic Top Ranking:
+    // 1. Primary: Highest rating first (e.g., 5.0 -> 4.9 -> 4.8)
+    // 2. Secondary: Highest published course count
+    // 3. Tertiary: Highest active student enrollment count
+    // 4. Stable tie-breaker: Alphabetical by name
+    mappedInstructors.sort((a, b) => {
+      if (b.rating !== a.rating) {
+        return b.rating - a.rating;
+      }
+      if (b.courseCount !== a.courseCount) {
+        return b.courseCount - a.courseCount;
+      }
+      if (b.studentCount !== a.studentCount) {
+        return b.studentCount - a.studentCount;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    const parsedLimit = Number(limit);
+    return parsedLimit > 0 ? mappedInstructors.slice(0, parsedLimit) : mappedInstructors;
   }
 
   /**
@@ -643,11 +682,19 @@ export class CatalogService {
    * Strict: 0 hardcoded numbers or fake +1 additions
    */
   static async getPublicStats() {
+    const verifiedInstructorUserIds = await InstructorProfile.distinct('userId', {
+      verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
+    });
+
     const [totalCourses, totalInstructors, totalStudents, totalLearningPaths, totalWebinars, reviewAgg] =
       await Promise.all([
         Course.countDocuments({ status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] } }),
-        User.countDocuments({ role: 'INSTRUCTOR' }),
-        User.countDocuments({ role: 'STUDENT' }),
+        User.countDocuments({
+          _id: { $in: verifiedInstructorUserIds },
+          role: 'INSTRUCTOR',
+          status: { $in: ['ACTIVE', 'Active', 'active', 'VERIFIED'] },
+        }),
+        User.countDocuments({ role: 'STUDENT', status: { $in: ['ACTIVE', 'Active', 'active'] } }),
         LearningPath.countDocuments({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } }),
         Webinar.countDocuments({ status: { $in: ['SCHEDULED', 'LIVE', 'ACTIVE', 'Active'] } }),
         Review.aggregate([

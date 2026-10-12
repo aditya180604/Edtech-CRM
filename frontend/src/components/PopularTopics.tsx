@@ -96,23 +96,23 @@ export const PopularTopics: React.FC = () => {
   };
 
   return (
-    <section className="py-8 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-10 w-full max-w-[1680px] mx-auto px-4 sm:px-8 lg:px-12 xl:px-16">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
             Popular Topics
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
             Learn specific skills. Buy only what you need.
           </p>
         </div>
         <Link
           to="/topics"
-          className="group inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+          className="group inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-[#FA5A36] hover:text-[#E04322] transition-colors"
         >
-          <span>View All</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          <span>View all</span>
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
         </Link>
       </div>
 
@@ -122,7 +122,7 @@ export const PopularTopics: React.FC = () => {
           <Link
             key={topic.id || topic._id || idx}
             to={`/topics?search=${encodeURIComponent(topic.title)}`}
-            className="group bg-white p-4 rounded-2xl border border-slate-100 shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:border-indigo-100 transition-all duration-150 flex items-center justify-between"
+            className="group bg-white p-4.5 rounded-2xl border border-slate-100 shadow-2xs hover:shadow-md hover:border-[#FFCCC2] transition-all duration-150 flex items-center justify-between"
           >
             <div className="flex items-center gap-3.5 min-w-0">
               {/* Icon Container */}
@@ -136,13 +136,13 @@ export const PopularTopics: React.FC = () => {
 
               {/* Title & Duration */}
               <div className="min-w-0">
-                <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block truncate">
+                <span className="text-[10px] font-semibold uppercase text-[#FA5A36] tracking-wider block truncate">
                   {topic.category}
                 </span>
-                <h3 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight truncate mb-0.5">
+                <h3 className="text-xs sm:text-sm font-medium text-slate-800 group-hover:text-[#FA5A36] transition-colors leading-tight truncate mb-0.5">
                   {topic.title}
                 </h3>
-                <span className="text-[11px] text-slate-400 font-medium">
+                <span className="text-[11px] text-slate-400 font-normal">
                   {topic.duration}m • {topic.lessonsCount || 1} Lessons
                 </span>
               </div>
@@ -150,13 +150,13 @@ export const PopularTopics: React.FC = () => {
 
             {/* Price Tag */}
             <div className="text-right pl-3 shrink-0">
-              <span className="text-sm font-black text-slate-900 block">
+              <span className="text-sm font-semibold text-slate-900 block">
                 {topic.isFree || topic.price === 0
                   ? 'FREE'
                   : `₹${topic.price.toLocaleString('en-IN')}`}
               </span>
-              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                Buy Skill
+              <span className="text-[10px] font-medium text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
+                Buy Topic
               </span>
             </div>
           </Link>
