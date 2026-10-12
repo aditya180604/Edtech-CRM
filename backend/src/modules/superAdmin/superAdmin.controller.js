@@ -310,13 +310,13 @@ export class SuperAdminController {
     return ApiResponse.success(res, data, 'Platform fees overview retrieved successfully.');
   });
 
-<<<<<<< HEAD
   static verifyRegistrationFeeOrder = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
     const { forceMarkPaid } = req.body || {};
     const data = await SuperAdminService.verifyRegistrationFeeOrder(orderId, forceMarkPaid);
     return ApiResponse.success(res, data, data.message || 'Registration fee verified successfully.');
-=======
+  });
+
   // 13. System Status & Audit Logs
   static getStatus = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getSystemStatus(req.user.userId);
@@ -326,7 +326,6 @@ export class SuperAdminController {
   static getAuditLogs = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getAuditLogs(req.query);
     return ApiResponse.success(res, data, 'Audit logs retrieved.');
->>>>>>> version
   });
 
   // 12. Admin Management (Super Admin Exclusive)
