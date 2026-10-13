@@ -24,6 +24,7 @@ import {
   PRODUCT_TYPES,
   TRANSACTION_TYPES,
 } from '../../config/constants.js';
+import { getAppOrigin } from '../../config/env.js';
 
 export class PaymentService {
   /**
@@ -778,7 +779,7 @@ export class PaymentService {
         });
       }
 
-      const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || process.env.FRONTEND_URL || 'http://localhost:5173';
+      const appOrigin = getAppOrigin();
 
       order.receiptSnapshot = {
         receiptNumber: generatedReceiptNumber,

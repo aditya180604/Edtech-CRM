@@ -24,8 +24,8 @@ import {
   InstructorEarning,
   PlatformSetting,
   InstructorRegistrationFee,
-} from '../../models/index.js';
 import { ROLES, USER_STATUS } from '../../config/constants.js';
+import { getAppOrigin } from '../../config/env.js';
 import fs from 'fs';
 import path from 'path';
 import { InstructorService } from '../instructor/instructor.service.js';
@@ -1009,7 +1009,7 @@ export class SuperAdminService {
     const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
     if (recipientEmail) {
       try {
-        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const appOrigin = getAppOrigin();
         const emailRes = await sendInstructorApplicationApprovedEmail({
           to: recipientEmail,
           instructorName: recipientName,
@@ -1093,7 +1093,7 @@ export class SuperAdminService {
     const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
     if (recipientEmail) {
       try {
-        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const appOrigin = getAppOrigin();
         const emailRes = await sendInstructorApplicationRejectedEmail({
           to: recipientEmail,
           instructorName: recipientName,
@@ -1176,7 +1176,7 @@ export class SuperAdminService {
     const recipientName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Instructor';
     if (recipientEmail) {
       try {
-        const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+        const appOrigin = getAppOrigin();
         const emailRes = await sendInstructorChangesRequestedEmail({
           to: recipientEmail,
           instructorName: recipientName,

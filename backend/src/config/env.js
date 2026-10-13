@@ -8,6 +8,17 @@ const __dirname = path.dirname(__filename);
 // Single source of truth for environment: backend/.env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+export function getAppOrigin() {
+  const origin =
+    process.env.FRONTEND_URL ||
+    process.env.APP_BASE_URL ||
+    (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : '') ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://frontend-alpha-green-2l6qnyuw3g.vercel.app'
+      : 'http://localhost:5173');
+  return origin.replace(/\/+$/, '');
+}
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '5000', 10),

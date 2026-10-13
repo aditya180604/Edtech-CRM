@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { getAppOrigin } from '../config/env.js';
 
 /**
  * Generates an official, beautifully styled PDF receipt buffer using PDFKit.
@@ -216,7 +217,7 @@ export function generateReceiptPdfBuffer(receiptData) {
         { width: leftNoteWidth - 24, lineGap: 3 }
       );
 
-      const targetUrl = receiptData.courseUrl || 'http://localhost:5173/dashboard/student';
+      const targetUrl = receiptData.courseUrl || `${getAppOrigin()}/dashboard/student`;
       doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#C2410C').text(
         `Dashboard: ${targetUrl}`,
         52,

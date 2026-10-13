@@ -4,6 +4,7 @@ import { CashfreeService } from '../../services/cashfree.service.js';
 import { sendConsultationStudentConfirmationEmail, sendConsultationInstructorAlertEmail } from '../../services/email.service.js';
 import { AccessToken } from 'livekit-server-sdk';
 import { AppError } from '../../utils/apiResponse.js';
+import { getAppOrigin } from '../../config/env.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { publishConsultationRatingUpdate } from '../../services/realtime.service.js';
 
@@ -457,7 +458,7 @@ export class ConsultationService {
 
     const bookingCode = `CNS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     const roomCode = `room_cns_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    const appOrigin = getAppOrigin();
     const meetingUrl = `${appOrigin}/webinars/live/${roomCode}`;
 
     // CASE A: FREE CONSULTATION (Fee == 0)

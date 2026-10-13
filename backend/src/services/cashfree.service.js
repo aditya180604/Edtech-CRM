@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { config } from '../config/env.js';
+import { config, getAppOrigin } from '../config/env.js';
 
 export class CashfreeService {
   /**
@@ -69,7 +69,7 @@ export class CashfreeService {
             : '9999999999',
       },
       order_meta: {
-        return_url: returnUrl || 'http://localhost:5173/dashboard/instructor',
+        return_url: returnUrl || `${getAppOrigin()}/dashboard/instructor`,
         ...(notifyUrl ? { notify_url: notifyUrl } : {}),
       },
       order_note: orderNote,

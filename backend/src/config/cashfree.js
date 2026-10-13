@@ -1,4 +1,4 @@
-import { config } from './env.js';
+import { config, getAppOrigin } from './env.js';
 
 const isProduction = (process.env.CASHFREE_ENV || 'SANDBOX').toUpperCase() === 'PRODUCTION';
 
@@ -13,8 +13,16 @@ export const cashfreeConfig = {
   secretKey: isProduction
     ? process.env.CASHFREE_SECRET_KEY_PRODUCTION || process.env.CASHFREE_SECRET_KEY
     : process.env.CASHFREE_SECRET_KEY_SANDBOX || process.env.CASHFREE_SECRET_KEY,
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
-  backendPublicUrl: process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000',
+  get frontendUrl() {
+    return getAppOrigin();
+  },
+  get backendPublicUrl() {
+    return (
+      process.env.BACKEND_PUBLIC_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      'http://localhost:5000'
+    ).replace(/\/+$/, '');
+  },
 };
 
 export function validateCashfreeConfig() {

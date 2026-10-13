@@ -25,6 +25,7 @@ import {
 import { ROLES, TRANSACTION_TYPES } from '../../config/constants.js';
 import fs from 'fs';
 import path from 'path';
+import { getAppOrigin } from '../../config/env.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { ReadinessScoringService } from './readinessScoring.service.js';
@@ -1937,7 +1938,7 @@ export class InstructorService {
       customerName: fullName,
       customerEmail: user.email || 'instructor@example.com',
       customerPhone: user.phone || '9999999999',
-      returnUrl: returnUrl || `http://localhost:5173/dashboard/instructor`,
+      returnUrl: returnUrl || `${getAppOrigin()}/dashboard/instructor`,
       orderNote: `One-Time Instructor Registration & Account Setup Fee for ${fullName}`,
     });
 

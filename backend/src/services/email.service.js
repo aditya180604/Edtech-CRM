@@ -1,18 +1,9 @@
 import nodemailer from 'nodemailer';
 import '../config/env.js';
+import { getAppOrigin } from '../config/env.js';
+export { getAppOrigin };
 
 let transporterInstance = null;
-
-export function getAppOrigin() {
-  const origin =
-    process.env.APP_BASE_URL ||
-    process.env.FRONTEND_URL ||
-    (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : '') ||
-    (process.env.NODE_ENV === 'production'
-      ? 'https://frontend-alpha-green-2l6qnyuw3g.vercel.app'
-      : 'http://localhost:5173');
-  return origin.replace(/\/+$/, '');
-}
 
 function getTransporter() {
   if (transporterInstance) return transporterInstance;

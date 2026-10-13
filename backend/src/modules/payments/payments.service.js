@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { CashfreeService } from '../../services/cashfree.service.js';
-import { config } from '../../config/env.js';
+import { config, getAppOrigin } from '../../config/env.js';
 import {
   PlatformFee,
   Course,
@@ -90,7 +90,7 @@ export class PaymentsService {
       customerName: `${instructor?.firstName || ''} ${instructor?.lastName || ''}`.trim() || 'Instructor',
       customerEmail: instructor?.email || 'instructor@example.com',
       customerPhone: instructor?.phone || '9999999999',
-      returnUrl: returnUrl || `http://localhost:5173/dashboard/instructor`,
+      returnUrl: returnUrl || `${getAppOrigin()}/dashboard/instructor`,
       orderNote: `10% Platform Publishing Fee for "${course.title}"`,
     });
 
