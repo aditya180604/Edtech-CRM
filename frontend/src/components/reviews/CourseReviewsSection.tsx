@@ -14,6 +14,7 @@ import {
   type CourseReviewItem,
   type CourseReviewsResponse,
 } from '../../api/courses';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 interface CourseReviewsSectionProps {
@@ -26,6 +27,7 @@ export const CourseReviewsSection: React.FC<CourseReviewsSectionProps> = ({
   isEnrolled,
 }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [reviewsData, setReviewsData] = useState<CourseReviewsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -41,6 +43,14 @@ export const CourseReviewsSection: React.FC<CourseReviewsSectionProps> = ({
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  const handleOpenWriteReview = () => {
+    if (!user) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    setIsWriteModalOpen(true);
+  };
 
   const fetchReviews = () => {
     setLoading(true);
@@ -93,6 +103,11 @@ export const CourseReviewsSection: React.FC<CourseReviewsSectionProps> = ({
 
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setFormError('Please sign in to write and submit a review.');
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
     if (!inputComment.trim()) {
       setFormError('Please write your review feedback.');
       return;
@@ -187,13 +202,23 @@ export const CourseReviewsSection: React.FC<CourseReviewsSectionProps> = ({
 
           {/* Write review button trigger */}
           <div className="mt-4">
-            <button
-              onClick={() => setIsWriteModalOpen(true)}
-              className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-xl text-xs font-bold shadow-xs shadow-[#FA5A36]/25 transition cursor-pointer flex items-center gap-2"
-            >
-              <MessageSquarePlus className="w-3.5 h-3.5" />
-              <span>{myReview ? 'Edit Your Review' : 'Write a Review'}</span>
-            </button>
+            {user ? (
+              <button
+                onClick={handleOpenWriteReview}
+                className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-xl text-xs font-bold shadow-xs shadow-[#FA5A36]/25 transition cursor-pointer flex items-center gap-2"
+              >
+                <MessageSquarePlus className="w-3.5 h-3.5" />
+                <span>{myReview ? 'Edit Your Review' : 'Write a Review'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleOpenWriteReview}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer flex items-center gap-2"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Log In to Write a Review</span>
+              </button>
+            )}
           </div>
         </div>
 

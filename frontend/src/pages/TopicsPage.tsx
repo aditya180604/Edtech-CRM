@@ -16,11 +16,13 @@ import {
   GitBranch,
   Video,
   Layers,
+  X,
 } from 'lucide-react';
 import { coursesApi, type TopicItem } from '../api/courses';
 import { popularTopicsData } from '../data/mockData';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
+import { TopicDetailModal } from '../components/TopicDetailModal';
 
 export const TopicsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -30,12 +32,36 @@ export const TopicsPage: React.FC = () => {
 
   const courseIdParam = searchParams.get('courseId') || '';
   const initialCat = searchParams.get('category') || 'All';
+  const initialSearch = searchParams.get('search') || '';
 
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState(initialCat);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const [categories, setCategories] = useState<string[]>(['All']);
+  const [activeTopic, setActiveTopic] = useState<TopicItem | null>(null);
+
+  // Sync with URL query parameter changes
+  useEffect(() => {
+    const urlSearch = searchParams.get('search');
+    if (urlSearch !== null && urlSearch !== searchQuery) {
+      setSearchQuery(urlSearch);
+      setDebouncedSearch(urlSearch);
+    }
+    const urlCat = searchParams.get('category');
+    if (urlCat && urlCat !== selectedCategory) {
+      setSelectedCategory(urlCat);
+    }
+  }, [searchParams]);
+
+  // Debounce search query to prevent excessive fetches while typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Fetch dynamic topics from database
   const fetchTopics = useCallback(async () => {
@@ -44,18 +70,19 @@ export const TopicsPage: React.FC = () => {
       const res = await coursesApi.getTopics({
         courseId: courseIdParam || undefined,
         category: selectedCategory === 'All' ? undefined : selectedCategory,
-        search: searchQuery.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
       });
 
-      if (res.success && res.data && res.data.length > 0) {
+      if (res.success && Array.isArray(res.data)) {
         setTopics(res.data);
-        // Compute distinct categories
-        const cats = Array.from(
-          new Set(res.data.map((t) => t.category).filter(Boolean))
-        );
-        setCategories(['All', ...cats]);
+        if (categories.length <= 1 && res.data.length > 0) {
+          const cats = Array.from(
+            new Set(res.data.map((t) => t.category).filter(Boolean))
+          );
+          setCategories(['All', ...cats]);
+        }
       } else {
-        // Map mock fallback if database has no standalone topics yet
+        // Fallback filtering if needed
         const mappedMock: TopicItem[] = popularTopicsData.map((t) => ({
           id: t.id,
           _id: t.id,
@@ -78,9 +105,12 @@ export const TopicsPage: React.FC = () => {
             (t) => t.category.toLowerCase() === selectedCategory.toLowerCase()
           );
         }
-        if (searchQuery.trim()) {
+        if (debouncedSearch.trim()) {
+          const q = debouncedSearch.toLowerCase().trim();
           filtered = filtered.filter((t) =>
-            t.title.toLowerCase().includes(searchQuery.toLowerCase())
+            t.title.toLowerCase().includes(q) ||
+            t.category.toLowerCase().includes(q) ||
+            (t.skills && t.skills.some((s) => s.toLowerCase().includes(q)))
           );
         }
         setTopics(filtered);
@@ -92,7 +122,7 @@ export const TopicsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseIdParam, selectedCategory, searchQuery]);
+  }, [courseIdParam, selectedCategory, debouncedSearch]);
 
   useEffect(() => {
     fetchTopics();
@@ -198,9 +228,35 @@ export const TopicsPage: React.FC = () => {
               type="text"
               placeholder="Search topics by title or skill..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9.5 pr-4 py-2.5 bg-white text-sm text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-2 focus:ring-[#FFF5F2] shadow-2xs font-normal"
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                const nextParams = new URLSearchParams(searchParams);
+                if (val.trim()) {
+                  nextParams.set('search', val.trim());
+                } else {
+                  nextParams.delete('search');
+                }
+                setSearchParams(nextParams, { replace: true });
+              }}
+              className="w-full pl-9.5 pr-9 py-2.5 bg-white text-sm text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-2 focus:ring-[#FFF5F2] shadow-2xs font-normal"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setDebouncedSearch('');
+                  const nextParams = new URLSearchParams(searchParams);
+                  nextParams.delete('search');
+                  setSearchParams(nextParams, { replace: true });
+                }}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -228,24 +284,43 @@ export const TopicsPage: React.FC = () => {
             <p className="text-xs font-medium text-slate-500">Loading dynamic topics from courses...</p>
           </div>
         ) : topics.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center max-w-md mx-auto space-y-3 shadow-xs">
+          <div className="bg-white rounded-3xl border border-slate-100 p-12 text-center max-w-md mx-auto space-y-4 shadow-xs">
             <Layers className="w-10 h-10 text-slate-400 mx-auto" />
-            <h3 className="font-semibold text-slate-900 text-base">No Topics Found</h3>
-            <p className="text-xs text-slate-500 font-normal">
-              No standalone topics match your search criteria. Try selecting another category or clear search.
-            </p>
+            <div>
+              <h3 className="font-semibold text-slate-900 text-base">No Topics Found</h3>
+              <p className="text-xs text-slate-500 font-normal mt-1">
+                {searchQuery
+                  ? `No topics match "${searchQuery}". Try a different keyword or reset filters.`
+                  : 'No standalone topics match your selected category.'}
+              </p>
+            </div>
+            {(searchQuery || selectedCategory !== 'All') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setDebouncedSearch('');
+                  setSelectedCategory('All');
+                  setSearchParams({});
+                }}
+                className="px-4 py-2 bg-[#FFF5F2] hover:bg-[#FFE8E0] text-[#FA5A36] text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                Clear All Filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {topics.map((topic, idx) => (
               <div
                 key={topic.id || topic._id || idx}
-                className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:shadow-md hover:border-[#FFCCC2] hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-between gap-4"
+                onClick={() => setActiveTopic(topic)}
+                className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs hover:shadow-md hover:border-[#FFCCC2] hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-between gap-4 cursor-pointer group"
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   {/* Colorful Icon Container */}
                   <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${getTopicBg(
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform duration-150 ${getTopicBg(
                       idx
                     )}`}
                   >
@@ -256,7 +331,7 @@ export const TopicsPage: React.FC = () => {
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-[#FA5A36] block mb-0.5 truncate">
                       {topic.category}
                     </span>
-                    <h3 className="text-sm font-medium text-slate-900 leading-snug line-clamp-2">
+                    <h3 className="text-sm font-medium text-slate-900 group-hover:text-[#FA5A36] transition-colors leading-snug line-clamp-2">
                       {topic.title}
                     </h3>
                     {topic.description && (
@@ -287,7 +362,10 @@ export const TopicsPage: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleBuyTopic(topic)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBuyTopic(topic);
+                    }}
                     className="px-3.5 py-1.5 bg-[#FFF5F2] hover:bg-[#FA5A36] text-[#FA5A36] hover:text-white border border-[#FFCCC2] text-xs font-medium rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <ShoppingBag className="w-3.5 h-3.5" />
@@ -298,6 +376,17 @@ export const TopicsPage: React.FC = () => {
             ))}
           </div>
         )}
+
+        {/* Dynamic Topic Details Modal */}
+        <TopicDetailModal
+          topic={activeTopic}
+          isOpen={!!activeTopic}
+          onClose={() => setActiveTopic(null)}
+          onAddToCart={(topic) => {
+            handleBuyTopic(topic);
+            setActiveTopic(null);
+          }}
+        />
       </main>
       <Footer />
     </div>

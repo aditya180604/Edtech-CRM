@@ -204,6 +204,12 @@ export class PaymentService {
             status: ENTITLEMENT_STATUS.ACTIVE,
             grantedAt: new Date(),
           });
+
+          if (targetCourseId) {
+            await Course.findByIdAndUpdate(targetCourseId, {
+              $inc: { enrolledCount: 1 },
+            }).catch(() => null);
+          }
         }
       } else if (productType === PRODUCT_TYPES.CONTENT_OFFERING || productType === 'TOPIC') {
         const existingEntitlement = await Entitlement.findOne({
@@ -226,6 +232,12 @@ export class PaymentService {
             status: ENTITLEMENT_STATUS.ACTIVE,
             grantedAt: new Date(),
           });
+
+          if (item.courseId) {
+            await Course.findByIdAndUpdate(item.courseId, {
+              $inc: { enrolledCount: 1 },
+            }).catch(() => null);
+          }
         }
 
         // Accrue TopicCredit toward future course upgrade
@@ -391,7 +403,8 @@ export class PaymentService {
       });
     }
 
-    const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const { getAppOrigin } = await import('../../services/email.service.js');
+    const appOrigin = getAppOrigin();
     const resolvedProviderPaymentId = providerPaymentId || order.paymentId || 'Verified';
 
     order.receiptSnapshot = {

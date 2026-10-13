@@ -2272,7 +2272,7 @@ export const InstructorDashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setCreateStep(createStep + 1)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04824] active:bg-[#C93C1B] text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition-all cursor-pointer"
                   >
                     <span>Next Step</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -2282,7 +2282,7 @@ export const InstructorDashboard: React.FC = () => {
                     type="button"
                     onClick={handleWizardPayFee}
                     disabled={processingFee}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04824] active:bg-[#C93C1B] text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition-all cursor-pointer disabled:opacity-60"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
                     <span>Pay Fee (₹{(courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.10).toFixed(2)) : 0).toLocaleString('en-IN')}) to Unlock</span>
@@ -2310,9 +2310,9 @@ export const InstructorDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Stepper Progress Badges (9 Progressive Steps Matching Image 1) */}
+            {/* Stepper Progress Badges (9 Progressive Steps with Modern Branded Theme) */}
             <div className="overflow-x-auto pb-2 scrollbar-thin">
-              <div className="flex items-center gap-2 min-w-max p-1 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-max p-1.5 bg-white rounded-2xl border border-slate-200/90 shadow-xs">
                 {[
                   { step: 1, label: 'Basic Information' },
                   { step: 2, label: 'Course Description' },
@@ -2328,21 +2328,21 @@ export const InstructorDashboard: React.FC = () => {
                     key={s.step}
                     type="button"
                     onClick={() => setCreateStep(s.step)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none ${
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none ${
                       createStep === s.step
-                        ? 'bg-blue-50 border border-blue-200 text-blue-700 shadow-2xs'
+                        ? 'bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] shadow-xs'
                         : createStep > s.step
-                        ? 'bg-emerald-50/60 border border-emerald-100 text-emerald-800'
-                        : 'bg-transparent border border-transparent text-slate-600 hover:bg-slate-50'
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                        : 'bg-transparent border border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                     }`}
                   >
                     <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 ${
+                      className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-[11px] shrink-0 transition-transform ${
                         createStep === s.step
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-[#FA5A36] text-white shadow-xs'
                           : createStep > s.step
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-100 text-slate-500'
+                          : 'bg-slate-100 text-slate-400'
                       }`}
                     >
                       {createStep > s.step ? '✓' : s.step}
@@ -2363,7 +2363,7 @@ export const InstructorDashboard: React.FC = () => {
                 <div className="space-y-6 text-xs">
                   {/* Step 1 Header Badge */}
                   <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                    <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2] shadow-2xs">
                       <FileText className="w-5 h-5" />
                     </div>
                     <div>
@@ -2382,7 +2382,7 @@ export const InstructorDashboard: React.FC = () => {
                           placeholder="e.g. Complete Web Development Bootcamp"
                           value={courseFormData.title}
                           onChange={(e) => setCourseFormData({ ...courseFormData, title: e.target.value })}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 focus:border-blue-500 focus:outline-none shadow-2xs"
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                         />
                       </div>
 
@@ -2399,7 +2399,7 @@ export const InstructorDashboard: React.FC = () => {
                           placeholder="Brief overview of the course (1-2 sentences)..."
                           value={courseFormData.shortDescription}
                           onChange={(e) => setCourseFormData({ ...courseFormData, shortDescription: e.target.value })}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-blue-500 focus:outline-none shadow-2xs resize-none"
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-900 focus:border-[#FA5A36] focus:outline-none shadow-2xs resize-none transition-colors"
                         />
                       </div>
 
@@ -2411,8 +2411,8 @@ export const InstructorDashboard: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Formatting Toolbar (Image 1) */}
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                        {/* Formatting Toolbar */}
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs focus-within:border-[#FA5A36] transition-colors">
                           <div className="flex items-center flex-wrap gap-1 p-2 bg-slate-50 border-b border-slate-200 text-slate-600">
                             <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Bold"><Bold className="w-3.5 h-3.5" /></button>
                             <button type="button" className="p-1.5 hover:bg-white hover:text-slate-900 rounded-lg font-bold" title="Italic"><Italic className="w-3.5 h-3.5" /></button>
@@ -2459,8 +2459,8 @@ export const InstructorDashboard: React.FC = () => {
                             </button>
                           </div>
                         ) : (
-                          <div className="rounded-2xl border-2 border-dashed border-blue-200/80 p-6 text-center bg-blue-50/20 flex flex-col items-center justify-center space-y-2">
-                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                          <div className="rounded-2xl border-2 border-dashed border-[#FA5A36]/30 p-6 text-center bg-[#FFF5F2]/40 flex flex-col items-center justify-center space-y-2">
+                            <div className="w-10 h-10 rounded-xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center border border-[#FFCCC2]">
                               <ImageIcon className="w-5 h-5" />
                             </div>
                             <div>
@@ -2478,7 +2478,7 @@ export const InstructorDashboard: React.FC = () => {
                               onClick={() => setThumbUploadTab('device')}
                               className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${
                                 thumbUploadTab === 'device'
-                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  ? 'bg-[#FA5A36] text-white border-[#FA5A36] shadow-xs'
                                   : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                               }`}
                             >
@@ -2490,7 +2490,7 @@ export const InstructorDashboard: React.FC = () => {
                               onClick={() => setThumbUploadTab('url')}
                               className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 border ${
                                 thumbUploadTab === 'url'
-                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  ? 'bg-[#FA5A36] text-white border-[#FA5A36] shadow-xs'
                                   : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                               }`}
                             >
@@ -2500,7 +2500,7 @@ export const InstructorDashboard: React.FC = () => {
                           </div>
 
                           {thumbUploadTab === 'device' ? (
-                            <label className="block w-full py-2 px-3 bg-white border border-slate-200 hover:border-blue-400 rounded-xl text-center text-xs font-bold text-slate-700 hover:text-blue-600 cursor-pointer transition-colors shadow-2xs">
+                            <label className="block w-full py-2.5 px-3 bg-white border border-slate-200 hover:border-[#FA5A36] rounded-xl text-center text-xs font-bold text-slate-700 hover:text-[#FA5A36] cursor-pointer transition-colors shadow-2xs">
                               <input
                                 type="file"
                                 accept="image/*"
@@ -2516,12 +2516,12 @@ export const InstructorDashboard: React.FC = () => {
                                 placeholder="https://example.com/thumbnail.jpg"
                                 value={thumbUrlInput}
                                 onChange={(e) => setThumbUrlInput(e.target.value)}
-                                className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none"
+                                className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none"
                               />
                               <button
                                 type="button"
                                 onClick={handleApplyWebUrl}
-                                className="px-3.5 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                                className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04824] text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs transition-colors"
                               >
                                 Apply
                               </button>
@@ -2537,7 +2537,7 @@ export const InstructorDashboard: React.FC = () => {
                           <select
                             value={courseFormData.category}
                             onChange={(e) => setCourseFormData({ ...courseFormData, category: e.target.value })}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           >
                             <option value="Development">Development</option>
                             <option value="Cloud Computing">Cloud Computing</option>
@@ -2555,7 +2555,7 @@ export const InstructorDashboard: React.FC = () => {
                             placeholder="e.g. Web Architecture, DevOps"
                             value={courseFormData.subcategory}
                             onChange={(e) => setCourseFormData({ ...courseFormData, subcategory: e.target.value })}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           />
                         </div>
                       </div>
@@ -2572,7 +2572,7 @@ export const InstructorDashboard: React.FC = () => {
                                 onClick={() => setCourseFormData({ ...courseFormData, level: lvl })}
                                 className={`py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                                   courseFormData.level === lvl
-                                    ? 'bg-white text-blue-600 border border-blue-200 shadow-2xs'
+                                    ? 'bg-white text-[#FA5A36] border border-[#FFCCC2] shadow-2xs font-extrabold'
                                     : 'text-slate-600 hover:text-slate-900'
                                 }`}
                               >
@@ -2587,7 +2587,7 @@ export const InstructorDashboard: React.FC = () => {
                           <select
                             value={courseFormData.language}
                             onChange={(e) => setCourseFormData({ ...courseFormData, language: e.target.value })}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           >
                             <option value="English">English</option>
                             <option value="Hindi">Hindi</option>
@@ -2602,14 +2602,14 @@ export const InstructorDashboard: React.FC = () => {
                       <div>
                         <label className="font-bold text-slate-800 block mb-1.5">Key Skills Taught</label>
                         {courseFormData.skills.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl mb-2 min-h-[38px] items-center">
+                          <div className="flex flex-wrap gap-1.5 p-2 bg-[#FFF5F2]/40 border border-[#FFCCC2] rounded-xl mb-2 min-h-[38px] items-center">
                             {courseFormData.skills.map((s, idx) => (
-                              <span key={idx} className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-[11px] flex items-center gap-1.5 border border-blue-100">
+                              <span key={idx} className="px-2.5 py-1 rounded-lg bg-white text-[#FA5A36] font-bold text-[11px] flex items-center gap-1.5 border border-[#FFCCC2] shadow-2xs">
                                 {s}
                                 <button
                                   type="button"
                                   onClick={() => setCourseFormData({ ...courseFormData, skills: courseFormData.skills.filter((_, i) => i !== idx) })}
-                                  className="text-blue-400 hover:text-red-500 font-bold cursor-pointer"
+                                  className="text-[#FA5A36]/60 hover:text-red-500 font-bold cursor-pointer transition-colors"
                                 >
                                   ×
                                 </button>
@@ -2632,7 +2632,7 @@ export const InstructorDashboard: React.FC = () => {
                                 }
                               }
                             }}
-                            className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           />
                           <button
                             type="button"
@@ -2642,7 +2642,7 @@ export const InstructorDashboard: React.FC = () => {
                                 setNewSkillTagInput('');
                               }
                             }}
-                            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs"
+                            className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04824] text-white font-bold rounded-xl text-xs cursor-pointer shadow-2xs transition-colors"
                           >
                             + Add
                           </button>
@@ -2660,7 +2660,7 @@ export const InstructorDashboard: React.FC = () => {
                             placeholder="e.g. Thursday, 5th September | 7:30PM"
                             value={courseFormData.schedule || ''}
                             onChange={(e) => setCourseFormData({ ...courseFormData, schedule: e.target.value })}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           />
                           <p className="text-[10px] text-slate-400 mt-1">Live batch cohort date or weekly schedule. Displays prominently on the course card.</p>
                         </div>
@@ -2670,7 +2670,7 @@ export const InstructorDashboard: React.FC = () => {
                           <select
                             value={courseFormData.mentorStatus || 'Pro Mentor'}
                             onChange={(e) => setCourseFormData({ ...courseFormData, mentorStatus: e.target.value })}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none shadow-2xs"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           >
                             <option value="Pro Mentor">⭐ Pro Mentor</option>
                             <option value="Top 1% Mentor">🏆 Top 1% Mentor</option>

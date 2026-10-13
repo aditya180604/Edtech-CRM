@@ -14,9 +14,33 @@ import {
 } from 'lucide-react';
 import { coursesApi, type TopicItem } from '../api/courses';
 import { popularTopicsData } from '../data/mockData';
+import { useCart } from '../context/CartContext';
+import { useToast } from '../context/ToastContext';
+import { TopicDetailModal } from './TopicDetailModal';
 
 export const PopularTopics: React.FC = () => {
   const [topics, setTopics] = useState<TopicItem[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState<TopicItem | null>(null);
+  const { addToCart } = useCart();
+  const { success, error: showError } = useToast();
+
+  const handleBuyTopic = async (topic: TopicItem, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    try {
+      await addToCart(topic.id || topic._id, 'TOPIC', {
+        title: topic.title,
+        price: topic.price || 0,
+        courseId: topic.courseId,
+        category: topic.category,
+      });
+      success('Added to Cart', `"${topic.title}" has been added to your shopping cart.`);
+    } catch (err: any) {
+      showError('Cart Error', err.message || 'Failed to add topic to cart.');
+    }
+  };
 
   useEffect(() => {
     const loadPopular = async () => {
@@ -119,12 +143,12 @@ export const PopularTopics: React.FC = () => {
       {/* Topics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {topics.map((topic, idx) => (
-          <Link
+          <div
             key={topic.id || topic._id || idx}
-            to={`/topics?search=${encodeURIComponent(topic.title)}`}
-            className="group bg-white p-4.5 rounded-2xl border border-slate-100 shadow-2xs hover:shadow-md hover:border-[#FFCCC2] transition-all duration-150 flex items-center justify-between"
+            onClick={() => setSelectedTopic(topic)}
+            className="group bg-white p-4.5 rounded-2xl border border-slate-100 shadow-2xs hover:shadow-md hover:border-[#FFCCC2] transition-all duration-150 flex items-center justify-between cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
               {/* Icon Container */}
               <div
                 className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform duration-150 ${getTopicBg(
@@ -135,7 +159,7 @@ export const PopularTopics: React.FC = () => {
               </div>
 
               {/* Title & Duration */}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 pr-2">
                 <span className="text-[10px] font-semibold uppercase text-[#FA5A36] tracking-wider block truncate">
                   {topic.category}
                 </span>
@@ -148,20 +172,35 @@ export const PopularTopics: React.FC = () => {
               </div>
             </div>
 
-            {/* Price Tag */}
-            <div className="text-right pl-3 shrink-0">
+            {/* Price Tag & Dedicated Buy Topic Button */}
+            <div className="text-right pl-2 shrink-0 flex flex-col items-end gap-1.5">
               <span className="text-sm font-semibold text-slate-900 block">
                 {topic.isFree || topic.price === 0
                   ? 'FREE'
                   : `₹${topic.price.toLocaleString('en-IN')}`}
               </span>
-              <span className="text-[10px] font-medium text-[#FA5A36] bg-[#FFF5F2] px-2 py-0.5 rounded-md border border-[#FFCCC2]">
+              <button
+                type="button"
+                onClick={(e) => handleBuyTopic(topic, e)}
+                className="text-[10px] font-semibold text-[#FA5A36] bg-[#FFF5F2] hover:bg-[#FA5A36] hover:text-white px-2.5 py-1 rounded-md border border-[#FFCCC2] hover:border-[#FA5A36] transition-all cursor-pointer shadow-2xs"
+              >
                 Buy Topic
-              </span>
+              </button>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
+
+      {/* Dynamic Topic Details Modal */}
+      <TopicDetailModal
+        topic={selectedTopic}
+        isOpen={!!selectedTopic}
+        onClose={() => setSelectedTopic(null)}
+        onAddToCart={(topic) => {
+          handleBuyTopic(topic);
+          setSelectedTopic(null);
+        }}
+      />
     </section>
   );
 };

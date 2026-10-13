@@ -389,24 +389,38 @@ export const CoursesPage: React.FC = () => {
                             </div>
                           )}
 
+                          {/* Core Tools or Skills Chips */}
+                          {((course.coreTools && course.coreTools.length > 0) || (course.skills && course.skills.length > 0)) && (
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                              {(course.coreTools && course.coreTools.length > 0 ? course.coreTools : course.skills).slice(0, 3).map((item: string, idx: number) => (
+                                <span
+                                  key={idx}
+                                  className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md truncate max-w-[120px]"
+                                >
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Structural Content Badges */}
                           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
                             <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                               <span className="text-[9px] font-normal text-slate-400 uppercase">Sessions</span>
                               <span className="text-xs font-semibold text-slate-800 truncate w-full">
-                                {course.totalSessions || 24}
+                                {course.totalSessions ? `${course.totalSessions}` : course.modulesCount ? `${course.modulesCount} Modules` : 'Self-Paced'}
                               </span>
                             </div>
                             <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                               <span className="text-[9px] font-normal text-slate-400 uppercase">Duration</span>
                               <span className="text-xs font-semibold text-slate-800 truncate w-full">
-                                {course.courseIncludes?.videoHours?.split(' ')[0] || '20+ Hrs'}
+                                {course.courseIncludes?.videoHours?.split(' ')[0] || course.duration || 'Flexible'}
                               </span>
                             </div>
                             <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                               <span className="text-[9px] font-normal text-slate-400 uppercase">Enrolled</span>
                               <span className="text-xs font-semibold text-slate-800 truncate w-full">
-                                {course.enrolledCount ? `${course.enrolledCount}` : 'Active'}
+                                {course.enrolledCount !== undefined && course.enrolledCount !== null ? `${course.enrolledCount}` : '0'}
                               </span>
                             </div>
                           </div>
@@ -426,16 +440,20 @@ export const CoursesPage: React.FC = () => {
                                 </div>
                               )}
                               <span className="text-xs font-normal text-slate-600 truncate">
-                                {course.instructorName}
+                                {course.instructorName || 'Lead Instructor'}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
                               <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                              <span className="font-semibold text-slate-900">{course.rating || 4.8}</span>
-                              <span className="text-[11px] text-slate-400 font-normal">
-                                ({course.reviewCount || '10K'})
+                              <span className="font-semibold text-slate-900">
+                                {course.rating && course.rating > 0 ? course.rating : 'New'}
                               </span>
+                              {Boolean(course.reviewCount || course.reviewsCount) && (
+                                <span className="text-[11px] text-slate-400 font-normal">
+                                  ({course.reviewCount || course.reviewsCount})
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -250,19 +250,19 @@ export const FeaturedCourses: React.FC = () => {
                       <div className="p-1 rounded-lg bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                         <span className="text-[8px] font-normal text-slate-400 uppercase">Sessions</span>
                         <span className="text-[10px] font-medium text-slate-700 truncate w-full">
-                          {course.totalSessions || 24}
+                          {course.totalSessions ? `${course.totalSessions}` : course.modulesCount ? `${course.modulesCount} Mod` : 'Self-Paced'}
                         </span>
                       </div>
                       <div className="p-1 rounded-lg bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                         <span className="text-[8px] font-normal text-slate-400 uppercase">Duration</span>
                         <span className="text-[10px] font-medium text-slate-700 truncate w-full">
-                          {course.courseIncludes?.videoHours?.split(' ')[0] || '20+ Hrs'}
+                          {course.courseIncludes?.videoHours?.split(' ')[0] || course.duration || 'Flexible'}
                         </span>
                       </div>
                       <div className="p-1 rounded-lg bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
                         <span className="text-[8px] font-normal text-slate-400 uppercase">Enrolled</span>
                         <span className="text-[10px] font-medium text-slate-700 truncate w-full">
-                          {course.enrolledCount ? `${course.enrolledCount}` : 'Active'}
+                          {course.enrolledCount !== undefined && course.enrolledCount !== null ? `${course.enrolledCount}` : '0'}
                         </span>
                       </div>
                     </div>
@@ -282,16 +282,22 @@ export const FeaturedCourses: React.FC = () => {
                           </div>
                         )}
                         <span className="text-[11px] font-normal text-slate-600 truncate">
-                          {course.instructorName}
+                          {course.instructorName || 'Lead Instructor'}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
                         <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                         <span className="font-medium text-slate-900">
-                          {typeof course.rating === 'number' ? course.rating.toFixed(1) : course.rating || '4.8'}
+                          {typeof course.rating === 'number' && course.rating > 0
+                            ? course.rating.toFixed(1)
+                            : course.rating || 'New'}
                         </span>
-                        <span className="text-[10px] text-slate-400">({course.reviewCount || '10K'})</span>
+                        {Boolean(course.reviewCount || course.reviewsCount) && (
+                          <span className="text-[10px] text-slate-400">
+                            ({course.reviewCount || course.reviewsCount})
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

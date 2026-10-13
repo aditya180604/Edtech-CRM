@@ -3,17 +3,30 @@ import '../config/env.js';
 
 let transporterInstance = null;
 
+export function getAppOrigin() {
+  const origin =
+    process.env.APP_BASE_URL ||
+    process.env.FRONTEND_URL ||
+    (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',')[0].trim() : '') ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://frontend-alpha-green-2l6qnyuw3g.vercel.app'
+      : 'http://localhost:5173');
+  return origin.replace(/\/+$/, '');
+}
+
 function getTransporter() {
   if (transporterInstance) return transporterInstance;
 
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.SMTP_PORT || 465);
-  const secure = process.env.SMTP_SECURE !== 'false';
+  const port = Number(process.env.SMTP_PORT || 587);
+  // In Nodemailer: secure = false on port 587 enables STARTTLS (matching HR-Recruitment-Agent)
+  // secure = true is only for legacy implicit SSL on port 465
+  const secure = process.env.SMTP_SECURE === 'true' || (port === 465 && process.env.SMTP_SECURE !== 'false');
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_APP_PASSWORD;
 
   if (!user || !pass) {
-    console.warn('[EmailService] SMTP credentials not fully set; email sending will be simulated or skipped.');
+    console.warn('[EmailService] SMTP credentials not set; email sending will be simulated in console.');
     return null;
   }
 
@@ -24,6 +37,10 @@ function getTransporter() {
     auth: {
       user,
       pass,
+    },
+    // Modern TLS configuration to prevent cert rejection in cloud containers
+    tls: {
+      rejectUnauthorized: false,
     },
   });
 
@@ -160,7 +177,7 @@ export async function sendCoursePurchaseEmail({
         day: 'numeric',
       });
 
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const targetUrl = courseUrl || `${appOrigin}/dashboard/student`;
   const computedSubtotal = subtotal != null ? subtotal : amount;
 
@@ -317,7 +334,7 @@ export async function sendConsultationStudentConfirmationEmail({
   bookingCode,
   joinUrl,
 }) {
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const meetingLink = joinUrl || `${appOrigin}/dashboard/student`;
 
   const html = `
@@ -394,7 +411,7 @@ export async function sendConsultationInstructorAlertEmail({
   studentNotes = '',
   dashboardUrl,
 }) {
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const dashUrl = dashboardUrl || `${appOrigin}/dashboard/instructor`;
 
   const html = `
@@ -465,7 +482,7 @@ export async function sendInstructorApplicationApprovedEmail({
   instructorName,
   actionUrl,
 }) {
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const targetUrl = actionUrl || `${appOrigin}/dashboard/instructor`;
 
   const html = `
@@ -533,7 +550,7 @@ export async function sendInstructorApplicationRejectedEmail({
   reason,
   resubmitUrl,
 }) {
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const targetUrl = resubmitUrl || `${appOrigin}/instructor/onboarding`;
 
   const html = `
@@ -603,7 +620,7 @@ export async function sendInstructorChangesRequestedEmail({
   feedback,
   resubmitUrl,
 }) {
-  const appOrigin = process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+  const appOrigin = getAppOrigin();
   const targetUrl = resubmitUrl || `${appOrigin}/instructor/onboarding`;
 
   const html = `

@@ -117,20 +117,38 @@ export interface CourseReviewsResponse {
   };
 }
 
+export interface TopicLessonItem {
+  id: string;
+  title: string;
+  duration: number;
+  isFreePreview?: boolean;
+}
+
 export interface TopicItem {
   id: string;
   _id: string;
   title: string;
   description?: string;
   price: number;
+  currency?: string;
   duration: number;
+  difficulty?: string;
+  skills?: string[];
+  prerequisites?: string[];
+  learningObjectives?: string[];
   isFree: boolean;
   category: string;
   courseTitle: string;
   courseSlug: string;
   courseId: string;
   moduleTitle: string;
+  instructor?: {
+    name: string;
+    email?: string;
+    avatar?: string | null;
+  };
   lessonsCount: number;
+  lessons?: TopicLessonItem[];
   videoUrl?: string;
   hasVideo: boolean;
   thumbnail?: string;

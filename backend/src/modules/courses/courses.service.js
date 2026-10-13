@@ -47,14 +47,64 @@ export class CoursesService {
       });
     }
 
+    // Dynamic Entitlements (Enrolled students count)
+    const entitlementAgg = await Entitlement.aggregate([
+      {
+        $match: {
+          status: ENTITLEMENT_STATUS.ACTIVE,
+          $or: [
+            { productId: { $in: courseIds } },
+            { courseId: { $in: courseIds } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$courseId', '$productId'] },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const enrollmentMap = {};
+    entitlementAgg.forEach((item) => {
+      if (item._id) enrollmentMap[item._id.toString()] = item.count;
+    });
+
+    // Dynamic Reviews & Ratings
+    const reviewAgg = await Review.aggregate([
+      { $match: { courseId: { $in: courseIds }, status: 'APPROVED' } },
+      {
+        $group: {
+          _id: '$courseId',
+          avgRating: { $avg: '$rating' },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const reviewMap = {};
+    reviewAgg.forEach((item) => {
+      if (item._id) {
+        reviewMap[item._id.toString()] = {
+          avgRating: Math.round(item.avgRating * 10) / 10,
+          totalReviews: item.totalReviews,
+        };
+      }
+    });
+
     const badges = ['BEST SELLER', 'POPULAR', 'HOT & NEW', 'TOP RATED'];
 
     return courses.map((c, idx) => {
       const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
       const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
-      const enrolled = c.enrolledCount || 0;
+      const liveEntitlements = enrollmentMap[c._id.toString()] || 0;
+      const enrolled = Math.max(c.enrolledCount || 0, liveEntitlements);
       const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
       const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+      const revData = reviewMap[c._id.toString()];
+      const rating = revData ? revData.avgRating : (c.rating || 0);
+      const reviewCount = revData ? `${revData.totalReviews}` : (c.reviewCount ? `${c.reviewCount}` : '');
 
       return {
         id: c._id.toString(),
@@ -63,8 +113,9 @@ export class CoursesService {
         slug: c.slug || c._id.toString(),
         instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
         instructorAvatar: c.instructorId?.profilePhoto || null,
-        rating: 4.8,
-        reviewCount: '12K',
+        rating,
+        reviewCount,
+        reviewsCount: revData ? revData.totalReviews : (c.reviewsCount || 0),
         price: c.coursePrice ?? 0,
         originalPrice: Math.round((c.coursePrice || 1999) * 2.5),
         thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
@@ -173,12 +224,62 @@ export class CoursesService {
       { name: 'Advanced', count: levelCountMap['Advanced'] || 0 },
     ];
 
+    // Dynamic Entitlements (Enrolled students count)
+    const entitlementAgg = await Entitlement.aggregate([
+      {
+        $match: {
+          status: ENTITLEMENT_STATUS.ACTIVE,
+          $or: [
+            { productId: { $in: courseIds } },
+            { courseId: { $in: courseIds } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ['$courseId', '$productId'] },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const enrollmentMap = {};
+    entitlementAgg.forEach((item) => {
+      if (item._id) enrollmentMap[item._id.toString()] = item.count;
+    });
+
+    // Dynamic Reviews & Ratings
+    const reviewAgg = await Review.aggregate([
+      { $match: { courseId: { $in: courseIds }, status: 'APPROVED' } },
+      {
+        $group: {
+          _id: '$courseId',
+          avgRating: { $avg: '$rating' },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const reviewMap = {};
+    reviewAgg.forEach((item) => {
+      if (item._id) {
+        reviewMap[item._id.toString()] = {
+          avgRating: Math.round(item.avgRating * 10) / 10,
+          totalReviews: item.totalReviews,
+        };
+      }
+    });
+
     const formatted = courses.map((c) => {
       const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
       const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
-      const enrolled = c.enrolledCount || 0;
+      const liveEntitlements = enrollmentMap[c._id.toString()] || 0;
+      const enrolled = Math.max(c.enrolledCount || 0, liveEntitlements);
       const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
       const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+      const revData = reviewMap[c._id.toString()];
+      const rating = revData ? revData.avgRating : (c.rating || 0);
+      const reviewCount = revData ? `${revData.totalReviews}` : (c.reviewCount ? `${c.reviewCount}` : '');
 
       return {
         id: c._id.toString(),
@@ -187,8 +288,9 @@ export class CoursesService {
         slug: c.slug || c._id.toString(),
         instructorName: [c.instructorId?.firstName, c.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor',
         instructorAvatar: c.instructorId?.profilePhoto || null,
-        rating: 4.8,
-        reviewCount: '10K',
+        rating,
+        reviewCount,
+        reviewsCount: revData ? revData.totalReviews : (c.reviewsCount || 0),
         price: c.coursePrice ?? 0,
         originalPrice: Math.round((c.coursePrice || 1999) * 2.2),
         thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
@@ -411,10 +513,32 @@ export class CoursesService {
     const instructorBio = instProfile?.bio || instProfile?.experience || course.instructorId?.bio || 'Passionate engineering educator and technical architect with industry experience in cloud systems, production microservices, and modern development workflows.';
     const instructorExperience = instProfile?.experience || '8+ Years';
 
+    const activeEntitlementsCount = await Entitlement.countDocuments({
+      status: ENTITLEMENT_STATUS.ACTIVE,
+      $or: [
+        { productId: course._id },
+        { courseId: course._id },
+      ],
+    });
+
     const maxLimit = typeof course.maxEnrollmentLimit === 'number' && course.maxEnrollmentLimit > 0 ? course.maxEnrollmentLimit : null;
-    const enrolled = course.enrolledCount || 0;
+    const enrolled = Math.max(course.enrolledCount || 0, activeEntitlementsCount);
     const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
     const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
+
+    const reviewStats = await Review.aggregate([
+      { $match: { courseId: course._id, status: 'APPROVED' } },
+      {
+        $group: {
+          _id: '$courseId',
+          avgRating: { $avg: '$rating' },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const realRating = reviewStats[0]?.avgRating ? Math.round(reviewStats[0].avgRating * 10) / 10 : (course.rating || 0);
+    const realReviewCount = reviewStats[0]?.totalReviews || course.reviewsCount || 0;
 
     let completedLessonIds = [];
     if (userId) {
@@ -442,9 +566,10 @@ export class CoursesService {
         instructorTitle: instructorHeadline,
         instructorBio,
         instructorExperience,
-        rating: course.rating || 4.8,
-        reviewCount: course.reviewCount ? `${course.reviewCount} ratings` : '12,450 ratings',
-        studentCount: '45,820 students',
+        rating: realRating,
+        reviewCount: realReviewCount > 0 ? `${realReviewCount}` : '',
+        reviewsCount: realReviewCount,
+        studentCount: `${enrolled} students`,
         isEnrolled,
         enrolledTopicsCount,
         totalTopicsCount: topics.length,
@@ -486,29 +611,57 @@ export class CoursesService {
       topicQuery.moduleId = { $in: moduleIds };
     }
     if (search && search.trim()) {
-      topicQuery.title = new RegExp(search.trim(), 'i');
+      const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(sanitized, 'i');
+      topicQuery.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        { skills: searchRegex },
+        { prerequisites: searchRegex },
+        { learningObjectives: searchRegex },
+      ];
     }
 
     const topics = await Topic.find(topicQuery)
       .populate({
+        path: 'courseId',
+        select: 'title category thumbnail coursePrice slug status instructorId',
+        populate: {
+          path: 'instructorId',
+          select: 'firstName lastName email profilePhoto',
+        },
+      })
+      .populate({
         path: 'moduleId',
-        select: 'title courseId',
+        select: 'title order courseId',
         populate: {
           path: 'courseId',
-          select: 'title category thumbnail coursePrice slug status',
+          select: 'title category thumbnail coursePrice slug status instructorId',
+          populate: {
+            path: 'instructorId',
+            select: 'firstName lastName email profilePhoto',
+          },
         },
       })
       .sort({ order: 1, createdAt: -1 })
       .lean();
 
     const topicIds = topics.map((t) => t._id);
-    const lessons = await Lesson.find({ topicId: { $in: topicIds } }).lean();
+    const lessons = await Lesson.find({ topicId: { $in: topicIds } })
+      .select('title duration playbackReference videoUrl isFreePreview order topicId resources')
+      .sort({ order: 1 })
+      .lean();
 
     let formatted = topics.map((t) => {
       const mod = t.moduleId;
-      const crs = mod?.courseId;
+      const crs = t.courseId || mod?.courseId;
+      const inst = crs?.instructorId;
+      const instructorName = inst
+        ? `${inst.firstName || ''} ${inst.lastName || ''}`.trim() || inst.email || 'Course Instructor'
+        : 'Course Instructor';
+
       const topLessons = lessons.filter((l) => l.topicId.toString() === t._id.toString());
-      const hasVideo = !!(t.videoUrl || topLessons.some((l) => l.playbackReference || l.videoId));
+      const hasVideo = !!(t.videoUrl || topLessons.some((l) => l.playbackReference || l.videoUrl || l.videoId));
 
       return {
         id: t._id.toString(),
@@ -516,15 +669,31 @@ export class CoursesService {
         title: t.title,
         description: t.description || '',
         price: t.price ?? 0,
+        currency: t.currency || 'INR',
         duration: t.duration || 30,
+        difficulty: t.difficulty || 'ALL_LEVELS',
+        skills: Array.isArray(t.skills) ? t.skills : [],
+        prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites : [],
+        learningObjectives: Array.isArray(t.learningObjectives) ? t.learningObjectives : [],
         isFree: !!t.isFree,
         category: (crs?.category || 'Development').toUpperCase(),
         courseTitle: crs?.title || 'Comprehensive Course',
         courseSlug: crs?.slug || '',
         courseId: crs?._id?.toString() || '',
         moduleTitle: mod?.title || '',
+        instructor: {
+          name: instructorName,
+          email: inst?.email || '',
+          avatar: inst?.profilePhoto || null,
+        },
         lessonsCount: topLessons.length || (t.lessons?.length || 1),
-        videoUrl: t.videoUrl || topLessons[0]?.playbackReference || '',
+        lessons: topLessons.map((l) => ({
+          id: l._id.toString(),
+          title: l.title,
+          duration: l.duration || 15,
+          isFreePreview: !!l.isFreePreview,
+        })),
+        videoUrl: t.videoUrl || topLessons[0]?.playbackReference || topLessons[0]?.videoUrl || '',
         hasVideo,
         thumbnail: crs?.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
       };
