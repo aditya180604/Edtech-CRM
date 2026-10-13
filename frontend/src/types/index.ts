@@ -120,6 +120,8 @@ export interface Course {
   qualifications?: string[];
   totalSessions?: number | null;
   durationHours?: string;
+  modulesCount?: number;
+  reviewsCount?: number | string;
 }
 
 export interface CartItem {

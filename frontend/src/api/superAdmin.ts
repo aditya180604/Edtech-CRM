@@ -69,6 +69,8 @@ export interface SuperAdminUser {
   _id: string;
   instructorId?: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   role: 'STUDENT' | 'INSTRUCTOR' | 'ADMIN' | 'SUPER_ADMIN';
   status: 'ACTIVE' | 'PENDING' | 'TERMINATED' | 'INACTIVE';
@@ -86,6 +88,7 @@ export interface SuperAdminCourse {
   id: string;
   _id: string;
   title: string;
+  slug?: string;
   instructor: string;
   instructorAvatar?: string | null;
   category: string;
@@ -98,13 +101,20 @@ export interface SuperAdminCourse {
 
 export interface SuperAdminOrder {
   id: string;
+  _id?: string;
   orderId: string;
+  orderNumber?: string;
   user: string;
+  userName?: string;
   userEmail: string;
   courseTopic: string;
+  courseTitle?: string;
   amount: number;
+  totalAmount?: number;
+  finalAmount?: number;
   status: 'COMPLETED' | 'PENDING' | 'FAILED';
   date: string;
+  createdAt?: string;
 }
 
 export interface SuperAdminRefund {

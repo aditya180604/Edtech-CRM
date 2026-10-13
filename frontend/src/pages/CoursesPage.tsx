@@ -392,7 +392,7 @@ export const CoursesPage: React.FC = () => {
                           {/* Core Tools or Skills Chips */}
                           {((course.coreTools && course.coreTools.length > 0) || (course.skills && course.skills.length > 0)) && (
                             <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                              {(course.coreTools && course.coreTools.length > 0 ? course.coreTools : course.skills).slice(0, 3).map((item: string, idx: number) => (
+                              {((course.coreTools && course.coreTools.length > 0 ? course.coreTools : course.skills) || []).slice(0, 3).map((item: string, idx: number) => (
                                 <span
                                   key={idx}
                                   className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-medium rounded-md truncate max-w-[120px]"

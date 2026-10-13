@@ -30,7 +30,7 @@ export const PopularTopics: React.FC = () => {
       e.stopPropagation();
     }
     try {
-      await addToCart(topic.id || topic._id, 'TOPIC', {
+      await addToCart(topic.id || topic._id, 'CONTENT_OFFERING', {
         title: topic.title,
         price: topic.price || 0,
         courseId: topic.courseId,

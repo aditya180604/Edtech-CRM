@@ -18,7 +18,7 @@ interface CartContextType {
   addToCart: (
     productId: string,
     productType?: 'COURSE' | 'CONTENT_OFFERING',
-    meta?: { title?: string; price?: number; thumbnail?: string; courseId?: string; topicId?: string }
+    meta?: { title?: string; price?: number; thumbnail?: string; courseId?: string; topicId?: string; category?: string }
   ) => Promise<{ success: boolean; message?: string }>;
   removeFromCart: (productId: string) => Promise<void>;
   clearCart: () => Promise<void>;
