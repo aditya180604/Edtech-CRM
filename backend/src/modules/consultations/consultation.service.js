@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { User, InstructorProfile, Booking, TeachingSlot } from '../../models/index.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
+import { cashfreeConfig } from '../../config/cashfree.js';
 import { sendConsultationStudentConfirmationEmail, sendConsultationInstructorAlertEmail } from '../../services/email.service.js';
 import { AccessToken } from 'livekit-server-sdk';
 import { AppError } from '../../utils/apiResponse.js';
@@ -539,7 +540,7 @@ export class ConsultationService {
         customerEmail: studentUser.email,
         customerPhone: studentUser.phone || '9999999999',
         returnUrl: `${appOrigin}/dashboard/student?cns_order_id={order_id}`,
-        notifyUrl: `${process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000'}/api/v1/payments/cashfree/webhook`,
+        notifyUrl: `${cashfreeConfig.backendPublicUrl}/api/v1/payments/cashfree/webhook`,
         orderNote: `1-on-1 Consultation with ${instructorUser?.firstName || 'Mentor'} (${bookingCode})`,
       });
     } catch (cfErr) {
