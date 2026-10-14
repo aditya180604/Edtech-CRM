@@ -9,8 +9,8 @@ import {
   User,
   InstructorProfile,
   Entitlement,
-  Review,
 } from '../../models/index.js';
+import { LearningPathService } from '../learningPaths/learningPath.service.js';
 
 function normalizeCourseCategory(c) {
   if (c.category && typeof c.category === 'string' && c.category.trim()) {
@@ -632,10 +632,21 @@ export class CatalogService {
    * Strict: DRAFT paths are excluded from public catalog
    */
   static async getLearningPaths({ limit = 10 } = {}) {
-    const paths = await LearningPath.find({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } })
+    let paths = await LearningPath.find({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } })
       .populate('courses', 'title name slug thumbnail')
+      .sort({ updatedAt: -1 })
       .limit(Number(limit))
       .lean();
+
+    // If no paths found, run dynamic synchronization across all published courses
+    if (!paths || paths.length === 0) {
+      await LearningPathService.syncAllCoursesWithLearningPaths();
+      paths = await LearningPath.find({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } })
+        .populate('courses', 'title name slug thumbnail')
+        .sort({ updatedAt: -1 })
+        .limit(Number(limit))
+        .lean();
+    }
 
     return paths.map((lp) => ({
       id: lp._id.toString(),

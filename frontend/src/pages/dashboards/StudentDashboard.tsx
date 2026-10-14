@@ -58,6 +58,7 @@ import {
   Trash2,
   MapPin,
   Briefcase,
+  UserCheck,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { quizzesApi, type QuizItem } from '../../api/quizzes';
@@ -69,6 +70,7 @@ type StudentTab =
   | 'dashboard'
   | 'my-learning'
   | 'live-classes'
+  | 'mentorship'
   | 'assessments'
   | 'passport'
   | 'certificates'
@@ -361,8 +363,7 @@ export const StudentDashboard: React.FC = () => {
         .then((res) => {
           if (res.success) {
             success('Consultation Confirmed', 'Your 1-on-1 mentorship session is confirmed!');
-            setActiveTab('live-classes');
-            setLiveSubTab('consultations');
+            setActiveTab('mentorship');
             consultationsApi.getMyConsultations().then((list) => setStudentConsultations(list || []));
           }
         })
@@ -565,6 +566,7 @@ export const StudentDashboard: React.FC = () => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'my-learning', label: 'My Learning', icon: BookOpen, badge: stats.activeCoursesCount || undefined },
     { id: 'live-classes', label: 'Live Classes', icon: Video, badge: dashboardData?.upcomingLiveSessions?.length || undefined },
+    { id: 'mentorship', label: '1-on-1 Mentorship', icon: UserCheck, badge: studentConsultations.filter(c => c.status === 'CONFIRMED' && new Date(c.endTime).getTime() > consultationNow).length || undefined },
     { id: 'assessments', label: 'Assessments', icon: HelpCircle, badge: studentQuizzes.length || undefined },
     { id: 'passport', label: 'Skill Passport', icon: ShieldCheck },
     { id: 'certificates', label: 'Certificates', icon: Award, badge: stats.certificatesCount || undefined },
@@ -1542,300 +1544,297 @@ export const StudentDashboard: React.FC = () => {
               {/* ========================================================
                   TAB 3: LIVE CLASSES & 1-ON-1 CONSULTATIONS VIEW
                  ======================================================== */}
+              {/* ========================================================
+                  TAB 3: LIVE WEBINARS / CLASSES VIEW
+                 ======================================================== */}
               {activeTab === 'live-classes' && (
                 <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-4">
                     <div>
-                      <h2 className="text-base font-black text-slate-900">Live Classes & 1-on-1 Mentorship</h2>
-                      <p className="text-xs text-slate-500">Join interactive live webinar sessions and private 1-on-1 consultations with mentors.</p>
+                      <h2 className="text-base font-black text-slate-900">Live Classes & Webinars</h2>
+                      <p className="text-xs text-slate-500">Join interactive live webinar sessions and masterclasses hosted by instructors.</p>
                     </div>
 
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1 -mx-1 px-1">
-                      <button
-                        type="button"
-                        onClick={() => setLiveSubTab('webinars')}
-                        className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          liveSubTab === 'webinars'
-                            ? 'bg-[#FA5A36] text-white shadow-2xs'
-                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        Webinars & Workshops
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLiveSubTab('consultations')}
-                        className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                          liveSubTab === 'consultations'
-                            ? 'bg-[#FA5A36] text-white shadow-2xs'
-                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        <span>1-on-1 Consultations</span>
-                        {studentConsultations.length > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">
-                            {studentConsultations.length}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/mentorship')}
-                        className="shrink-0 whitespace-nowrap px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
-                      >
-                        <Sparkles className="w-3 h-3 text-orange-400" />
-                        <span>Find Mentor</span>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/webinars')}
+                      className="shrink-0 whitespace-nowrap px-3.5 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Explore Webinars</span>
+                    </button>
                   </div>
 
-                  {liveSubTab === 'consultations' ? (
-                    <div>
-                      {studentConsultations.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {studentConsultations.map((c) => (
-                            <div
-                              key={c.id}
-                              className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
-                            >
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase">
-                                    {c.status}
-                                  </span>
-                                  <span className="text-[10px] font-mono text-slate-400 font-semibold">
-                                    {c.bookingCode}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden">
-                                    {c.instructor?.profilePhoto ? (
-                                      <img
-                                        src={c.instructor.profilePhoto}
-                                        alt={c.instructor.name}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    ) : (
-                                      c.instructor?.name?.[0] || 'M'
-                                    )}
-                                  </div>
-                                  <div className="overflow-hidden">
-                                    <h4 className="text-xs font-black text-slate-900 truncate">
-                                      {c.instructor?.name || 'Mentor'}
-                                    </h4>
-                                    <p className="text-[11px] text-slate-500 truncate font-medium">
-                                      {c.instructor?.headline || 'Working IT Professional'}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-1 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1 text-slate-500 font-medium">
-                                      <Calendar className="w-3.5 h-3.5 text-slate-400" /> Date:
-                                    </span>
-                                    <span className="font-bold text-slate-800">
-                                      {new Date(c.startTime).toLocaleDateString('en-IN', {
-                                        weekday: 'short',
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                      })}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1 text-slate-500 font-medium">
-                                      <Clock className="w-3.5 h-3.5 text-slate-400" /> Time:
-                                    </span>
-                                    <span className="font-bold text-slate-800">
-                                      {new Date(c.startTime).toLocaleTimeString('en-IN', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}{' '}
-                                      ({c.durationMinutes} mins)
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500 font-medium">Fee:</span>
-                                    <span className="font-black text-slate-900">
-                                      ₹{c.fee} {c.paymentStatus === 'FREE' ? '(Free)' : '(Paid)'}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {c.notes && (
-                                  <p className="text-[11px] text-slate-500 bg-slate-100/60 p-2 rounded-lg italic line-clamp-2">
-                                    " {c.notes} "
-                                  </p>
-                                )}
-                              </div>
-
-                              {(() => {
-                                const completed =
-                                  c.isCompleted ||
-                                  c.status === 'ATTENDED' ||
-                                  new Date(c.endTime).getTime() <= consultationNow;
-                                const draft = consultationReviewDrafts[c.id] || { rating: 0, review: '' };
-
-                                return (
-                                  <div className="pt-3 border-t border-slate-200/70 space-y-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <span className={`text-[11px] font-bold flex items-center gap-1 ${completed ? 'text-slate-600' : 'text-emerald-600'}`}>
-                                        <CheckCircle2 className="w-3.5 h-3.5" />
-                                        {completed ? 'Session completed' : 'Confirmed'}
-                                      </span>
-                                      {!completed && c.meetingRoomCode && (
-                                        <button
-                                          onClick={() => navigate(`/webinars/live/${c.meetingRoomCode}`)}
-                                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                                        >
-                                          <Video className="w-3.5 h-3.5" />
-                                          <span>Enter Session</span>
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {c.consultationReview ? (
-                                      <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 space-y-1.5">
-                                        <div className="flex items-center gap-1" aria-label={`Your rating: ${c.consultationReview.rating} out of 5`}>
-                                          {Array.from({ length: 5 }, (_, index) => (
-                                            <Star
-                                              key={index}
-                                              className={`w-4 h-4 ${index < c.consultationReview!.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
-                                            />
-                                          ))}
-                                          <span className="ml-1 text-[10px] font-bold text-slate-600">Your review</span>
-                                        </div>
-                                        <p className="text-xs text-slate-700">{c.consultationReview.review}</p>
-                                      </div>
-                                    ) : completed && c.status !== 'CANCELLED' ? (
-                                      <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 space-y-2.5">
-                                        <p className="text-xs font-bold text-slate-800">How was your 1-on-1 with {c.instructor?.name || 'your mentor'}?</p>
-                                        <div className="flex items-center gap-1" role="group" aria-label="Rate your consultation">
-                                          {Array.from({ length: 5 }, (_, index) => {
-                                            const rating = index + 1;
-                                            return (
-                                              <button
-                                                key={rating}
-                                                type="button"
-                                                aria-pressed={draft.rating === rating}
-                                                aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
-                                                onClick={() =>
-                                                  setConsultationReviewDrafts((current) => ({
-                                                    ...current,
-                                                    [c.id]: { ...draft, rating },
-                                                  }))
-                                                }
-                                                className="p-0.5 cursor-pointer"
-                                              >
-                                                <Star className={`w-5 h-5 ${rating <= draft.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                        <textarea
-                                          value={draft.review}
-                                          maxLength={2000}
-                                          onChange={(event) =>
-                                            setConsultationReviewDrafts((current) => ({
-                                              ...current,
-                                              [c.id]: { ...draft, review: event.target.value },
-                                            }))
-                                          }
-                                          placeholder="Share your experience with this mentor..."
-                                          rows={3}
-                                          className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-[#FA5A36]"
-                                        />
-                                        <button
-                                          type="button"
-                                          disabled={submittingReviewId === c.id || draft.rating < 1 || !draft.review.trim()}
-                                          onClick={() => handleSubmitConsultationReview(c.id)}
-                                          className="px-3.5 py-2 rounded-lg bg-[#FA5A36] text-white text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                          {submittingReviewId === c.id ? 'Submitting...' : 'Submit review'}
-                                        </button>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                );
-                              })()}
+                  {dashboardData.upcomingLiveSessions && dashboardData.upcomingLiveSessions.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {dashboardData.upcomingLiveSessions.map((session, idx) => (
+                        <div
+                          key={session.sessionId || idx}
+                          className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col justify-between space-y-4"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black rounded uppercase">
+                                Scheduled Live
+                              </span>
+                              <span className="text-[11px] text-slate-500 flex items-center gap-1 font-semibold">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                {session.scheduledAt ? new Date(session.scheduledAt).toLocaleDateString() : 'Upcoming'}
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12 space-y-3">
-                          <div className="w-12 h-12 bg-orange-50 text-[#FA5A36] rounded-2xl flex items-center justify-center mx-auto">
-                            <Calendar className="w-6 h-6" />
+                            <h3 className="font-extrabold text-slate-900 text-sm">{session.title}</h3>
+                            <p className="text-xs text-slate-600">{session.description || 'Interactive hands-on session with live Q&A.'}</p>
+                            <p className="text-xs font-bold text-[#FA5A36]">Instructor: {session.instructorName || 'Lead Instructor'}</p>
                           </div>
-                          <h3 className="text-sm font-bold text-slate-800">No 1-on-1 Consultations Booked</h3>
-                          <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
-                            Connect with experienced senior engineers and IT instructors for personalized code reviews, career guidance, and architecture deep dives.
-                          </p>
-                          <button
-                            onClick={() => navigate('/mentorship')}
-                            className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Browse Available Mentors</span>
-                          </button>
+
+                          <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{session.scheduledAt ? new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (session.meetingUrl) {
+                                  window.open(session.meetingUrl, '_blank');
+                                } else {
+                                  navigate('/webinars');
+                                }
+                              }}
+                              className="px-4 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition"
+                            >
+                              Join Class
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
                   ) : (
-                    <>
-                      {dashboardData.upcomingLiveSessions && dashboardData.upcomingLiveSessions.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {dashboardData.upcomingLiveSessions.map((session, idx) => (
-                            <div
-                              key={session.sessionId || idx}
-                              className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col justify-between space-y-4"
-                            >
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black rounded uppercase">
-                                    Scheduled Live
-                                  </span>
-                                  <span className="text-[11px] text-slate-500 flex items-center gap-1 font-semibold">
-                                    <Calendar className="w-3 h-3 text-slate-400" />
-                                    {session.scheduledAt ? new Date(session.scheduledAt).toLocaleDateString() : 'Upcoming'}
-                                  </span>
-                                </div>
-                                <h3 className="font-extrabold text-slate-900 text-sm">{session.title}</h3>
-                                <p className="text-xs text-slate-600">{session.description || 'Interactive hands-on session with live Q&A.'}</p>
-                                <p className="text-xs font-bold text-[#FA5A36]">Instructor: {session.instructorName || 'Lead Instructor'}</p>
+                    <div className="text-center py-12 space-y-2">
+                      <Video className="w-10 h-10 text-slate-300 mx-auto" />
+                      <h3 className="text-sm font-bold text-slate-800">No live classes scheduled</h3>
+                      <p className="text-xs text-slate-400">Upcoming webinars and mentor sessions will appear here.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ========================================================
+                  TAB: 1-ON-1 MENTORSHIP VIEW
+                 ======================================================== */}
+              {activeTab === 'mentorship' && (
+                <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-4">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-50 text-[#FA5A36] text-[10px] font-black uppercase tracking-wider mb-1">
+                        <UserCheck className="w-3 h-3" />
+                        <span>Private Mentorship</span>
+                      </div>
+                      <h2 className="text-base font-black text-slate-900">1-on-1 Mentorship Sessions</h2>
+                      <p className="text-xs text-slate-500">Your scheduled and completed private consultation sessions with senior IT mentors.</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('/mentorship')}
+                      className="shrink-0 whitespace-nowrap px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                      <span>Book New Session</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    {studentConsultations.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {studentConsultations.map((c) => (
+                          <div
+                            key={c.id}
+                            className="p-5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase">
+                                  {c.status}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400 font-semibold">
+                                  {c.bookingCode}
+                                </span>
                               </div>
 
-                              <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
-                                <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                  <span>{session.scheduledAt ? new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}</span>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden">
+                                  {c.instructor?.profilePhoto ? (
+                                    <img
+                                      src={c.instructor.profilePhoto}
+                                      alt={c.instructor.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    c.instructor?.name?.[0] || 'M'
+                                  )}
                                 </div>
-                                <button
-                                  onClick={() => {
-                                    if (session.meetingUrl) {
-                                      window.open(session.meetingUrl, '_blank');
-                                    } else {
-                                      navigate('/webinars');
-                                    }
-                                  }}
-                                  className="px-4 py-1.5 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition"
-                                >
-                                  Join Class
-                                </button>
+                                <div className="overflow-hidden">
+                                  <h4 className="text-xs font-black text-slate-900 truncate">
+                                    {c.instructor?.name || 'Mentor'}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-500 truncate font-medium">
+                                    {c.instructor?.headline || 'Working IT Professional'}
+                                  </p>
+                                </div>
                               </div>
+
+                              <div className="space-y-1 text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
+                                <div className="flex items-center justify-between">
+                                  <span className="flex items-center gap-1 text-slate-500 font-medium">
+                                    <Calendar className="w-3.5 h-3.5 text-slate-400" /> Date:
+                                  </span>
+                                  <span className="font-bold text-slate-800">
+                                    {new Date(c.startTime).toLocaleDateString('en-IN', {
+                                      weekday: 'short',
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="flex items-center gap-1 text-slate-500 font-medium">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400" /> Time:
+                                  </span>
+                                  <span className="font-bold text-slate-800">
+                                    {new Date(c.startTime).toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}{' '}
+                                    ({c.durationMinutes} mins)
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500 font-medium">Fee:</span>
+                                  <span className="font-black text-slate-900">
+                                    ₹{c.fee} {c.paymentStatus === 'FREE' ? '(Free)' : '(Paid)'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {c.notes && (
+                                <p className="text-[11px] text-slate-500 bg-slate-100/60 p-2 rounded-lg italic line-clamp-2">
+                                  " {c.notes} "
+                                </p>
+                              )}
                             </div>
-                          ))}
+
+                            {(() => {
+                              const completed =
+                                c.isCompleted ||
+                                c.status === 'ATTENDED' ||
+                                new Date(c.endTime).getTime() <= consultationNow;
+                              const draft = consultationReviewDrafts[c.id] || { rating: 0, review: '' };
+
+                              return (
+                                <div className="pt-3 border-t border-slate-200/70 space-y-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className={`text-[11px] font-bold flex items-center gap-1 ${completed ? 'text-slate-600' : 'text-emerald-600'}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      {completed ? 'Session completed' : 'Confirmed'}
+                                    </span>
+                                    {!completed && c.meetingRoomCode && (
+                                      <button
+                                        onClick={() => navigate(`/webinars/live/${c.meetingRoomCode}`)}
+                                        className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                                      >
+                                        <Video className="w-3.5 h-3.5" />
+                                        <span>Enter Session</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {c.consultationReview ? (
+                                    <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 space-y-1.5">
+                                      <div className="flex items-center gap-1" aria-label={`Your rating: ${c.consultationReview.rating} out of 5`}>
+                                        {Array.from({ length: 5 }, (_, index) => (
+                                          <Star
+                                            key={index}
+                                            className={`w-4 h-4 ${index < c.consultationReview!.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                                          />
+                                        ))}
+                                        <span className="ml-1 text-[10px] font-bold text-slate-600">Your review</span>
+                                      </div>
+                                      <p className="text-xs text-slate-700">{c.consultationReview.review}</p>
+                                    </div>
+                                  ) : completed && c.status !== 'CANCELLED' ? (
+                                    <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 space-y-2.5">
+                                      <p className="text-xs font-bold text-slate-800">How was your 1-on-1 with {c.instructor?.name || 'your mentor'}?</p>
+                                      <div className="flex items-center gap-1" role="group" aria-label="Rate your consultation">
+                                        {Array.from({ length: 5 }, (_, index) => {
+                                          const rating = index + 1;
+                                          return (
+                                            <button
+                                              key={rating}
+                                              type="button"
+                                              aria-pressed={draft.rating === rating}
+                                              aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
+                                              onClick={() =>
+                                                setConsultationReviewDrafts((current) => ({
+                                                  ...current,
+                                                  [c.id]: { ...draft, rating },
+                                                }))
+                                              }
+                                              className="p-0.5 cursor-pointer"
+                                            >
+                                              <Star className={`w-5 h-5 ${rating <= draft.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                      <textarea
+                                        value={draft.review}
+                                        maxLength={2000}
+                                        onChange={(event) =>
+                                          setConsultationReviewDrafts((current) => ({
+                                            ...current,
+                                            [c.id]: { ...draft, review: event.target.value },
+                                          }))
+                                        }
+                                        placeholder="Share your experience with this mentor..."
+                                        rows={3}
+                                        className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-[#FA5A36]"
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={submittingReviewId === c.id || draft.rating < 1 || !draft.review.trim()}
+                                        onClick={() => handleSubmitConsultationReview(c.id)}
+                                        className="px-3.5 py-2 rounded-lg bg-[#FA5A36] text-white text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {submittingReviewId === c.id ? 'Submitting...' : 'Submit review'}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 space-y-3">
+                        <div className="w-12 h-12 bg-orange-50 text-[#FA5A36] rounded-2xl flex items-center justify-center mx-auto">
+                          <Calendar className="w-6 h-6" />
                         </div>
-                      ) : (
-                        <div className="text-center py-12 space-y-2">
-                          <Video className="w-10 h-10 text-slate-300 mx-auto" />
-                          <h3 className="text-sm font-bold text-slate-800">No live classes scheduled</h3>
-                          <p className="text-xs text-slate-400">Upcoming webinars and mentor sessions will appear here.</p>
-                        </div>
-                      )}
-                    </>
-                  )}
+                        <h3 className="text-sm font-bold text-slate-800">No 1-on-1 Consultations Booked</h3>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+                          Connect with experienced senior engineers and IT instructors for personalized code reviews, career guidance, and architecture deep dives.
+                        </p>
+                        <button
+                          onClick={() => navigate('/mentorship')}
+                          className="px-4 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs rounded-xl shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Browse Available Mentors</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

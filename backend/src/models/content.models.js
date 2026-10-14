@@ -229,6 +229,7 @@ const learningPathSchema = new mongoose.Schema(
     slug: { type: String, unique: true, sparse: true, index: true, lowercase: true },
     description: { type: String },
     skills: { type: [String], default: [] },
+    category: { type: String, index: true },
     career: { type: String },
     level: { type: String, default: 'ALL_LEVELS' },
     estimatedDuration: { type: String },

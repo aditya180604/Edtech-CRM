@@ -29,6 +29,7 @@ import { getAppOrigin } from '../../config/env.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { ReadinessScoringService } from './readinessScoring.service.js';
+import { LearningPathService } from '../learningPaths/learningPath.service.js';
 
 export class InstructorService {
   /**
@@ -400,6 +401,12 @@ export class InstructorService {
       }
     }
 
+    if (['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in createCourse:', err)
+      );
+    }
+
     return course;
   }
 
@@ -574,6 +581,12 @@ export class InstructorService {
       }
     }
 
+    if (['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in updateCourse:', err)
+      );
+    }
+
     return course;
   }
 
@@ -641,6 +654,13 @@ export class InstructorService {
       update,
       { new: true }
     );
+
+    if (course && ['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in updateCourseVisibility:', err)
+      );
+    }
+
     return course;
   }
 
@@ -1813,6 +1833,10 @@ export class InstructorService {
     course.status = 'PUBLISHED';
     course.publishedAt = new Date();
     await course.save();
+
+    await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+      console.error('[LearningPathSync] Error in publishCourse:', err)
+    );
 
     return course;
   }

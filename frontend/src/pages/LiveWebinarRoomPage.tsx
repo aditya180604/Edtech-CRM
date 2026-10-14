@@ -531,17 +531,41 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
       mediaStreamRef.current = localStream;
       setLocalCameraEnabled(enabled);
       if (isHost) setCameraEnabled(enabled);
+
+      [localVideoRef.current, localPipVideoRef.current].forEach((element) => {
+        if (!element) return;
+        if (cameraTrack && enabled) {
+          cameraTrack.detach(element);
+          cameraTrack.attach(element);
+        } else {
+          cameraTrack?.detach(element);
+          element.srcObject = null;
+        }
+      });
+
       setLocalTrackVersion((version) => version + 1);
     };
 
     const attachRemoteVideo = () => {
       const remoteCamera = remoteCameraStream.getVideoTracks().length ? remoteCameraStream : null;
-      if (isHost) {
-        playVideo(remotePipVideoRef.current, remoteCamera);
-      } else {
-        playVideo(remoteVideoRef.current, remoteCamera);
-        playVideo(remotePipVideoRef.current, remoteCamera);
+      const remoteVideoTarget = isHost ? remotePipVideoRef.current : remoteVideoRef.current;
+      const remotePiPTarget = remotePipVideoRef.current;
+
+      if (remoteVideoTarget && remoteCamera) {
+        remoteCameraStream.getVideoTracks().forEach((track) => {
+          remoteVideoTarget.srcObject = new MediaStream([track]);
+        });
+      } else if (remoteVideoTarget) {
+        remoteVideoTarget.srcObject = null;
       }
+
+      if (remotePiPTarget && remoteCamera) {
+        remotePiPTarget.srcObject = remoteCamera;
+        remotePiPTarget.play().catch((error) => console.warn('LiveKit PIP playback:', error));
+      } else if (remotePiPTarget) {
+        remotePiPTarget.srcObject = null;
+      }
+
       if (!localScreenShareActiveRef.current) {
         playVideo(screenVideoRef.current, remoteScreenStream.getVideoTracks().length ? remoteScreenStream : null);
       }
@@ -827,39 +851,61 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   useEffect(() => {
     if (!isMentorship || !liveKitConnected) return;
 
-    const cameraTrack = [...(liveKitRoomRef.current?.localParticipant.trackPublications.values() || [])]
+    const room = liveKitRoomRef.current;
+    const localCamera = [...(room?.localParticipant.trackPublications.values() || [])]
       .find((publication) => publication.source === 'camera')?.track;
-    const mediaTrack = cameraTrack?.mediaStreamTrack;
-    const cameraIsLive = Boolean(
-      cameraTrack &&
-      !cameraTrack.isMuted &&
-      mediaTrack?.readyState === 'live' &&
-      mediaTrack.enabled
+    const remoteCamera = [...(room?.remoteParticipants.values() || [])]
+      .flatMap((participant) => [...participant.trackPublications.values()])
+      .find((publication) => publication.source === 'camera' && publication.track && !publication.isMuted)?.track;
+    const localMediaTrack = localCamera?.mediaStreamTrack;
+    const remoteMediaTrack = remoteCamera?.mediaStreamTrack;
+    const localCameraIsLive = Boolean(
+      localCamera &&
+      !localCamera.isMuted &&
+      localMediaTrack?.readyState === 'live' &&
+      localMediaTrack.enabled
     );
-    const videoElements = [localVideoRef.current, localPipVideoRef.current];
+    const remoteCameraIsLive = Boolean(
+      remoteCamera &&
+      !remoteCamera.isMuted &&
+      remoteMediaTrack?.readyState === 'live' &&
+      remoteMediaTrack.enabled
+    );
+    const localElements = [localVideoRef.current, localPipVideoRef.current];
+    const remoteElements = isHost || screenShareActive
+      ? [remotePipVideoRef.current]
+      : [remoteVideoRef.current];
 
-    videoElements.forEach((element) => {
+    localElements.forEach((element) => {
       if (!element) return;
-      if (cameraIsLive && cameraTrack) {
-        cameraTrack.attach(element);
-      } else {
-        cameraTrack?.detach(element);
+      if (localCameraIsLive && localCamera) localCamera.attach(element);
+      else {
+        localCamera?.detach(element);
+        element.srcObject = null;
+      }
+    });
+    remoteElements.forEach((element) => {
+      if (!element) return;
+      if (remoteCameraIsLive && remoteCamera) remoteCamera.attach(element);
+      else {
+        remoteCamera?.detach(element);
         element.srcObject = null;
       }
     });
 
     return () => {
-      videoElements.forEach((element) => {
-        if (element) cameraTrack?.detach(element);
+      [...localElements, ...remoteElements].forEach((element) => {
+        if (element) {
+          localCamera?.detach(element);
+          remoteCamera?.detach(element);
+        }
       });
     };
-  }, [isMentorship, liveKitConnected, localCameraEnabled, localTrackVersion]);
+  }, [isHost, isMentorship, liveKitConnected, localCameraEnabled, localTrackVersion, remoteCameraEnabled, remoteMediaVersion, screenShareActive]);
 
   // Auto-attach video and audio streams whenever screen share or camera state changes
   useEffect(() => {
     if (isMentorship) {
-      const localCamera = mediaStreamRef.current;
-      const remoteCamera = remoteStreamRef.current?.getVideoTracks().length ? remoteStreamRef.current : null;
       const activeScreen = localScreenShareActive
         ? screenStreamRef.current
         : remoteScreenStreamRef.current?.getVideoTracks().length
@@ -871,10 +917,6 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         if (stream) element.play().catch((error) => console.warn('LiveKit video playback:', error));
       };
 
-      attach(localVideoRef.current, localCamera);
-      attach(localPipVideoRef.current, localCamera);
-      attach(remoteVideoRef.current, remoteCamera);
-      attach(remotePipVideoRef.current, remoteCamera);
       attach(screenVideoRef.current, screenShareActive ? activeScreen : null);
       if (remoteAudioRef.current) {
         remoteAudioRef.current.muted = mutedIncoming;

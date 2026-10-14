@@ -14,6 +14,7 @@ import {
   User,
   Course,
   Notification,
+  Booking,
 } from '../../models/index.js';
 import { generateReceiptPdfBuffer } from '../../services/receipt.service.js';
 import { CashfreeService } from './providers/cashfree/cashfree.service.js';
@@ -654,6 +655,22 @@ export class PaymentService {
     }
 
     const normalizedStatus = CashfreeService.normalizePaymentStatus(paymentStatus);
+
+    // If order is a 1-on-1 Consultation booking (CF_CNS_...)
+    if (orderId && orderId.startsWith('CF_CNS_')) {
+      const { ConsultationService } = await import('../consultations/consultation.service.js');
+      const booking = await Booking.findOne({ cashfreeOrderId: orderId });
+      if (booking) {
+        if (normalizedStatus === PAYMENT_STATUS.SUCCESS && booking.status !== 'CONFIRMED') {
+          await ConsultationService.verifyBookingPayment(booking.userId, { orderId });
+        } else if (normalizedStatus === PAYMENT_STATUS.FAILED || normalizedStatus === PAYMENT_STATUS.CANCELLED) {
+          booking.status = 'CANCELLED';
+          booking.paymentStatus = 'FAILED';
+          await booking.save();
+        }
+      }
+      return { received: true, success: true };
+    }
 
     if (normalizedStatus === PAYMENT_STATUS.SUCCESS) {
       await this.finalizeSuccessfulPayment({

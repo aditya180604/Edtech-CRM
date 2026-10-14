@@ -17,6 +17,7 @@ import {
 import { AppError } from '../../utils/apiResponse.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
 import { ROLES, USER_STATUS, PAYMENT_STATUS, ORDER_STATUS } from '../../config/constants.js';
+import { LearningPathService } from '../learningPaths/learningPath.service.js';
 
 export class AdminService {
   /**
@@ -585,6 +586,12 @@ export class AdminService {
       oldValue: { status: oldStatus },
       newValue: { status },
     });
+
+    if (['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in admin updateCourseStatus:', err)
+      );
+    }
 
     return {
       id: course._id.toString(),

@@ -155,7 +155,12 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
 
         let cashfree: any = null;
         try {
-          cashfree = await loadCashfree({ mode: 'sandbox' });
+          const cfMode =
+            ((res.environment || '').toLowerCase() === 'production' ||
+             (import.meta.env.VITE_CASHFREE_ENV || '').toLowerCase() === 'production')
+              ? 'production'
+              : 'sandbox';
+          cashfree = await loadCashfree({ mode: cfMode });
         } catch (e) {
           console.warn('Cashfree load error:', e);
         }
@@ -199,19 +204,20 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-6 text-white relative">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center sm:p-4 p-0">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full max-h-[92dvh] sm:max-h-[88vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        {/* Header - Fixed & Compact */}
+        <div className="shrink-0 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 sm:p-6 text-white relative">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+            className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 p-1.5 sm:p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+            aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
           </button>
 
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white flex items-center justify-center font-bold text-xl shrink-0 overflow-hidden shadow-md">
+          <div className="flex items-center gap-3 sm:gap-4 pr-8 sm:pr-0">
+            <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white flex items-center justify-center font-bold text-lg sm:text-xl shrink-0 overflow-hidden shadow-md">
               {mentor.profilePhoto ? (
                 <img
                   src={mentor.profilePhoto}
@@ -222,45 +228,45 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                 mentor.name[0] || 'M'
               )}
             </div>
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-300 text-[10px] font-bold mb-1">
-                <Sparkles className="w-3 h-3" />
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 text-[9px] sm:text-[10px] font-bold mb-0.5">
+                <Sparkles className="w-2.5 h-2.5" />
                 1-on-1 Mentorship
               </div>
-              <h3 className="text-xl font-black text-white">{mentor.name}</h3>
-              <p className="text-xs text-slate-300 font-medium">{mentor.headline}</p>
+              <h3 className="text-base sm:text-xl font-black text-white truncate">{mentor.name}</h3>
+              <p className="text-[11px] sm:text-xs text-slate-300 font-medium truncate">{mentor.headline}</p>
             </div>
           </div>
 
           {/* Quick Meta Pills */}
-          <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-white/10 text-xs">
-            <div className="flex items-center gap-1.5 text-slate-200">
-              <Clock className="w-3.5 h-3.5 text-orange-400" />
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mt-3 pt-3 sm:mt-4 sm:pt-4 border-t border-white/10 text-[11px] sm:text-xs">
+            <div className="flex items-center gap-1 sm:gap-1.5 text-slate-200">
+              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-orange-400" />
               <span>{mentor.consultationDuration || 45} mins per session</span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-200">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="flex items-center gap-1 sm:gap-1.5 text-slate-200">
+              <DollarSign className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
               <span className="font-bold text-emerald-300">
                 {mentor.consultationFee === 0 ? 'FREE' : `₹${mentor.consultationFee}`}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-slate-200">
-              <Video className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="flex items-center gap-1 sm:gap-1.5 text-slate-200">
+              <Video className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-400" />
               <span>In-Platform LiveKit Video Room</span>
             </div>
           </div>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 sm:p-8 space-y-6">
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* STATE 1: BOOKING CONFIRMED SUCCESS */}
           {bookingConfirmed ? (
-            <div className="py-8 text-center space-y-5">
-              <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
-                <CheckCircle2 className="w-8 h-8" />
+            <div className="py-6 sm:py-8 text-center space-y-4 sm:space-y-5">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+                <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8" />
               </div>
               <div>
-                <h4 className="text-xl font-black text-slate-900">Consultation Confirmed!</h4>
+                <h4 className="text-lg sm:text-xl font-black text-slate-900">Consultation Confirmed!</h4>
                 <p className="text-xs text-slate-500 font-medium mt-1">
                   We've sent calendar invites & confirmation emails to{' '}
                   <span className="font-bold text-slate-700">{user?.email}</span>.
@@ -295,7 +301,7 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 {bookingConfirmed.meetingRoomCode && (
                   <button
                     onClick={() => {
@@ -320,12 +326,12 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
               </div>
             </div>
           ) : loadingSlots ? (
-            <div className="py-20 flex flex-col items-center justify-center space-y-3">
+            <div className="py-16 sm:py-20 flex flex-col items-center justify-center space-y-3">
               <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#FA5A36] border-t-transparent" />
               <p className="text-xs font-semibold text-slate-500">Checking mentor calendar availability...</p>
             </div>
           ) : availableDates.length === 0 ? (
-            <div className="py-12 text-center space-y-3">
+            <div className="py-10 sm:py-12 text-center space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FA5A36] flex items-center justify-center mx-auto">
                 <Calendar className="w-6 h-6" />
               </div>
@@ -342,7 +348,7 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
                   <span>1. Choose a Date</span>
                 </label>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+                <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
                   {availableDates.map((dateStr) => {
                     const d = new Date(`${dateStr}T00:00:00`);
                     const isSelected = selectedDate === dateStr;
@@ -354,17 +360,17 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                           setSelectedDate(dateStr);
                           setSelectedSlot(null);
                         }}
-                        className={`flex-shrink-0 px-3.5 py-2.5 rounded-2xl text-center border transition-all cursor-pointer ${
+                        className={`shrink-0 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl text-center border transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                             : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-75">
+                        <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider opacity-75">
                           {d.toLocaleDateString('en-US', { weekday: 'short' })}
                         </p>
-                        <p className="text-sm font-extrabold">{d.getDate()}</p>
-                        <p className="text-[10px] opacity-75">
+                        <p className="text-xs sm:text-sm font-extrabold">{d.getDate()}</p>
+                        <p className="text-[9px] sm:text-[10px] opacity-75">
                           {d.toLocaleDateString('en-US', { month: 'short' })}
                         </p>
                       </button>
@@ -398,7 +404,7 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                 {currentDaySlots.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No slots on this date.</p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
                     {currentDaySlots.map((slot) => {
                       const isAvailable = slot.isAvailable !== false;
                       const isSelected = selectedSlot?.slotId === slot.slotId;
@@ -417,7 +423,7 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                           type="button"
                           disabled={!isAvailable}
                           onClick={() => isAvailable && setSelectedSlot(slot)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
+                          className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                             !isAvailable
                               ? 'bg-slate-100/80 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
                               : isSelected
@@ -425,10 +431,10 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                               : 'bg-emerald-50/30 border-emerald-200 text-slate-800 hover:border-emerald-400 hover:bg-emerald-50/60 cursor-pointer'
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-900">{startTimeDisplay}</span>
+                          <div className="flex items-center justify-between gap-1 mb-0.5 sm:mb-1">
+                            <span className="text-[11px] sm:text-xs font-bold text-slate-900">{startTimeDisplay}</span>
                             <span
-                              className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                              className={`text-[8px] sm:text-[9px] font-extrabold uppercase px-1 sm:px-1.5 py-0.5 rounded ${
                                 isAvailable
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : 'bg-slate-200 text-slate-500'
@@ -437,7 +443,7 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                               {isAvailable ? 'Available' : 'Booked'}
                             </span>
                           </div>
-                          <div className="text-[10px] text-slate-500 font-medium">to {endTimeDisplay}</div>
+                          <div className="text-[9px] sm:text-[10px] text-slate-500 font-medium">to {endTimeDisplay}</div>
                         </button>
                       );
                     })}
@@ -456,45 +462,47 @@ export const ConsultationBookingModal: React.FC<ConsultationBookingModalProps> =
                   value={studentNotes}
                   onChange={(e) => setStudentNotes(e.target.value)}
                   placeholder="e.g., Code review of my full-stack project, system design prep, resume feedback..."
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition"
+                  className="w-full p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition"
                 />
-              </div>
-
-              {/* Step 4: Summary & Confirm Button */}
-              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="text-[11px] text-slate-400 font-semibold uppercase">Total Investment</div>
-                  <div className="text-xl font-black text-slate-900">
-                    {mentor.consultationFee === 0 ? 'FREE' : `₹${mentor.consultationFee}`}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleConfirmBooking}
-                  disabled={!selectedSlot || submitting}
-                  className="px-6 py-3 bg-[#FA5A36] hover:bg-[#E04322] disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {submitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
-                      <span>Reserving Slot...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>
-                        {mentor.consultationFee === 0
-                          ? 'Confirm Free Booking'
-                          : `Pay ₹${mentor.consultationFee} & Book Session`}
-                      </span>
-                    </>
-                  )}
-                </button>
               </div>
             </>
           )}
         </div>
+
+        {/* Sticky Footer for Clean Mobile & Desktop Booking */}
+        {!bookingConfirmed && !loadingSlots && availableDates.length > 0 && (
+          <div className="shrink-0 bg-white border-t border-slate-100 p-3.5 sm:p-4 px-4 sm:px-6 flex items-center justify-between gap-3 shadow-xs">
+            <div>
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-semibold uppercase">Total Investment</div>
+              <div className="text-lg sm:text-xl font-black text-slate-900">
+                {mentor.consultationFee === 0 ? 'FREE' : `₹${mentor.consultationFee}`}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmBooking}
+              disabled={!selectedSlot || submitting}
+              className="px-5 sm:px-6 py-2.5 sm:py-3 bg-[#FA5A36] hover:bg-[#E04322] disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 shrink-0"
+            >
+              {submitting ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                  <span>Reserving Slot...</span>
+                </div>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>
+                    {mentor.consultationFee === 0
+                      ? 'Confirm Free Booking'
+                      : `Pay ₹${mentor.consultationFee} & Book Session`}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

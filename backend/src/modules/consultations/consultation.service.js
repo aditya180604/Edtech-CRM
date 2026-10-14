@@ -11,6 +11,34 @@ import { publishConsultationRatingUpdate } from '../../services/realtime.service
 
 const DAYS_OF_WEEK = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
+function parseDateTimeInZone(dateStr, timeStr, timeZone = 'Asia/Kolkata') {
+  const [h, m] = (timeStr || '00:00').split(':').map(Number);
+  const utcGuess = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00.000Z`);
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(utcGuess);
+  const partObj = {};
+  for (const p of parts) partObj[p.type] = p.value;
+
+  const targetHour = parseInt(partObj.hour === '24' ? '0' : partObj.hour, 10);
+  const targetMin = parseInt(partObj.minute, 10);
+
+  const wantedMin = h * 60 + m;
+  const gotMin = targetHour * 60 + targetMin;
+  let diffMin = wantedMin - gotMin;
+
+  if (diffMin > 720) diffMin -= 1440;
+  if (diffMin < -720) diffMin += 1440;
+
+  return new Date(utcGuess.getTime() + diffMin * 60 * 1000);
+}
+
 export class ConsultationService {
   /**
    * 1. Get Public / Student Directory of Mentors Offering 1-on-1 Consultations
@@ -128,19 +156,28 @@ export class ConsultationService {
     const buffer = profile.consultationBufferMinutes || 15;
     const weeklySched = profile.weeklyAvailability || [];
     const unavailableDates = new Set(profile.unavailableDates || []);
+    const timeZone = profile.consultationTimezone || 'Asia/Kolkata';
 
-    const start = startDate ? new Date(startDate) : new Date();
-    start.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const todayDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
 
-    const end = new Date(start);
-    end.setDate(end.getDate() + Number(days));
+    const startBaseDate = startDate
+      ? new Date(startDate)
+      : parseDateTimeInZone(todayDateStr, '00:00', timeZone);
+
+    const end = new Date(startBaseDate.getTime() + Number(days) * 24 * 60 * 60 * 1000);
 
     // 2. Fetch all existing bookings & reserved slots in this window to prevent double-booking
     const targetUserId = profile.userId;
     const existingBookings = await Booking.find({
       instructorId: targetUserId,
       status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
-      startTime: { $gte: start, $lte: end },
+      startTime: { $gte: startBaseDate, $lte: end },
     }).lean();
 
     const bookedRanges = existingBookings
@@ -156,22 +193,22 @@ export class ConsultationService {
         end: new Date(b.endTime).getTime(),
       }));
 
-    // 3. Generate dynamic slots for each day
+    // 3. Generate dynamic slots for each day in the mentor's timezone
     const dynamicSlots = [];
-    const now = new Date();
     const minLeadTime = new Date(now.getTime() + 15 * 60 * 1000); // 15 mins lead time
 
     for (let d = 0; d < days; d++) {
-      const curDate = new Date(start.getFullYear(), start.getMonth(), start.getDate() + d);
-
-      const year = curDate.getFullYear();
-      const month = String(curDate.getMonth() + 1).padStart(2, '0');
-      const day = String(curDate.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      const currentDayDate = new Date(startBaseDate.getTime() + d * 24 * 60 * 60 * 1000);
+      const dateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(currentDayDate);
 
       if (unavailableDates.has(dateStr)) continue;
 
-      const dayName = DAYS_OF_WEEK[curDate.getDay()];
+      const dayName = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'long' }).format(currentDayDate).toUpperCase();
       const dayConfig = weeklySched.find((w) => w.dayOfWeek === dayName && w.isEnabled);
       if (!dayConfig || !dayConfig.slots || dayConfig.slots.length === 0) continue;
 
@@ -181,8 +218,22 @@ export class ConsultationService {
         const [startH, startM] = timeRange.startTime.split(':').map(Number);
         const [endH, endM] = timeRange.endTime.split(':').map(Number);
 
-        const rangeStart = new Date(curDate.getFullYear(), curDate.getMonth(), curDate.getDate(), startH, startM, 0, 0);
-        const rangeEnd = new Date(curDate.getFullYear(), curDate.getMonth(), curDate.getDate(), endH, endM, 0, 0);
+        const rangeStart = parseDateTimeInZone(dateStr, timeRange.startTime, timeZone);
+
+        // If endTime is '00:00' or end <= start, it means midnight at the END of dateStr (24:00)
+        let rangeEnd;
+        if (timeRange.endTime === '00:00' || endH * 60 + endM <= startH * 60 + startM) {
+          const nextDayObj = new Date(rangeStart.getTime() + 24 * 60 * 60 * 1000);
+          const nextDateStr = new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(nextDayObj);
+          rangeEnd = parseDateTimeInZone(nextDateStr, '00:00', timeZone);
+        } else {
+          rangeEnd = parseDateTimeInZone(dateStr, timeRange.endTime, timeZone);
+        }
 
         let slotCursor = new Date(rangeStart);
         while (slotCursor.getTime() + duration * 60 * 1000 <= rangeEnd.getTime()) {
@@ -488,13 +539,17 @@ export class ConsultationService {
         `${instructorUser.firstName || ''} ${instructorUser.lastName || ''}`.trim() || 'your mentor'
       );
 
-      // Dispatch automated notification emails asynchronously
-      this._dispatchConsultationEmails({
-        booking: confirmedBooking,
-        student: studentUser,
-        instructor: instructorUser,
-        timezone: instructorProfile.consultationTimezone || 'Asia/Kolkata',
-      }).catch((e) => console.warn('[Consultation Email Error]:', e.message));
+      // Dispatch automated notification emails
+      try {
+        await this._dispatchConsultationEmails({
+          booking: confirmedBooking,
+          student: studentUser,
+          instructor: instructorUser,
+          timezone: instructorProfile.consultationTimezone || 'Asia/Kolkata',
+        });
+      } catch (e) {
+        console.warn('[Consultation Email Error]:', e.message);
+      }
 
       return {
         success: true,
@@ -559,6 +614,7 @@ export class ConsultationService {
       paymentSessionId: cfOrder.paymentSessionId || cfOrder.payment_session_id,
       orderId: cfOrderId,
       reservationExpiresAt,
+      environment: cfOrder.environment || cashfreeConfig.env,
     };
   }
 
@@ -605,12 +661,16 @@ export class ConsultationService {
       );
 
       // Dispatch automated emails to both Student & Instructor
-      this._dispatchConsultationEmails({
-        booking,
-        student: studentUser,
-        instructor: instructorUser,
-        timezone: instructorProfile?.consultationTimezone || 'Asia/Kolkata',
-      }).catch((e) => console.warn('[Consultation Email Error]:', e.message));
+      try {
+        await this._dispatchConsultationEmails({
+          booking,
+          student: studentUser,
+          instructor: instructorUser,
+          timezone: instructorProfile?.consultationTimezone || 'Asia/Kolkata',
+        });
+      } catch (e) {
+        console.warn('[Consultation Email Error]:', e.message);
+      }
 
       return {
         success: true,

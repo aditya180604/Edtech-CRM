@@ -57,11 +57,25 @@ export interface RoadmapDomain {
   topics: RoadmapTopic[];
 }
 
+export interface LearningPathCourse {
+  id: string;
+  title: string;
+  slug: string;
+  thumbnail?: string | null;
+  description: string;
+  price: number;
+  level: string;
+  duration?: number | null;
+  category?: string | null;
+  skills?: string[];
+}
+
 export interface LearningPathDetail {
   id: string;
   learningPathId: string;
   title: string;
   slug: string;
+  category?: string | null;
   description: string;
   skills: string[];
   career?: string | null;
@@ -72,6 +86,7 @@ export interface LearningPathDetail {
   overallProgress: number;
   isEnrolled?: boolean;
   domains: RoadmapDomain[];
+  courses?: LearningPathCourse[];
 }
 
 export interface TutorOfferingSummary {

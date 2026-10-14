@@ -647,13 +647,17 @@ export const MobileHomeView: React.FC = () => {
       </section>
 
       {/* =========================================================================
-          6. LEARNING PATHS (Target: Image 4 Screen 1)
+          6. LEARNING PATHS (Target: Smaller Screens)
          ========================================================================= */}
       <section className="py-5 px-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3.5">
           <div>
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-[#FA5A36] text-[10px] font-bold uppercase tracking-wider mb-1">
+              <Layers className="w-3 h-3" />
+              <span>Career Tracks</span>
+            </div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900">Learning Paths</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Structured career curriculums designed to take you from beginner to professional</p>
+            <p className="text-xs text-slate-500 mt-0.5">Step-by-step career curriculum from beginner to pro</p>
           </div>
           <Link
             to="/learning-paths"
@@ -664,31 +668,87 @@ export const MobileHomeView: React.FC = () => {
           </Link>
         </div>
 
-        <div className="space-y-3">
-          {(Array.isArray(paths) ? paths : []).slice(0, 2).map((path) => (
-            <Link
-              key={path.id}
-              to={path.slug ? `/learning-paths/${path.slug}` : `/learning-paths`}
-              className="block bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden"
-            >
-              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-3.5 text-white flex items-center justify-between">
+        {/* Horizontal Swipeable Cards for Smooth Touch Interaction */}
+        <div className="flex overflow-x-auto gap-3.5 snap-x snap-mandatory scroll-smooth pb-2 no-scrollbar -mx-4 px-4">
+          {(Array.isArray(paths) && paths.length > 0 ? paths : []).map((path, idx) => {
+            const gradients = [
+              'from-slate-900 via-indigo-950 to-slate-900',
+              'from-slate-900 via-slate-800 to-indigo-950',
+              'from-slate-950 via-blue-950 to-slate-900',
+            ];
+            const gradient = gradients[idx % gradients.length];
+            const courseNum = path.coursesCount || (path as any).domainsCount || '3';
+            const durationText = (path as any).estimatedDuration || path.duration || 'Self-paced';
+
+            return (
+              <Link
+                key={path.id || idx}
+                to={path.slug ? `/learning-paths/${path.slug}` : `/learning-paths`}
+                className="w-[82vw] max-w-[310px] shrink-0 snap-center bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all overflow-hidden flex flex-col justify-between"
+              >
                 <div>
-                  <span className="text-[9px] uppercase font-bold tracking-widest text-[#FF8A65]">Career Track</span>
-                  <h4 className="text-xs font-bold text-white">{path.career || path.title}</h4>
+                  {/* Career Track Banner */}
+                  <div className={`bg-gradient-to-r ${gradient} p-4 text-white relative`}>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-orange-400">
+                        Career Track
+                      </span>
+                      <span className="px-2 py-0.5 bg-white/15 backdrop-blur-md text-white text-[9px] font-bold rounded-md uppercase tracking-wider">
+                        {(path.level || 'Beginner').replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-white line-clamp-1">
+                      {path.career || path.title}
+                    </h3>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-3.5 space-y-2">
+                    <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
+                      {path.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                      {path.description || 'Structured step-by-step curriculum to take you to job readiness.'}
+                    </p>
+
+                    {/* Skills pills if available */}
+                    {Array.isArray(path.skills) && path.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {path.skills.slice(0, 3).map((skill, sIdx) => (
+                          <span
+                            key={sIdx}
+                            className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px] font-semibold"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <span className="px-2 py-0.5 bg-white/20 backdrop-blur-md text-white text-[9px] font-semibold rounded">
-                  {path.level}
-                </span>
-              </div>
-              <div className="p-3 flex items-center justify-between text-xs text-slate-600">
-                <span>{path.coursesCount} Courses</span>
-                <span className="text-[#FA5A36] font-semibold flex items-center gap-1">
-                  <span>Explore Track</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </Link>
-          ))}
+
+                {/* Footer with Metadata & CTA */}
+                <div className="px-3.5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold">
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <Layers className="w-3.5 h-3.5 text-[#FA5A36]" />
+                      <span>{courseNum.toString().includes('Course') ? courseNum : `${courseNum} Courses`}</span>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1 text-slate-400">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{durationText}</span>
+                    </span>
+                  </div>
+
+                  <span className="text-[#FA5A36] font-bold text-[11px] flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    <span>Explore Track</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 

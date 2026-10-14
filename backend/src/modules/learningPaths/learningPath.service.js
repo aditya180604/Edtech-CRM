@@ -167,12 +167,25 @@ export class LearningPathService {
     const pathId = path._id;
 
     // Fetch published domains ordered by DB order
-    const domains = await LearningPathDomain.find({
+    let domains = await LearningPathDomain.find({
       learningPathId: pathId,
       status: 'PUBLISHED',
     })
       .sort({ order: 1 })
       .lean();
+
+    // Auto-sync domains and topics if none exist yet but courses are linked
+    if (domains.length === 0 && Array.isArray(path.courses) && path.courses.length > 0) {
+      for (const cId of path.courses) {
+        await LearningPathService.syncCourseWithLearningPath(cId);
+      }
+      domains = await LearningPathDomain.find({
+        learningPathId: pathId,
+        status: 'PUBLISHED',
+      })
+        .sort({ order: 1 })
+        .lean();
+    }
 
     const domainIds = domains.map((d) => d._id);
 
@@ -346,11 +359,19 @@ export class LearningPathService {
       }
     }
 
+    const pathCourses = await Course.find({
+      _id: { $in: path.courses || [] },
+      status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
+    })
+      .select('title name slug thumbnail description coursePrice rawFee level duration category skills')
+      .lean();
+
     return {
       id: pathId.toString(),
       learningPathId: path.learningPathId || pathId.toString(),
       title: path.title,
       slug: path.slug || pathId.toString(),
+      category: path.category || null,
       description: path.description || '',
       skills: Array.isArray(path.skills) ? path.skills : [],
       career: path.career || null,
@@ -361,6 +382,18 @@ export class LearningPathService {
       overallProgress: overallProgress,
       isEnrolled: isPathEnrolled,
       domains: structuredDomains,
+      courses: pathCourses.map((c) => ({
+        id: c._id.toString(),
+        title: c.title || c.name || '',
+        slug: c.slug || c._id.toString(),
+        thumbnail: c.thumbnail || null,
+        description: c.description || '',
+        price: c.coursePrice ?? c.rawFee ?? 0,
+        level: c.level || 'ALL_LEVELS',
+        duration: c.duration || null,
+        category: c.category || null,
+        skills: Array.isArray(c.skills) ? c.skills : [],
+      })),
     };
   }
 
@@ -919,5 +952,247 @@ export class LearningPathService {
     );
 
     return progress;
+  }
+
+  /**
+   * Helper: Normalize Course Category
+   */
+  static normalizeCategory(c) {
+    if (!c) return 'General';
+    const cat = c.category || c.cat;
+    if (typeof cat === 'string' && cat.trim()) {
+      const trimmed = cat.trim();
+      const lower = trimmed.toLowerCase();
+      if (lower === 'web') return 'Web Development';
+      if (lower === 'ai') return 'AI & Machine Learning';
+      if (lower === 'programming') return 'Programming';
+      if (lower === 'marketing') return 'Digital Marketing';
+      if (lower === 'data') return 'Data Science';
+      if (lower === 'dev') return 'Development';
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }
+    return 'General';
+  }
+
+  /**
+   * Automatically sync a course with its corresponding dynamic Learning Path.
+   * If no Learning Path exists for this course's category, one is automatically created.
+   * If a Learning Path exists, the course is linked to it, and its modules/topics are linked into domains.
+   */
+  static async syncCourseWithLearningPath(courseDocOrId) {
+    try {
+      let course = courseDocOrId;
+      if (typeof courseDocOrId === 'string' || (courseDocOrId && !courseDocOrId.title && mongoose.isValidObjectId(courseDocOrId))) {
+        course = await Course.findById(courseDocOrId).lean();
+      }
+      if (!course || !course._id) return null;
+
+      // Only sync published / active courses
+      const status = (course.status || '').toUpperCase();
+      if (!['PUBLISHED', 'ACTIVE'].includes(status)) {
+        return null;
+      }
+
+      const category = this.normalizeCategory(course);
+      const catSlug = category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const trackSlug = `${catSlug}-career-track`;
+
+      // 1. Find or create the LearningPath for this category
+      let path = await LearningPath.findOne({
+        $or: [
+          { category: new RegExp(`^${category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          { slug: trackSlug },
+          { title: new RegExp(`^${category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i') },
+        ],
+      });
+
+      const courseSkills = Array.isArray(course.skills) && course.skills.length > 0 ? course.skills : [];
+
+      if (!path) {
+        path = await LearningPath.create({
+          learningPathId: `LP-${Date.now().toString().slice(-6)}`,
+          title: `${category} Career Track`,
+          slug: trackSlug,
+          category: category,
+          career: `${category} Specialist`,
+          description: `Master ${category} from foundational concepts to advanced production architecture with step-by-step curriculum and expert guidance.`,
+          skills: courseSkills.length > 0 ? courseSkills : [category, `${category} Fundamentals`, 'Production Architecture'],
+          level: course.level || 'ALL_LEVELS',
+          estimatedDuration: course.duration ? `${Math.round(course.duration / 60)} Hours` : '40 Hours',
+          courses: [course._id],
+          certificate: true,
+          status: 'PUBLISHED',
+        });
+      } else {
+        let changed = false;
+        const currentCourses = (path.courses || []).map((c) => (c._id || c).toString());
+        if (!currentCourses.includes(course._id.toString())) {
+          path.courses.push(course._id);
+          changed = true;
+        }
+
+        if (!path.category) {
+          path.category = category;
+          changed = true;
+        }
+
+        if (path.status !== 'PUBLISHED') {
+          path.status = 'PUBLISHED';
+          changed = true;
+        }
+
+        if (courseSkills.length > 0) {
+          const existingSkills = new Set(path.skills || []);
+          let added = false;
+          for (const s of courseSkills) {
+            if (s && !existingSkills.has(s)) {
+              existingSkills.add(s);
+              added = true;
+            }
+          }
+          if (added) {
+            path.skills = Array.from(existingSkills);
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          await path.save();
+        }
+      }
+
+      // 2. Fetch course modules and topics to populate LearningPathDomain and LearningPathDomainTopic
+      const [modules, topics] = await Promise.all([
+        Module.find({ courseId: course._id }).sort({ order: 1 }).lean(),
+        Topic.find({ courseId: course._id }).sort({ order: 1 }).lean(),
+      ]);
+
+      if (modules.length > 0) {
+        let currentDomainOrder = await LearningPathDomain.countDocuments({ learningPathId: path._id });
+
+        for (const mod of modules) {
+          const modSlug = (mod.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+          let domain = await LearningPathDomain.findOne({
+            learningPathId: path._id,
+            $or: [{ title: mod.title }, { slug: modSlug }],
+          });
+
+          if (!domain) {
+            currentDomainOrder++;
+            domain = await LearningPathDomain.create({
+              domainId: `DOM-${path._id.toString().slice(-4)}-${currentDomainOrder}`,
+              learningPathId: path._id,
+              title: mod.title,
+              slug: modSlug || `module-${currentDomainOrder}`,
+              description: mod.description || `Master comprehensive skills and competencies in ${mod.title}.`,
+              order: currentDomainOrder,
+              status: 'PUBLISHED',
+            });
+          }
+
+          // Attach topics under this module
+          const modTopics = topics.filter((t) => t.moduleId && t.moduleId.toString() === mod._id.toString());
+          let currentTopicOrder = await LearningPathDomainTopic.countDocuments({ domainId: domain._id });
+
+          for (const mt of modTopics) {
+            const linkExists = await LearningPathDomainTopic.findOne({
+              learningPathId: path._id,
+              domainId: domain._id,
+              topicId: mt._id,
+            });
+
+            if (!linkExists) {
+              currentTopicOrder++;
+              await LearningPathDomainTopic.create({
+                learningPathId: path._id,
+                domainId: domain._id,
+                topicId: mt._id,
+                order: currentTopicOrder,
+                isRequired: true,
+                status: 'ACTIVE',
+              });
+            }
+          }
+        }
+      } else if (topics.length > 0) {
+        // Course has topics without modules -> group into category core curriculum domain
+        let defaultDomain = await LearningPathDomain.findOne({
+          learningPathId: path._id,
+          title: `${category} Core Curriculum`,
+        });
+
+        if (!defaultDomain) {
+          const dCount = await LearningPathDomain.countDocuments({ learningPathId: path._id });
+          defaultDomain = await LearningPathDomain.create({
+            domainId: `DOM-${path._id.toString().slice(-4)}-${dCount + 1}`,
+            learningPathId: path._id,
+            title: `${category} Core Curriculum`,
+            slug: `${catSlug}-core-curriculum`,
+            description: `Essential topics and hands-on modules for ${category}.`,
+            order: dCount + 1,
+            status: 'PUBLISHED',
+          });
+        }
+
+        let currentTopicOrder = await LearningPathDomainTopic.countDocuments({ domainId: defaultDomain._id });
+        for (const t of topics) {
+          const linkExists = await LearningPathDomainTopic.findOne({
+            learningPathId: path._id,
+            domainId: defaultDomain._id,
+            topicId: t._id,
+          });
+
+          if (!linkExists) {
+            currentTopicOrder++;
+            await LearningPathDomainTopic.create({
+              learningPathId: path._id,
+              domainId: defaultDomain._id,
+              topicId: t._id,
+              order: currentTopicOrder,
+              isRequired: true,
+              status: 'ACTIVE',
+            });
+          }
+        }
+      } else {
+        // Fallback domain if course has no modules yet
+        const dCount = await LearningPathDomain.countDocuments({ learningPathId: path._id });
+        if (dCount === 0) {
+          await LearningPathDomain.create({
+            domainId: `DOM-${path._id.toString().slice(-4)}-1`,
+            learningPathId: path._id,
+            title: `${category} Foundations & Core Practice`,
+            slug: `${catSlug}-foundations-core-practice`,
+            description: `Comprehensive industry curriculum and projects for ${category}.`,
+            order: 1,
+            status: 'PUBLISHED',
+          });
+        }
+      }
+
+      return path;
+    } catch (err) {
+      console.error(`[LearningPathSync] Error syncing course ${courseDocOrId?._id || courseDocOrId} with learning path:`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Synchronize all existing published courses in MongoDB with their respective dynamic Learning Paths.
+   */
+  static async syncAllCoursesWithLearningPaths() {
+    try {
+      const courses = await Course.find({
+        status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
+      }).lean();
+
+      for (const course of courses) {
+        await this.syncCourseWithLearningPath(course);
+      }
+      return { success: true, count: courses.length };
+    } catch (err) {
+      console.error('[LearningPathSync] Error in syncAllCoursesWithLearningPaths:', err);
+      return { success: false, error: err.message };
+    }
   }
 }

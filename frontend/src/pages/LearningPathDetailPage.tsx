@@ -400,6 +400,74 @@ export const LearningPathDetailPage: React.FC = () => {
                 );
               })}
             </div>
+
+            {/* Included Courses in this Career Track */}
+            {Array.isArray(pathDetail.courses) && pathDetail.courses.length > 0 && (
+              <div className="mt-12 pt-8 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      Included Courses in this Career Track
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                      Complete end-to-end coursework, video masterclasses, and capstone labs included in this specialization.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold px-3 py-1 bg-[#FFF5F2] text-[#FA5A36] rounded-full border border-[#FFCCC2]">
+                    {pathDetail.courses.length} {pathDetail.courses.length === 1 ? 'Course' : 'Courses'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {pathDetail.courses.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/courses/${c.slug || c.id}`}
+                      className="group bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-lg hover:border-[#FA5A36]/30 hover:-translate-y-1 transition-all overflow-hidden flex flex-col justify-between"
+                    >
+                      <div>
+                        {c.thumbnail ? (
+                          <div className="aspect-16/9 w-full overflow-hidden bg-slate-100">
+                            <img
+                              src={c.thumbnail}
+                              alt={c.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+                        ) : (
+                          <div className="aspect-16/9 w-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
+                            <h5 className="text-white text-sm font-semibold text-center line-clamp-2">
+                              {c.title}
+                            </h5>
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                            {c.level.replace(/_/g, ' ')}
+                          </span>
+                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-[#FA5A36] transition-colors mt-2 line-clamp-2">
+                            {c.title}
+                          </h4>
+                          {c.description && (
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                              {c.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-4 pt-0 border-t border-slate-100 mt-2 flex items-center justify-between">
+                        <span className="text-sm font-bold text-slate-900">
+                          {c.price > 0 ? `₹${c.price}` : 'Free'}
+                        </span>
+                        <span className="text-xs font-semibold text-[#FA5A36] group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                          Explore Course <ArrowRight className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

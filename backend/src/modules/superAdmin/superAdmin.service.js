@@ -24,12 +24,14 @@ import {
   InstructorEarning,
   PlatformSetting,
   InstructorRegistrationFee,
+} from '../../models/index.js';
 import { ROLES, USER_STATUS } from '../../config/constants.js';
 import { getAppOrigin } from '../../config/env.js';
 import fs from 'fs';
 import path from 'path';
 import { InstructorService } from '../instructor/instructor.service.js';
 import { ReadinessScoringService } from '../instructor/readinessScoring.service.js';
+import { LearningPathService } from '../learningPaths/learningPath.service.js';
 import {
   sendInstructorApplicationApprovedEmail,
   sendInstructorApplicationRejectedEmail,
@@ -479,6 +481,11 @@ export class SuperAdminService {
       resourceId: courseId,
       newValue: { status: status.toUpperCase() },
     });
+    if (course && ['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in superAdmin updateCourseStatus:', err)
+      );
+    }
     return course;
   }
 
@@ -590,6 +597,10 @@ export class SuperAdminService {
       resourceId: courseId,
       newValue: { approvalStatus: 'APPROVED', status: 'PUBLISHED' },
     });
+
+    await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+      console.error('[LearningPathSync] Error in approveCourse:', err)
+    );
 
     return course;
   }
@@ -1392,6 +1403,12 @@ export class SuperAdminService {
         publishingFeePaid: true,
       },
     });
+
+    if (['PUBLISHED', 'ACTIVE'].includes((course.status || '').toUpperCase())) {
+      await LearningPathService.syncCourseWithLearningPath(course).catch((err) =>
+        console.error('[LearningPathSync] Error in createCourseOnBehalf:', err)
+      );
+    }
 
     return course;
   }

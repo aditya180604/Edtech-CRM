@@ -112,6 +112,7 @@ export interface ReservationResponse {
   paymentSessionId?: string;
   orderId?: string;
   reservationExpiresAt?: string;
+  environment?: string;
   message?: string;
 }
 

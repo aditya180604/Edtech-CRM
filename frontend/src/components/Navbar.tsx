@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, GraduationCap, Crown, ShieldCheck, Briefcase, LogOut, LayoutDashboard, Compass, ShoppingCart, Search } from 'lucide-react';
+import { Menu, X, GraduationCap, Crown, ShieldCheck, Briefcase, LogOut, LayoutDashboard, Compass, ShoppingCart, Search, Home } from 'lucide-react';
 import { useAuthModal } from '../context/AuthModalContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -305,6 +305,14 @@ export const Navbar: React.FC = () => {
                 >
                   <Compass className="w-4 h-4" />
                   <span>Explore Courses</span>
+                </Link>
+                <Link
+                  to="/"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Home Page</span>
                 </Link>
               </div>
 
