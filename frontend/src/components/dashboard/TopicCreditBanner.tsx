@@ -13,7 +13,7 @@ export const TopicCreditBanner: React.FC<TopicCreditBannerProps> = ({ upgrades }
   if (!upgrades || upgrades.length === 0) {
     return null;
   }
-
+ 
   // Display primary upgrade opportunity
   const primaryUpgrade = upgrades[0];
   const currencySymbol = primaryUpgrade.currency === 'INR' ? '₹' : '$';
