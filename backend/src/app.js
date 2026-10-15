@@ -89,7 +89,7 @@ app.use('/api', apiRouter);
 
 // Root health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'Edutech LMS & CRM Backend' });
+  res.status(200).json({ status: 'ok', service: 'VStudyOnline LMS & CRM Backend' });
 });
 
 // Centralized error handling

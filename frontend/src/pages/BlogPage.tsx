@@ -139,7 +139,7 @@ export const BlogPage: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-black uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>EduTech Engineering & Insights</span>
+            <span>VStudyOnline Engineering & Insights</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Articles, Tutorials & Industry Perspectives
@@ -369,13 +369,13 @@ export const BlogPage: React.FC = () => {
                     ))
                   ) : (
                     <p className="font-normal text-slate-700">
-                      Full technical breakdown and code architectures are continuously published by EduTech senior educators.
+                      Full technical breakdown and code architectures are continuously published by VStudyOnline senior educators.
                     </p>
                   )}
                 </div>
 
                 <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-xs text-slate-400 font-medium">Published on EduTech Insights</span>
+                  <span className="text-xs text-slate-400 font-medium">Published on VStudyOnline Insights</span>
                   <button
                     type="button"
                     onClick={() => setSelectedPost(null)}

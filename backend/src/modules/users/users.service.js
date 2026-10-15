@@ -245,7 +245,7 @@ export class UsersService {
       firstName: user.firstName || 'Learner',
       lastName: user.lastName || '',
       fullName: [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Verified Learner',
-      headline: user.headline || 'EduTech Certified Learner',
+      headline: user.headline || 'VStudyOnline Certified Learner',
       profilePhoto: user.profilePhoto || null,
       institution: user.institution || '',
       qualification: user.qualification || '',

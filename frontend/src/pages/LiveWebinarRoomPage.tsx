@@ -1998,7 +1998,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                       {roomState.instructor.headline || 'Lead Instructor & Workshop Host'}
                     </p>
                     <p className="text-xs text-slate-400 mt-2">
-                      Streaming live via EduTech Built-in Studio. Interactive chat & materials active.
+                      Streaming live via VStudyOnline Built-in Studio. Interactive chat & materials active.
                     </p>
                   </div>
 

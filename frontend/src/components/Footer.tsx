@@ -210,7 +210,7 @@ export const Footer: React.FC = () => {
         {/* Bottom Centered Copyrights - Matching Image 2 */}
         <div className="pt-6 sm:pt-8 flex flex-col items-center justify-center text-center space-y-1 text-xs">
           <p className="font-medium text-slate-400 text-[11px] sm:text-xs">
-            © 2026–2027 EduTech. All rights reserved.
+            © 2026–2027 VStudyOnline. All rights reserved.
           </p>
         </div>
       </div>

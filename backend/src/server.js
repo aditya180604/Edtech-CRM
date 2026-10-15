@@ -26,7 +26,7 @@ async function startServer() {
     const server = createServer(app);
     const io = initializeRealtime(server);
     server.listen(config.port, () => {
-      console.log(`[Server] Edutech LMS backend running on port ${config.port} [${config.env}]`);
+      console.log(`[Server] VStudyOnline LMS backend running on port ${config.port} [${config.env}]`);
       console.log(`[Server] Health check: http://localhost:${config.port}/api/v1/health`);
     });
 

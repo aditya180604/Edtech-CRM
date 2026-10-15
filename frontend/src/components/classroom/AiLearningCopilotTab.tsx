@@ -44,7 +44,7 @@ export const AiLearningCopilotTab: React.FC<AiLearningCopilotTabProps> = ({
     {
       id: 'welcome-msg',
       role: 'model',
-      text: `👋 **Hi there! I'm your EduTech AI Copilot.**\n\nI'm active on **${lessonTitle}**. Ask me any doubt, request a simpler explanation, get code snippets, or test your understanding with a quick quiz!`,
+      text: `👋 **Hi there! I'm your VStudyOnline AI Copilot.**\n\nI'm active on **${lessonTitle}**. Ask me any doubt, request a simpler explanation, get code snippets, or test your understanding with a quick quiz!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -291,7 +291,7 @@ export const AiLearningCopilotTab: React.FC<AiLearningCopilotTabProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                EduTech AI Copilot
+                VStudyOnline AI Copilot
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Mentor
                 </span>

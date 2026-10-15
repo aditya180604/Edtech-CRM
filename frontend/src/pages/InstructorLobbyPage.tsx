@@ -781,8 +781,8 @@ export const InstructorLobbyPage: React.FC = () => {
               <strong className="block font-bold text-slate-800">Need priority review?</strong>
               <p className="text-slate-500 mt-1 leading-relaxed">
                 Reach out to administrator support at{' '}
-                <a href="mailto:admin@edtech.com" className="text-indigo-600 font-bold hover:underline">
-                  admin@edtech.com
+                <a href="mailto:admin@vstudyonline.com" className="text-indigo-600 font-bold hover:underline">
+                  admin@vstudyonline.com
                 </a>{' '}
                 with your portfolio link for accelerated verification.
               </p>
@@ -793,7 +793,7 @@ export const InstructorLobbyPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="py-6 text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} Edtech CRM Platform. All rights reserved.
+        © {new Date().getFullYear()} VStudyOnline Platform. All rights reserved.
       </footer>
     </div>
   );

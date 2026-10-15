@@ -177,15 +177,6 @@ export const StudentDashboard: React.FC = () => {
     }
   };
 
-  // Profile Presets for quick avatar selection
-  const AVATAR_PRESETS = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
-    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=256&h=256&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&h=256&q=80',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&h=256&q=80',
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&h=256&q=80',
-  ];
-
   // Profile Form Edit State
   const [profileFormData, setProfileFormData] = useState({
     firstName: '',
@@ -2568,36 +2559,6 @@ export const StudentDashboard: React.FC = () => {
                               ? 'Profile fully verified for certificates & passport'
                               : 'Add headline, location & social links to reach 100%'}
                           </p>
-                        </div>
-                      </div>
-
-                      {/* Avatar Quick Presets */}
-                      <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/70 space-y-2">
-                        <span className="text-[11px] font-bold text-slate-500">Or choose an avatar style:</span>
-                        <div className="flex flex-wrap items-center gap-3">
-                          {AVATAR_PRESETS.map((presetUrl, pIdx) => {
-                            const isSelected = (profileFormData.profilePhoto || profilePhoto) === presetUrl;
-                            return (
-                              <button
-                                key={pIdx}
-                                type="button"
-                                onClick={() => {
-                                  setProfileFormData((prev) => ({ ...prev, profilePhoto: presetUrl }));
-                                  success('Avatar preset selected!');
-                                }}
-                                className={`relative w-10 h-10 rounded-xl overflow-hidden transition-all cursor-pointer border-2 ${
-                                  isSelected ? 'border-[#FA5A36] scale-110 shadow-md ring-2 ring-[#FA5A36]/30' : 'border-slate-200 hover:border-slate-400'
-                                }`}
-                              >
-                                <img src={presetUrl} alt={`Preset ${pIdx + 1}`} className="w-full h-full object-cover" />
-                                {isSelected && (
-                                  <div className="absolute inset-0 bg-[#FA5A36]/30 flex items-center justify-center">
-                                    <Check className="w-3.5 h-3.5 text-white" />
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
                         </div>
                       </div>
 

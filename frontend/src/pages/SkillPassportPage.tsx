@@ -222,7 +222,7 @@ export const SkillPassportPage: React.FC = () => {
                     <Award className="w-5 h-5" />
                   </div>
                   <span className="text-[10px] font-semibold tracking-widest uppercase text-[#FFCCC2] block">
-                    EDUTECH LMS
+                    VSTUDYONLINE
                   </span>
                   <span className="text-[11px] font-semibold text-slate-300">
                     Official Recruiter Passport
@@ -386,7 +386,7 @@ export const SkillPassportPage: React.FC = () => {
               <div className="flex items-center gap-3 text-center sm:text-left">
                 <ShieldCheck className="w-5 h-5 text-[#FA5A36] shrink-0" />
                 <span>
-                  This public Skill Passport is cryptographically tied to student identity <strong className="text-slate-900">{passport.studentId}</strong> on the EduTech platform.
+                  This public Skill Passport is cryptographically tied to student identity <strong className="text-slate-900">{passport.studentId}</strong> on the VStudyOnline platform.
                 </span>
               </div>
               <button

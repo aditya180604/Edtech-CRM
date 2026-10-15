@@ -17,8 +17,7 @@ function getTransporter() {
   const pass = process.env.SMTP_APP_PASSWORD;
 
   if (!user || !pass) {
-    console.warn('[EmailService] SMTP credentials not set; email sending will be simulated in console.');
-    return null;
+    throw new Error('SMTP credentials are required. Configure SMTP_USER and SMTP_APP_PASSWORD.');
   }
 
   transporterInstance = nodemailer.createTransport({
@@ -29,10 +28,6 @@ function getTransporter() {
       user,
       pass,
     },
-    // Modern TLS configuration to prevent cert rejection in cloud containers
-    tls: {
-      rejectUnauthorized: false,
-    },
   });
 
   return transporterInstance;
@@ -40,48 +35,8 @@ function getTransporter() {
 
 export async function verifyEmailConnection() {
   const transporter = getTransporter();
-  if (!transporter) return false;
   await transporter.verify();
   return true;
-}
-
-async function sendViaResend({ to, subject, html, text, attachments }) {
-  const apiKey = (process.env.RESEND_API_KEY || '').trim();
-  if (!apiKey) return null;
-
-  const rawFrom = process.env.RESEND_FROM || 'EduTechCRM <onboarding@resend.dev>';
-  // Resend API expects: { from, to: [to], subject, html, text, attachments: [{ filename, content }] }
-  const payload = {
-    from: rawFrom,
-    to: Array.isArray(to) ? to : [to],
-    subject,
-    html: html || undefined,
-    text: text || (html ? html.replace(/<[^>]+>/g, ' ') : undefined),
-  };
-
-  if (Array.isArray(attachments) && attachments.length > 0) {
-    payload.attachments = attachments.map((att) => ({
-      filename: att.filename,
-      content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : att.content,
-    }));
-  }
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    const errorMsg = data?.message || response.statusText || 'Resend API error';
-    throw new Error(`[Resend] ${errorMsg}`);
-  }
-
-  return { messageId: data.id, provider: 'resend' };
 }
 
 export async function sendEmail({ to, subject, html, text, attachments }) {
@@ -89,27 +44,8 @@ export async function sendEmail({ to, subject, html, text, attachments }) {
     throw new Error('Recipient, subject, and email content are required.');
   }
 
-  // 1. Try Resend if RESEND_API_KEY is configured
-  if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
-    try {
-      const resendResult = await sendViaResend({ to, subject, html, text, attachments });
-      if (resendResult) {
-        console.log(`[EmailService] Delivered email to ${to} via Resend (ID: ${resendResult.messageId})`);
-        return resendResult;
-      }
-    } catch (resendErr) {
-      console.warn(`[EmailService] Resend failed (${resendErr.message}). Falling back to SMTP...`);
-    }
-  }
-
-  // 2. Fallback to SMTP (e.g. Gmail)
   const transporter = getTransporter();
-  if (!transporter) {
-    console.warn(`[EmailService] Simulated send to ${to}: ${subject}`);
-    return { messageId: `mock_${Date.now()}`, provider: 'simulated' };
-  }
-
-  const fromName = process.env.EMAIL_FROM_NAME || 'EduTechCRM';
+  const fromName = process.env.EMAIL_FROM_NAME || 'VStudyOnline';
   const fromAddress = process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER;
 
   const mailOptions = {
@@ -139,7 +75,7 @@ export async function sendCoursePurchaseEmail({
   studentEmail,
   studentName,
   courseTitle,
-  instructorName = 'EduTechCRM Faculty',
+  instructorName = 'VStudyOnline Faculty',
   receiptNumber,
   providerPaymentId,
   paymentMethod = 'Cashfree Gateway',
@@ -282,11 +218,11 @@ export async function sendCoursePurchaseEmail({
       <a href="${targetUrl}" class="btn">Access Your Course Now &rarr;</a>
 
       <p style="font-size: 12.5px; color: #64748b; line-height: 1.5; margin-top: 24px; text-align: center;">
-        Need assistance with your course or invoice? Reach our support team at <a href="mailto:support@edutechcrm.com" style="color: #FA5A36; text-decoration: none;">support@edutechcrm.com</a>.
+        Need assistance with your course or invoice? Reach our support team at <a href="mailto:support@vstudyonline.com" style="color: #FA5A36; text-decoration: none;">support@vstudyonline.com</a>.
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Global Learning Marketplace &bull; Automated Payment Notification<br>
+      VStudyOnline Global Learning Marketplace &bull; Automated Payment Notification<br>
       This is an official transactional notification sent to ${studentEmail}.
     </div>
   </div>
@@ -305,7 +241,7 @@ export async function sendCoursePurchaseEmail({
 
   return sendEmail({
     to: studentEmail,
-    subject: `Purchase Confirmed: ${courseTitle} (Receipt #${receiptNumber || orderId}) — EduTechCRM`,
+    subject: `Purchase Confirmed: ${courseTitle} (Receipt #${receiptNumber || orderId}) — VStudyOnline`,
     html,
     attachments,
   });
@@ -373,7 +309,7 @@ export async function sendConsultationStudentConfirmationEmail({
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Mentorship Studio &bull; Live Video Consultation
+      VStudyOnline Mentorship Studio &bull; Live Video Consultation
     </div>
   </div>
 </body>
@@ -382,7 +318,7 @@ export async function sendConsultationStudentConfirmationEmail({
 
   return sendEmail({
     to: studentEmail,
-    subject: `Your 1-on-1 Consultation Is Confirmed — EduTechCRM (${instructorName})`,
+    subject: `Your 1-on-1 Consultation Is Confirmed — VStudyOnline (${instructorName})`,
     html,
   });
 }
@@ -451,7 +387,7 @@ export async function sendConsultationInstructorAlertEmail({
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Mentorship Studio &bull; Instructor Notification
+      VStudyOnline Mentorship Studio &bull; Instructor Notification
     </div>
   </div>
 </body>
@@ -460,7 +396,7 @@ export async function sendConsultationInstructorAlertEmail({
 
   return sendEmail({
     to: instructorEmail,
-    subject: `New 1-on-1 Consultation Booked — EduTechCRM (${studentName})`,
+    subject: `New 1-on-1 Consultation Booked — VStudyOnline (${studentName})`,
     html,
   });
 }
@@ -518,7 +454,7 @@ export async function sendInstructorApplicationApprovedEmail({
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Faculty Verification &bull; Automated Decision Notification
+      VStudyOnline Faculty Verification &bull; Automated Decision Notification
     </div>
   </div>
 </body>
@@ -527,7 +463,7 @@ export async function sendInstructorApplicationApprovedEmail({
 
   return sendEmail({
     to,
-    subject: `Congratulations! Your Instructor Application Is Approved — EduTechCRM`,
+    subject: `Congratulations! Your Instructor Application Is Approved — VStudyOnline`,
     html,
   });
 }
@@ -569,7 +505,7 @@ export async function sendInstructorApplicationRejectedEmail({
     <div class="content">
       <p style="font-size: 15px; margin-top: 0;">Dear <strong>${instructorName || 'Applicant'}</strong>,</p>
       <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-        Thank you for your interest in teaching with EduTechCRM. Our verification team has reviewed your application and verification documents.
+        Thank you for your interest in teaching with VStudyOnline. Our verification team has reviewed your application and verification documents.
       </p>
 
       <div class="reason-box">
@@ -588,7 +524,7 @@ export async function sendInstructorApplicationRejectedEmail({
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Faculty Verification &bull; Official Decision Notice
+      VStudyOnline Faculty Verification &bull; Official Decision Notice
     </div>
   </div>
 </body>
@@ -597,7 +533,7 @@ export async function sendInstructorApplicationRejectedEmail({
 
   return sendEmail({
     to,
-    subject: `Update on Your Instructor Application — EduTechCRM`,
+    subject: `Update on Your Instructor Application — VStudyOnline`,
     html,
   });
 }
@@ -654,7 +590,7 @@ export async function sendInstructorChangesRequestedEmail({
       </p>
     </div>
     <div class="footer">
-      EduTechCRM Faculty Verification &bull; Revision Notice
+      VStudyOnline Faculty Verification &bull; Revision Notice
     </div>
   </div>
 </body>
@@ -663,7 +599,7 @@ export async function sendInstructorChangesRequestedEmail({
 
   return sendEmail({
     to,
-    subject: `Action Required: Revisions Requested for Your Instructor Application — EduTechCRM`,
+    subject: `Action Required: Revisions Requested for Your Instructor Application — VStudyOnline`,
     html,
   });
 }

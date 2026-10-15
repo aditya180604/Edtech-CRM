@@ -24,7 +24,7 @@ const TERMS_SECTIONS = [
     num: '01',
     title: 'Acceptance & Eligibility',
     icon: Scale,
-    desc: 'By accessing EduTech, creating an account, or purchasing curriculum access, you confirm that you agree to these Terms of Service.',
+    desc: 'By accessing VStudyOnline, creating an account, or purchasing curriculum access, you confirm that you agree to these Terms of Service.',
     points: [
       {
         heading: 'Age Requirement',
@@ -49,7 +49,7 @@ const TERMS_SECTIONS = [
       },
       {
         heading: 'Concurrent Stream Limits',
-        detail: 'EduTech employs telemetry safeguards to detect simultaneous playback across geographically distant IP addresses and may suspend accounts suspected of credential sharing.'
+        detail: 'VStudyOnline employs telemetry safeguards to detect simultaneous playback across geographically distant IP addresses and may suspend accounts suspected of credential sharing.'
       }
     ]
   },
@@ -58,8 +58,8 @@ const TERMS_SECTIONS = [
     num: '03',
     title: 'Course Content & Intellectual Property',
     icon: BookOpen,
-    desc: 'All course videos, architectural blueprints, quizzes, interactive sandboxes, and articles remain the intellectual property of EduTech and its verified instructors.',
-    highlight: 'Upon purchasing a course or learning path, EduTech grants you a personal, non-exclusive, non-transferable, revocable license for personal, non-commercial educational purposes.',
+    desc: 'All course videos, architectural blueprints, quizzes, interactive sandboxes, and articles remain the intellectual property of VStudyOnline and its verified instructors.',
+    highlight: 'Upon purchasing a course or learning path, VStudyOnline grants you a personal, non-exclusive, non-transferable, revocable license for personal, non-commercial educational purposes.',
     points: [
       {
         heading: 'Forbidden Redistribution',
@@ -111,15 +111,15 @@ const TERMS_SECTIONS = [
     num: '06',
     title: 'Disclaimers & Limitation of Liability',
     icon: AlertCircle,
-    desc: 'EduTech educational content is provided on an "as is" and "as available" basis without express or implied warranties.',
+    desc: 'VStudyOnline educational content is provided on an "as is" and "as available" basis without express or implied warranties.',
     points: [
       {
         heading: 'No Employment Guarantees',
-        detail: 'While our curricula are designed to reflect real-world engineering standards, EduTech does not guarantee specific job offers, compensation levels, or promotions.'
+        detail: 'While our curricula are designed to reflect real-world engineering standards, VStudyOnline does not guarantee specific job offers, compensation levels, or promotions.'
       },
       {
         heading: 'Limitation of Liability',
-        detail: 'To the maximum extent permitted by applicable law, EduTech shall not be held liable for indirect, incidental, or consequential damages resulting from platform usage.'
+        detail: 'To the maximum extent permitted by applicable law, VStudyOnline shall not be held liable for indirect, incidental, or consequential damages resulting from platform usage.'
       }
     ]
   }
@@ -146,13 +146,13 @@ export const TermsOfServicePage: React.FC = () => {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold tracking-wide">
                 <Scale className="w-3.5 h-3.5" />
-                <span>EduTech Legal Agreement</span>
+                <span>VStudyOnline Legal Agreement</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Terms of Service
               </h1>
               <p className="text-sm sm:text-base text-slate-600 max-w-2xl font-normal leading-relaxed">
-                These terms govern your access to EduTech's platform, courses, live workshops, mentorship forums, and APIs. Please review them carefully.
+                These terms govern your access to VStudyOnline's platform, courses, live workshops, mentorship forums, and APIs. Please review them carefully.
               </p>
 
               <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-slate-500 font-medium">
@@ -289,7 +289,7 @@ export const TermsOfServicePage: React.FC = () => {
               <div className="p-5 sm:p-6 rounded-2xl bg-[#FFF5F2]/50 border border-[#FFCCC2] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    EduTech Legal Counsel Desk
+                    VStudyOnline Legal Counsel Desk
                   </p>
                   <p className="text-base sm:text-lg font-black text-slate-900">
                     toppix851@gmail.com

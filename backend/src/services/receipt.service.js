@@ -32,9 +32,9 @@ export function generateReceiptPdfBuffer(receiptData) {
         margin: 40,
         info: {
           Title: `Receipt - ${receiptData.receiptNumber || receiptData.orderId}`,
-          Author: 'EduTechCRM',
+          Author: 'VStudyOnline',
           Subject: 'Course Purchase Confirmation & Official Receipt',
-          Keywords: 'EduTechCRM, Receipt, Course, Enrollment, Payment',
+          Keywords: 'VStudyOnline, Receipt, Course, Enrollment, Payment',
         },
       });
 
@@ -63,7 +63,7 @@ export function generateReceiptPdfBuffer(receiptData) {
 
       // ---- 2. Header Section ----
       let y = 35;
-      doc.fontSize(22).font('Helvetica-Bold').fillColor('#0F172A').text('EduTechCRM', 40, y);
+      doc.fontSize(22).font('Helvetica-Bold').fillColor('#0F172A').text('VStudyOnline', 40, y);
       doc.fontSize(9).font('Helvetica').fillColor('#64748B').text('Global Learning Marketplace & Education Platform', 40, y + 25);
 
       // Status Badge (Right aligned)
@@ -230,13 +230,13 @@ export function generateReceiptPdfBuffer(receiptData) {
       doc.moveTo(40, footerY).lineTo(doc.page.width - 40, footerY).strokeColor('#E2E8F0').lineWidth(0.5).stroke();
 
       doc.font('Helvetica').fontSize(8).fillColor('#94A3B8').text(
-        'This is a computer-generated official receipt issued by EduTechCRM Global Learning Marketplace. No physical signature is required.',
+        'This is a computer-generated official receipt issued by VStudyOnline Global Learning Marketplace. No physical signature is required.',
         40,
         footerY + 10,
         { align: 'center', width: doc.page.width - 80 }
       );
       doc.font('Helvetica').fontSize(8).fillColor('#94A3B8').text(
-        `Generated on ${new Date().toUTCString()} • Support: support@edutechcrm.com • Thank you for learning with us!`,
+        `Generated on ${new Date().toUTCString()} • Support: support@vstudyonline.com • Thank you for learning with us!`,
         40,
         footerY + 22,
         { align: 'center', width: doc.page.width - 80 }

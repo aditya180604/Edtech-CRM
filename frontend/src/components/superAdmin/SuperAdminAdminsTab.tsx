@@ -435,7 +435,7 @@ export const SuperAdminAdminsTab: React.FC = () => {
                 <input
                   type="email"
                   required
-                  placeholder="admin@edutech.com"
+                  placeholder="admin@vstudyonline.com"
                   value={createForm.email}
                   onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-[#FA5A36]"

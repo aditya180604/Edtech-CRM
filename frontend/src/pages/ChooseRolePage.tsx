@@ -56,7 +56,7 @@ export const ChooseRolePage: React.FC = () => {
           </div>
           <h2 className="text-2xl font-semibold text-slate-900">Choose Your Role</h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 text-center">
-            Select how you want to use EduTech
+            Select how you want to use VStudyOnline
           </p>
         </div>
 

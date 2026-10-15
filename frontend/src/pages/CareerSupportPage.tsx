@@ -75,8 +75,8 @@ const STEPS = [
 
 const FAQS = [
   {
-    q: 'Who is eligible for EduTech career support?',
-    a: 'Any student enrolled in an eligible EduTech Pro or Complete Learning Path who finishes their capstone and maintains passing grades in code reviews.'
+    q: 'Who is eligible for VStudyOnline career support?',
+    a: 'Any student enrolled in an eligible VStudyOnline Pro or Complete Learning Path who finishes their capstone and maintains passing grades in code reviews.'
   },
   {
     q: 'How many mock interviews are included?',
@@ -149,7 +149,7 @@ export const CareerSupportPage: React.FC = () => {
               <div className="lg:col-span-7 space-y-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-semibold">
                   <Briefcase className="w-3.5 h-3.5" />
-                  <span>EduTech Career Accelerator</span>
+                  <span>VStudyOnline Career Accelerator</span>
                 </div>
                 <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                   From First Line of Code to <span className="text-[#FA5A36]">Signed Tech Offer</span>

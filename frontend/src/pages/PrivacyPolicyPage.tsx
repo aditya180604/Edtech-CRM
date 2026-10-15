@@ -37,7 +37,7 @@ const SECTIONS = [
       },
       {
         heading: 'Secure Billing Information',
-        detail: 'Payment tokens and transaction IDs processed strictly via PCI-DSS compliant payment gateways (Stripe/PayPal). EduTech never stores raw credit card numbers or banking secrets.'
+        detail: 'Payment tokens and transaction IDs processed strictly via PCI-DSS compliant payment gateways (Stripe/PayPal). VStudyOnline never stores raw credit card numbers or banking secrets.'
       },
       {
         heading: 'Technical Telemetry',
@@ -93,7 +93,7 @@ const SECTIONS = [
     num: '04',
     title: 'No Data Sale & Minimal Third-Party Disclosures',
     icon: Shield,
-    desc: 'EduTech does not sell, rent, or monetize your personal data to ad networks or third-party data brokers.',
+    desc: 'VStudyOnline does not sell, rent, or monetize your personal data to ad networks or third-party data brokers.',
     highlight: 'We only transmit minimal operational data to strictly audited service providers necessary to operate the platform (e.g., AWS for hosting, Stripe for payments, and transactional email infrastructure).',
     points: [
       {
@@ -167,7 +167,7 @@ export const PrivacyPolicyPage: React.FC = () => {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold tracking-wide">
                 <Shield className="w-3.5 h-3.5" />
-                <span>EduTech Governance & Trust</span>
+                <span>VStudyOnline Governance & Trust</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Privacy Policy

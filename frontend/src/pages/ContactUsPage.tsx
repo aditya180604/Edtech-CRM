@@ -39,7 +39,7 @@ const QUICK_FAQS = [
   },
   {
     q: 'Can I switch my course cohort or batch?',
-    a: 'Yes, reach out via this contact form or email support@edutech.com within the first 14 days of cohort commencement to switch cohorts free of charge.'
+    a: 'Yes, reach out via this contact form or email support@vstudyonline.com within the first 14 days of cohort commencement to switch cohorts free of charge.'
   }
 ];
 
@@ -58,7 +58,7 @@ export const ContactUsPage: React.FC = () => {
   });
 
   const handleCopyEmail = () => {
-    navigator.clipboard.writeText('support@edutech.com');
+    navigator.clipboard.writeText('support@vstudyonline.com');
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 2000);
   };
@@ -90,7 +90,7 @@ export const ContactUsPage: React.FC = () => {
           <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold tracking-wide">
               <Headphones className="w-3.5 h-3.5" />
-              <span>EduTech Help & Support</span>
+              <span>VStudyOnline Help & Support</span>
             </div>
             <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
               How Can We Assist You Today?
@@ -145,7 +145,7 @@ export const ContactUsPage: React.FC = () => {
                   </div>
 
                   <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">support@edutech.com</span>
+                    <span className="text-xs font-semibold text-slate-700">support@vstudyonline.com</span>
                     <button
                       type="button"
                       onClick={handleCopyEmail}

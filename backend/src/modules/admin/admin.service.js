@@ -226,7 +226,7 @@ export class AdminService {
               email: log.actorId.email,
               role: log.actorId.role,
             }
-          : { name: 'System', email: 'system@edutech.internal', role: 'SYSTEM' },
+          : { name: 'System', email: 'system@vstudyonline.internal', role: 'SYSTEM' },
       })),
       upcomingConsultations: upcomingConsultationsList.map((c) => ({
         id: c._id.toString(),
@@ -422,7 +422,7 @@ export class AdminService {
         email: ins.email,
         title: prof?.headline || prof?.bio?.slice(0, 40) || 'Instructor',
         expertise: prof?.expertise || prof?.skills || ['Engineering'],
-        organization: prof?.institution || prof?.currentCompany || 'EduTech Community',
+        organization: prof?.institution || prof?.currentCompany || 'VStudyOnline Community',
         registeredOn: ins.createdAt,
         isVerified: prof?.isVerified || false,
         verificationStatus: prof?.verificationStatus || (prof?.isVerified ? 'APPROVED' : 'PENDING'),

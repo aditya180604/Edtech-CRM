@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-interface EduLogoProps {
+export interface EduLogoProps {
   className?: string;
   size?: 'sm' | 'md' | 'lg';
   to?: string;
@@ -9,40 +9,45 @@ interface EduLogoProps {
   variant?: 'light' | 'dark';
 }
 
-export const EduLogo: React.FC<EduLogoProps> = ({ className = '', size = 'md', to = '/', showText = true, variant = 'light' }) => {
+export type BrandLogoProps = EduLogoProps;
+
+export const EduLogo: React.FC<EduLogoProps> = ({
+  className = '',
+  size = 'md',
+  to = '/',
+  showText = true,
+  variant = 'light',
+}) => {
+  // Sizing optimized: compact on mobile/smaller screens, full size on sm/md/lg
   const iconSizes = {
-    sm: 'w-7 h-7 text-xs',
-    md: 'w-9 h-9 text-sm',
-    lg: 'w-11 h-11 text-base',
+    sm: 'w-5 h-5 sm:w-6 sm:h-6',
+    md: 'w-6 h-6 sm:w-8 sm:h-8 md:w-9 md:h-9',
+    lg: 'w-7 h-7 sm:w-10 sm:h-10 md:w-11 md:h-11',
   };
 
   const textSizes = {
-    sm: 'text-lg',
-    md: 'text-xl',
-    lg: 'text-2xl',
+    sm: 'text-[11px] sm:text-sm md:text-base',
+    md: 'text-xs sm:text-lg md:text-xl',
+    lg: 'text-sm sm:text-xl md:text-2xl',
   };
 
   const content = (
-    <div className={`flex items-center gap-2.5 group shrink-0 ${className}`}>
-      {/* Coral Sphere Emblem from Reference Image */}
-      <div
-        className={`${iconSizes[size]} rounded-xl bg-gradient-to-tr from-[#FA5A36] via-[#FF6E4A] to-[#FF8A65] flex items-center justify-center text-white shadow-sm shadow-[#FA5A36]/30 transition-transform group-hover:scale-105`}
-      >
-        <svg
-          className="w-5 h-5 fill-none stroke-white"
-          viewBox="0 0 24 24"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z" />
-          <path d="M12 6a6 6 0 1 0 6 6" />
-          <circle cx="12" cy="12" r="2" fill="white" />
-        </svg>
+    <div className={`flex items-center gap-1.5 sm:gap-2.5 group shrink-0 ${className}`}>
+      {/* VStudyOnline Official Brand Logo Emblem */}
+      <div className={`${iconSizes[size]} flex items-center justify-center shrink-0`}>
+        <img
+          src="/Images/logo.png"
+          alt="VStudyOnline Logo"
+          className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
+        />
       </div>
       {showText && (
-        <span className={`${textSizes[size]} font-semibold tracking-tight ${variant === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-          Edu<span className="text-[#FA5A36]">Tech</span>
+        <span
+          className={`${textSizes[size]} font-extrabold tracking-tight select-none leading-none`}
+        >
+          {/* Multi-color styling: V in distinct Royal Blue (#2563EB), Study in Dark Slate/White, Online in Coral (#FA5A36) */}
+          <span className={variant === 'dark' ? 'text-white' : 'text-[#0F172A]'}>VStudy</span>
+          <span className="text-[#FA5A36]">Online</span>
         </span>
       )}
     </div>
@@ -58,3 +63,6 @@ export const EduLogo: React.FC<EduLogoProps> = ({ className = '', size = 'md', t
 
   return content;
 };
+
+export const BrandLogo = EduLogo;
+export default EduLogo;

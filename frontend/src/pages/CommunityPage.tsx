@@ -180,7 +180,7 @@ export const CommunityPage: React.FC = () => {
             <div className="text-center max-w-3xl mx-auto space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-semibold tracking-wide">
                 <Users className="w-3.5 h-3.5" />
-                <span>EduTech Global Community</span>
+                <span>VStudyOnline Global Community</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Learn, Build, and Grow <span className="text-[#FA5A36]">Together</span>
@@ -422,7 +422,7 @@ export const CommunityPage: React.FC = () => {
                   Get Top Discussions & Code Challenges Delivered Weekly
                 </h3>
                 <p className="text-sm text-slate-300 font-normal leading-relaxed">
-                  Curated architecture breakdowns, interview tips, and cohort highlights from the EduTech engineering network.
+                  Curated architecture breakdowns, interview tips, and cohort highlights from the VStudyOnline engineering network.
                 </p>
               </div>
 

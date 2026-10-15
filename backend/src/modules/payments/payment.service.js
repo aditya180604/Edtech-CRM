@@ -371,7 +371,7 @@ export class PaymentService {
     // Resolve Courses & Instructors
     const populatedItems = [];
     for (const item of itemsToProvision) {
-      let instructorName = 'EduTechCRM Faculty';
+      let instructorName = 'VStudyOnline Faculty';
       let courseTitle = item.title || 'Course Enrollment';
       const courseId = item.courseId || (item.productType === PRODUCT_TYPES.COURSE ? item.productId : null);
       let instructorId = item.instructorId;
@@ -446,7 +446,7 @@ export class PaymentService {
     if (!order.confirmationEmailSent && studentEmail) {
       try {
         const courseTitles = populatedItems.map((i) => i.title).join(', ');
-        const leadInstructor = populatedItems[0]?.instructorName || 'EduTechCRM Faculty';
+        const leadInstructor = populatedItems[0]?.instructorName || 'VStudyOnline Faculty';
 
         const { sendCoursePurchaseEmail } = await import('../../services/email.service.js');
         await sendCoursePurchaseEmail({
@@ -765,7 +765,7 @@ export class PaymentService {
       const itemsToInspect = orderItems.length > 0 ? orderItems : order.items || [];
 
       for (const item of itemsToInspect) {
-        let instructorName = 'EduTechCRM Faculty';
+        let instructorName = 'VStudyOnline Faculty';
         let courseTitle = item.title || 'Course Enrollment';
         const courseId = item.courseId || (item.productType === PRODUCT_TYPES.COURSE ? item.productId : null);
         if (courseId) {

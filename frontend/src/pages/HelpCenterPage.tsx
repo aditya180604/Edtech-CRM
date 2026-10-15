@@ -23,7 +23,7 @@ const FAQS: FAQ[] = [
   },
   {
     question: 'Can I purchase single topics without buying the full course?',
-    answer: 'Yes! EduTech operates on an atomic learning model. You can purchase specific modules or topics you need. If you later decide to upgrade to the full course, 100% of the money you spent on those topics is automatically credited toward the course price.',
+    answer: 'Yes! VStudyOnline operates on an atomic learning model. You can purchase specific modules or topics you need. If you later decide to upgrade to the full course, 100% of the money you spent on those topics is automatically credited toward the course price.',
     category: 'payments',
   },
   {
@@ -32,7 +32,7 @@ const FAQS: FAQ[] = [
     category: 'courses',
   },
   {
-    question: 'What payment methods are supported on EduTech?',
+    question: 'What payment methods are supported on VStudyOnline?',
     answer: 'We support all major payment options via Razorpay and Stripe including UPI (Google Pay, PhonePe, Paytm), Credit & Debit cards (Visa, Mastercard, RuPay), Net Banking, and international payment cards with instant invoice generation.',
     category: 'payments',
   },
@@ -70,7 +70,7 @@ export const HelpCenterPage: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-black uppercase tracking-wider">
             <HelpCircle className="w-3.5 h-3.5" />
-            <span>EduTech Help Center</span>
+            <span>VStudyOnline Help Center</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             How can we help you learn?

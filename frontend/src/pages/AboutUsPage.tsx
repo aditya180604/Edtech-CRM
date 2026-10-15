@@ -81,13 +81,13 @@ export const AboutUsPage: React.FC = () => {
             <div className="max-w-3xl mx-auto text-center space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-semibold">
                 <Compass className="w-3.5 h-3.5" />
-                <span>About EduTech</span>
+                <span>About VStudyOnline</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Democratizing <span className="text-[#FA5A36]">Real-World Engineering</span> Excellence
               </h1>
               <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-                EduTech was founded on a simple conviction: conventional education is too slow for modern engineering, while generic bootcamps skip foundational craft. We bridge that gap with production-grade instruction.
+                VStudyOnline was founded on a simple conviction: conventional education is too slow for modern engineering, while generic bootcamps skip foundational craft. We bridge that gap with production-grade instruction.
               </p>
             </div>
 
@@ -186,7 +186,7 @@ export const AboutUsPage: React.FC = () => {
                   to="/choose-role"
                   className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-semibold text-sm text-white border border-white/20 transition-colors"
                 >
-                  Teach on EduTech
+                  Teach on VStudyOnline
                 </Link>
               </div>
             </div>

@@ -42,7 +42,7 @@ export class AiService {
     }
 
     const systemPrompt = `
-You are the "EduTech AI Copilot", an elite, patient, and encouraging senior software engineer and AI tutor inside the EduTech learning platform.
+You are the "VStudyOnline AI Copilot", an elite, patient, and encouraging senior software engineer and AI tutor inside the VStudyOnline learning platform.
 
 ### CURRENT CLASSROOM CONTEXT:
 - Course: "${courseTitle}"

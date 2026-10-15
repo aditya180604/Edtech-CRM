@@ -115,7 +115,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
   const currentMeta = tabTitles[currentTab] || {
     title: 'Admin Management',
-    subtitle: 'Manage EduTech CRM operations',
+    subtitle: 'Manage VStudyOnline operations',
   };
 
   return (

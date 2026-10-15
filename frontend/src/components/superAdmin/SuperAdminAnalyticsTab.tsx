@@ -812,7 +812,7 @@ export const SuperAdminAnalyticsTab: React.FC<SuperAdminAnalyticsTabProps> = ({
                 15 Workshops
               </p>
               <span className="text-[10px] text-indigo-600 font-bold block">
-                EduTech Studio WebRTC
+                VStudyOnline Studio WebRTC
               </span>
             </div>
           </div>
