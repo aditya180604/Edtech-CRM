@@ -92,6 +92,29 @@ export const InstructorDashboard: React.FC = () => {
     'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'webinars' | 'consultations' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
   >('dashboard');
 
+  // Top-Right Profile Dropdown State
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = React.useRef<HTMLDivElement>(null);
+  const mobileProfileDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const isInsideDesktop = profileDropdownRef.current && profileDropdownRef.current.contains(target);
+      const isInsideMobile = mobileProfileDropdownRef.current && mobileProfileDropdownRef.current.contains(target);
+      if (!isInsideDesktop && !isInsideMobile) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileDropdownOpen]);
+
   // Dashboard Telemetry Data
   const [dashboardData, setDashboardData] = useState<InstructorDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1656,8 +1679,86 @@ export const InstructorDashboard: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
-              {instructorName[0] || 'I'}
+            <div className="relative" ref={mobileProfileDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#FA5A36]/30 cursor-pointer"
+                title="Account menu"
+              >
+                {instructorName[0] || 'I'}
+              </button>
+              {profileDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* User Details */}
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                      {instructorName[0] || 'I'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 truncate leading-tight">{instructorName}</p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.email || 'instructor@platform.edu'}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-orange-50 text-[#FA5A36] text-[10px] font-bold rounded-full border border-orange-100">
+                        Instructor Studio
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Menu Items */}
+                  <div className="p-1.5 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('profile');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-slate-400" />
+                      <span>Profile & Verification</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('courses');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <BookOpen className="w-4 h-4 text-slate-400" />
+                      <span>My Courses</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('analytics');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <BarChart3 className="w-4 h-4 text-slate-400" />
+                      <span>Earnings & Analytics</span>
+                    </button>
+                  </div>
+
+                  {/* Sign Out Action */}
+                  <div className="p-1.5 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1676,14 +1777,99 @@ export const InstructorDashboard: React.FC = () => {
           <div className="flex items-center gap-3 self-end sm:self-auto">
             <NotificationBell />
 
-            <div className="flex items-center gap-2.5 pl-3 border-l border-slate-100">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
-                {instructorName[0] || 'I'}
-              </div>
-              <div className="text-left hidden sm:block">
-                <p className="text-xs font-bold text-slate-900 leading-tight">{instructorName}</p>
-                <p className="text-[10px] text-slate-500 font-medium">Instructor</p>
-              </div>
+            <div className="relative" ref={profileDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setProfileDropdownOpen((prev) => !prev)}
+                className="flex items-center gap-2.5 pl-3 border-l border-slate-100 hover:bg-slate-50/80 p-1.5 rounded-2xl transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-[#FA5A36]/20"
+                aria-expanded={profileDropdownOpen}
+                aria-label="Instructor profile menu"
+              >
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                  {instructorName[0] || 'I'}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <p className="text-xs font-bold text-slate-900 leading-tight">{instructorName}</p>
+                  <p className="text-[10px] text-slate-500 font-medium">Instructor</p>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 hidden sm:block ${
+                    profileDropdownOpen ? 'rotate-180 text-[#FA5A36]' : ''
+                  }`}
+                />
+              </button>
+
+              {profileDropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* User Details */}
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                      {instructorName[0] || 'I'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 truncate leading-tight">{instructorName}</p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{user?.email || 'instructor@platform.edu'}</p>
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-orange-50 text-[#FA5A36] text-[10px] font-bold rounded-full border border-orange-100">
+                        Instructor Studio
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick Navigation Items */}
+                  <div className="p-1.5 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('profile');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-slate-400" />
+                      <span>Profile & Verification</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('courses');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <BookOpen className="w-4 h-4 text-slate-400" />
+                      <span>My Courses</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNav('analytics');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <BarChart3 className="w-4 h-4 text-slate-400" />
+                      <span>Earnings & Analytics</span>
+                    </button>
+                  </div>
+
+                  {/* Sign Out Action */}
+                  <div className="p-1.5 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
