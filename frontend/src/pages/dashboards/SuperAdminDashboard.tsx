@@ -2206,7 +2206,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                 <div className="mt-1">
                                   {inst.registrationFeePaid ? (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                      ✓ Fee Paid (₹{inst.registrationFeeAmount || 1000})
+                                      ✓ Fee Paid{inst.registrationFeeAmount ? ` (₹${Number(inst.registrationFeeAmount).toLocaleString('en-IN')})` : ''}
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
@@ -4295,7 +4295,9 @@ export const SuperAdminDashboard: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Paid ₹{selectedVerification.registrationFeeAmount || 1000} (Cashfree)
+                        {selectedVerification.registrationFeeAmount
+                          ? `Paid ₹${Number(selectedVerification.registrationFeeAmount).toLocaleString('en-IN')} (Cashfree)`
+                          : 'Paid (Cashfree Verified)'}
                       </span>
                     </div>
                   ) : (

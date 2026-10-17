@@ -735,7 +735,7 @@ export class SuperAdminService {
   static async getInstructorVerifications({ status, search, page = 1, limit = 50 } = {}) {
     // 1. Fetch all InstructorProfile documents
     const allProfiles = await InstructorProfile.find()
-      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt instructorId')
+      .populate('userId', 'firstName lastName email profilePhoto phone status role createdAt instructorId registrationFeePaid registrationFeeAmount registrationFeeOrderId registrationFeePaidAt')
       .populate('reviewedBy', 'firstName lastName email')
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
@@ -861,6 +861,8 @@ export class SuperAdminService {
           governmentId: p.governmentId || null,
           verificationDocuments: Array.isArray(p.verificationDocuments) ? p.verificationDocuments : [],
           registrationFeePaid: Boolean(p.registrationFeePaid || u.registrationFeePaid),
+          registrationFeeAmount: p.registrationFeeAmount || u.registrationFeeAmount || 0,
+          registrationFeeOrderId: p.registrationFeeOrderId || u.registrationFeeOrderId || null,
           readinessScore: p.readinessReport?.score ?? null,
           readinessReport: p.readinessReport || null,
           isCompleted: p.isCompleted !== false,
