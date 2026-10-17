@@ -156,7 +156,8 @@ export class CoursesService {
     }
 
     if (search && search.trim()) {
-      const re = new RegExp(search.trim(), 'i');
+      const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(sanitized, 'i');
       query.$or = [{ title: re }, { shortDescription: re }, { category: re }];
     }
 

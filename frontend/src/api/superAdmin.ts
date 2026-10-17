@@ -122,6 +122,8 @@ export interface SuperAdminRefund {
   refundId: string;
   orderId: string;
   user: string;
+  userEmail?: string;
+  userId?: string;
   amount: number;
   reason: string;
   status: 'APPROVED' | 'PENDING' | 'REJECTED';
@@ -365,6 +367,18 @@ export const superAdminApi = {
   // 5. Refunds Management
   async getRefunds(): Promise<{ success: boolean; data: SuperAdminRefund[] }> {
     const res = await apiClient.get('/super-admin/refunds');
+    return res.data;
+  },
+
+  async createRefund(payload: {
+    userId: string;
+    orderId?: string;
+    orderNumber?: string;
+    amount: number;
+    reason: string;
+    status?: 'APPROVED' | 'PENDING';
+  }): Promise<{ success: boolean; data: SuperAdminRefund; message?: string }> {
+    const res = await apiClient.post('/super-admin/refunds', payload);
     return res.data;
   },
 

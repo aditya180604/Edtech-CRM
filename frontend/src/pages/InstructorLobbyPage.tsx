@@ -226,8 +226,17 @@ export const InstructorLobbyPage: React.FC = () => {
     if (typeof readinessReport?.predictedScore === 'number') return readinessReport.predictedScore;
     if (typeof readinessReport?.score === 'number' && readinessReport.score > 0) return readinessReport.score;
     let pts = 0;
-    if (user?.profilePhoto || profileData?.profilePhoto) pts += 10;
-    if (user?.firstName || profileData?.fullName) pts += 10;
+    const hasPhoto = Boolean(user?.profilePhoto || profileData?.profilePhoto);
+    const hasName = Boolean(user?.firstName || profileData?.fullName);
+    const hasPhone = Boolean(user?.phone || profileData?.phone);
+    const hasCountry = Boolean(user?.country || profileData?.country);
+
+    if (hasName && hasPhoto) pts += 10;
+    else if (hasName) pts += 6;
+
+    if (hasPhone && hasCountry) pts += 10;
+    else if (hasPhone || hasCountry) pts += 5;
+
     if (profileData?.currentJobTitle || !profileData?.isEmployed) pts += 10;
     if (profileData?.expertise?.length >= 3) pts += 15;
     else if (profileData?.expertise?.length >= 1) pts += 8;
@@ -235,8 +244,9 @@ export const InstructorLobbyPage: React.FC = () => {
     else if (profileData?.bio?.length >= 20) pts += 8;
     if (profileData?.linkedinUrl && profileData?.githubUrl) pts += 10;
     else if (profileData?.linkedinUrl || profileData?.githubUrl) pts += 5;
-    if (profileData?.governmentId?.documentUrl) pts += 15;
-    if (profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV')) pts += 15;
+    if (profileData?.governmentId?.documentUrl || profileData?.governmentId?.fileName) pts += 12;
+    if (profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV')) pts += 8;
+    if (profileData?.verificationDocuments?.some((d: any) => ['EMPLOYMENT_PROOF', 'EXPERIENCE_LETTER', 'CERTIFICATION'].includes(d.documentType))) pts += 10;
     return Math.min(100, pts);
   })();
 
@@ -250,7 +260,13 @@ export const InstructorLobbyPage: React.FC = () => {
     }
     const missing: string[] = [];
     if (!profileData?.profilePhoto && !user?.profilePhoto) {
-      missing.push('Professional Headshot / Profile Photo');
+      missing.push('Profile Photo');
+    }
+    if (!profileData?.phone && !user?.phone) {
+      missing.push('Contact Phone Number');
+    }
+    if (!profileData?.country && !user?.country) {
+      missing.push('Country / Operational Region');
     }
     if (!profileData?.bio || profileData.bio.length < 50) {
       missing.push('Expanded Professional Bio (recommend 50+ characters)');
@@ -264,7 +280,7 @@ export const InstructorLobbyPage: React.FC = () => {
     if (!profileData?.githubUrl) {
       missing.push('GitHub Profile URL');
     }
-    if (!profileData?.governmentId?.documentUrl) {
+    if (!profileData?.governmentId?.documentUrl && !profileData?.governmentId?.fileName) {
       missing.push('Government-Issued ID Proof document');
     }
     if (!profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV')) {

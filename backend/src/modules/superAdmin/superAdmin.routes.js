@@ -41,6 +41,7 @@ router.get('/orders', SuperAdminController.getOrders);
 
 // 5. Refunds Management
 router.get('/refunds', SuperAdminController.getRefunds);
+router.post('/refunds', SuperAdminController.createRefund);
 router.post('/refunds/:id/process', SuperAdminController.processRefund);
 
 // 6. Payouts Management (Strict Settlement Lifecycle)

@@ -182,6 +182,8 @@ export const instructorApi = {
     workExperience: string;
     yearsOfExperience: number;
     profilePhoto?: string;
+    phone?: string;
+    country?: string;
     qualification?: string;
     linkedinUrl?: string;
     githubUrl?: string;

@@ -4635,7 +4635,7 @@ export const InstructorDashboard: React.FC = () => {
                   </button>
                 </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 text-xs">
               <div className="p-4 rounded-2xl bg-[#FFF5F2] text-purple-700">
                 <p className="text-2xl font-black">{webinarCounts.all ?? 0}</p>
                 <p className="font-semibold text-slate-600">Total Webinars</p>
@@ -4650,6 +4650,15 @@ export const InstructorDashboard: React.FC = () => {
                     webinarsList.reduce((acc, w) => acc + (w.registrations?.length || 0), 0)}
                 </p>
                 <p className="font-semibold text-slate-600">Total Registrations</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-teal-50 text-teal-700">
+                <p className="text-2xl font-black">
+                  ₹{(
+                    webinarCounts.totalWebinarEarnings ??
+                    webinarsList.reduce((acc, w) => acc + (w.totalEarned || 0), 0)
+                  ).toLocaleString('en-IN')}
+                </p>
+                <p className="font-semibold text-slate-600">Net Webinar Revenue</p>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 text-amber-700">
                 <p className="text-2xl font-black">{webinarCounts.averageRating ?? '0.0'}</p>
@@ -4694,6 +4703,7 @@ export const InstructorDashboard: React.FC = () => {
                     <th className="py-3 px-4">Webinar Title</th>
                     <th className="py-3 px-4">Date & Time</th>
                     <th className="py-3 px-4">Registrations</th>
+                    <th className="py-3 px-4">Ticket & Earnings</th>
                     <th className="py-3 px-4">Capacity</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Meeting Link</th>
@@ -4703,7 +4713,7 @@ export const InstructorDashboard: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {webinarsList.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                      <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                         No webinars found. Click "+ Create Webinar" to schedule a session.
                       </td>
                     </tr>
@@ -4736,6 +4746,26 @@ export const InstructorDashboard: React.FC = () => {
                           </td>
                           <td className="py-3.5 px-4 font-bold text-[#FA5A36]">
                             {Math.max(w.registrationsCount ?? 0, w.registrations?.length ?? 0, w.attendanceCount ?? 0, w.attendance?.length ?? 0)}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {(w.price || 0) > 0 ? (
+                              <div>
+                                <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 border border-amber-200 text-amber-800">
+                                  ₹{w.price.toLocaleString('en-IN')} Ticket
+                                </span>
+                                <div className="text-[11px] font-bold text-emerald-600 mt-0.5">
+                                  ₹{(
+                                    w.totalEarned ??
+                                    ((w.instructorEarnings || Math.round(w.price * 0.90)) *
+                                      Math.max(w.registrationsCount ?? 0, w.registrations?.length ?? 0))
+                                  ).toLocaleString('en-IN')} Net
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600">
+                                Free (₹0)
+                              </span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-slate-800">{w.capacity || 100}</td>
                           <td className="py-3.5 px-4">
@@ -5336,7 +5366,7 @@ export const InstructorDashboard: React.FC = () => {
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
-                              ★ {Number(c.rating ?? c.averageRating ?? 5.0).toFixed(1)}
+                              ★ {Number(c.rating ?? c.averageRating ?? 0.0).toFixed(1)}
                             </span>
                           </td>
                         </tr>

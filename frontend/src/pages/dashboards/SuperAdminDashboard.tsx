@@ -133,6 +133,17 @@ export const SuperAdminDashboard: React.FC = () => {
   const [coursesList, setCoursesList] = useState<SuperAdminCourse[]>([]);
   const [ordersList, setOrdersList] = useState<SuperAdminOrder[]>([]);
   const [refundsList, setRefundsList] = useState<SuperAdminRefund[]>([]);
+
+  // Initiate Refund Modal State
+  const [showInitiateRefundModal, setShowInitiateRefundModal] = useState(false);
+  const [refundRecipientType, setRefundRecipientType] = useState<'USER' | 'ORDER'>('USER');
+  const [refundSelectedUserId, setRefundSelectedUserId] = useState('');
+  const [refundSelectedOrderId, setRefundSelectedOrderId] = useState('');
+  const [refundAmountInput, setRefundAmountInput] = useState<number | string>('');
+  const [refundReasonInput, setRefundReasonInput] = useState('');
+  const [refundAutoApprove, setRefundAutoApprove] = useState(true);
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+  const [refundUserSearch, setRefundUserSearch] = useState('');
   const [payoutsData, setPayoutsData] = useState<{
     metrics: { totalPayouts: string; pendingPayouts: string; completedPayouts: string; failedPayouts: string };
     payouts: SuperAdminPayout[];
@@ -315,7 +326,7 @@ export const SuperAdminDashboard: React.FC = () => {
         );
 
         // 5. Active Nav specific views
-        if (activeNav === 'users' || activeNav === 'creators' || activeNav === 'dashboard') {
+        if (activeNav === 'users' || activeNav === 'creators' || activeNav === 'refunds' || activeNav === 'dashboard') {
           const roleToQuery = activeNav === 'creators' ? 'INSTRUCTOR' : userRoleFilter === 'ALL' ? undefined : userRoleFilter;
           promises.push(
             superAdminApi
@@ -346,7 +357,7 @@ export const SuperAdminDashboard: React.FC = () => {
           );
         }
 
-        if (activeNav === 'orders' || activeNav === 'dashboard') {
+        if (activeNav === 'orders' || activeNav === 'refunds' || activeNav === 'dashboard') {
           promises.push(
             superAdminApi
               .getOrders({
@@ -643,11 +654,16 @@ export const SuperAdminDashboard: React.FC = () => {
 
   const handleRejectInstructor = async () => {
     if (!selectedVerification) return;
+    const trimmedReason = verificationRejectReason.trim();
+    if (!trimmedReason) {
+      toastError('Rejection Reason Required', 'Please provide a specific reason explaining why the application is being rejected.');
+      return;
+    }
     try {
       setProcessingVerification(true);
       const res = await superAdminApi.rejectInstructorVerification(
         selectedVerification.id || selectedVerification._id || selectedVerification.userId,
-        verificationRejectReason.trim() || undefined
+        trimmedReason
       );
       if (res.success) {
         success('Application Rejected', 'The instructor application has been rejected with feedback.');
@@ -700,15 +716,16 @@ export const SuperAdminDashboard: React.FC = () => {
   ) => {
     try {
       setPreviewingDocId(docId);
-      const res = await apiClient.get(`/super-admin/instructor-verifications/${instructorId}/documents/${encodeURIComponent(docId)}`, {
-        responseType: 'blob',
-      });
-      const headerType = (res.headers['content-type'] as string) || '';
-      const blob = new Blob([res.data], { type: headerType || 'application/pdf' });
-      const url = URL.createObjectURL(blob);
       const fileName = docTitle || 'document';
 
       if (isDownload) {
+        const res = await apiClient.get(
+          `/super-admin/instructor-verifications/${instructorId}/documents/${encodeURIComponent(docId)}`,
+          { responseType: 'blob' }
+        );
+        const headerType = (res.headers['content-type'] as string) || 'application/octet-stream';
+        const blob = new Blob([res.data], { type: headerType });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
@@ -716,25 +733,23 @@ export const SuperAdminDashboard: React.FC = () => {
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
+        success('Document Downloaded', `Saved ${fileName}`);
       } else {
-        const isPdfOrImage = headerType.includes('pdf') || headerType.includes('image') || fileName.match(/\.(pdf|png|jpg|jpeg|webp)$/i);
-        if (isPdfOrImage) {
-          setActiveDocPreview({
-            url,
-            fileName,
-            fileType: headerType,
-            title: docTitle || 'Document Preview',
-          });
-        } else {
-          // For Word, zip or other binaries, download directly
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          success('Document Downloaded', `Saved ${fileName}`);
-        }
+        // Always open in preview modal for user inspection
+        const res = await apiClient.get(
+          `/super-admin/instructor-verifications/${instructorId}/documents/${encodeURIComponent(docId)}?view=true`,
+          { responseType: 'blob' }
+        );
+        const headerType = (res.headers['content-type'] as string) || 'application/pdf';
+        const blob = new Blob([res.data], { type: headerType });
+        const url = URL.createObjectURL(blob);
+
+        setActiveDocPreview({
+          url,
+          fileName,
+          fileType: headerType,
+          title: docTitle || 'Document Preview',
+        });
       }
     } catch (err: any) {
       toastError('Document Access Failed', err.response?.data?.message || err.message || 'Could not open document preview.');
@@ -954,6 +969,53 @@ export const SuperAdminDashboard: React.FC = () => {
       }
     } catch (err: any) {
       toastError('Verification Error', err.response?.data?.message || err.message || 'Failed to verify transaction.');
+    }
+  };
+
+  // Initiate Refund Submission Handler
+  const handleInitiateRefundSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refundSelectedUserId) {
+      toastError('Recipient Required', 'Please select or specify the user/student for the refund.');
+      return;
+    }
+    const amt = Number(refundAmountInput);
+    if (!amt || amt <= 0) {
+      toastError('Invalid Amount', 'Please enter a valid refund amount greater than 0.');
+      return;
+    }
+    if (!refundReasonInput.trim()) {
+      toastError('Reason Required', 'Please provide the reason / need for this refund.');
+      return;
+    }
+
+    try {
+      setSubmittingRefund(true);
+      const res = await superAdminApi.createRefund({
+        userId: refundSelectedUserId,
+        orderId: refundSelectedOrderId || undefined,
+        amount: amt,
+        reason: refundReasonInput.trim(),
+        status: refundAutoApprove ? 'APPROVED' : 'PENDING',
+      });
+
+      if (res?.success) {
+        success(
+          'Refund Processed & Deducted',
+          `₹${amt.toLocaleString('en-IN')} refund successfully recorded and immediately deducted from platform revenue.`
+        );
+        setShowInitiateRefundModal(false);
+        setRefundSelectedUserId('');
+        setRefundSelectedOrderId('');
+        setRefundAmountInput('');
+        setRefundReasonInput('');
+        setRefundUserSearch('');
+        loadData(true);
+      }
+    } catch (err: any) {
+      toastError('Refund Failed', err.response?.data?.message || err.message || 'Could not process refund.');
+    } finally {
+      setSubmittingRefund(false);
     }
   };
 
@@ -3139,72 +3201,131 @@ export const SuperAdminDashboard: React.FC = () => {
           {/* =========================================================================
               VIEW 6: REFUNDS MANAGEMENT (100% Dynamic from DB)
              ========================================================================= */}
-          {activeNav === 'refunds' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Refunds Management</h2>
-                <p className="text-xs text-slate-500">Process and review student refund requests with financial ledger reconciliation.</p>
-              </div>
+          {activeNav === 'refunds' && (() => {
+            const totalRefundedSum = refundsList.reduce((acc, r) => {
+              if (r.status !== 'REJECTED') return acc + (Number(r.amount) || 0);
+              return acc;
+            }, 0);
+            const pendingRefundsCount = refundsList.filter((r) => r.status === 'PENDING').length;
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
-                      <th className="py-3 px-4">Refund ID</th>
-                      <th className="py-3 px-4">Order ID</th>
-                      <th className="py-3 px-4">User</th>
-                      <th className="py-3 px-4">Amount</th>
-                      <th className="py-3 px-4">Reason</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {refundsList.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-6 text-center text-slate-400 font-medium">
-                          No pending refund requests.
-                        </td>
+            return (
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">Refunds Management</h2>
+                    <p className="text-xs text-slate-500">Process and review student refund requests with financial ledger reconciliation and instant revenue deduction.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRefundRecipientType('USER');
+                      setRefundSelectedUserId('');
+                      setRefundSelectedOrderId('');
+                      setRefundAmountInput('');
+                      setRefundReasonInput('');
+                      setRefundAutoApprove(true);
+                      setRefundUserSearch('');
+                      setShowInitiateRefundModal(true);
+                    }}
+                    className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#E04D2B] text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 cursor-pointer shadow-xs transition active:scale-[0.98] shrink-0"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Initiate Refund</span>
+                  </button>
+                </div>
+
+                {/* Summary Telemetry Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200">
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Total Recorded Refunds</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-bold text-slate-900">{refundsList.length}</span>
+                      <span className="text-[11px] text-slate-500">entries</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-rose-50/60 rounded-xl p-3.5 border border-rose-100">
+                    <span className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider block">Total Amount Refunded</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-bold text-rose-600">₹{totalRefundedSum.toLocaleString('en-IN')}</span>
+                      <span className="text-[11px] font-medium text-rose-500">deducted from revenue</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/60 rounded-xl p-3.5 border border-amber-100">
+                    <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider block">Pending Review</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-xl font-bold text-amber-600">{pendingRefundsCount}</span>
+                      <span className="text-[11px] font-medium text-amber-600">awaiting approval</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                        <th className="py-3 px-4">Refund ID</th>
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">User</th>
+                        <th className="py-3 px-4">Amount</th>
+                        <th className="py-3 px-4">Reason</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Action</th>
                       </tr>
-                    ) : (
-                      refundsList.map((ref) => (
-                        <tr key={ref.id} className="hover:bg-slate-50/80">
-                          <td className="py-3 px-4 font-bold text-[#FA5A36]">{ref.refundId}</td>
-                          <td className="py-3 px-4 text-slate-500">{ref.orderId}</td>
-                          <td className="py-3 px-4 font-bold text-slate-900">{ref.user}</td>
-                          <td className="py-3 px-4 font-semibold text-slate-900">₹{ref.amount}</td>
-                          <td className="py-3 px-4 text-slate-600">{ref.reason}</td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                                ref.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                              }`}
-                            >
-                              {ref.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {ref.status === 'PENDING' && (
-                              <button
-                                onClick={async () => {
-                                  await superAdminApi.processRefund(ref.id, 'APPROVED');
-                                  success('Refund Approved', `Refund ${ref.refundId} processed successfully.`);
-                                  loadData(true);
-                                }}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] cursor-pointer shadow-xs"
-                              >
-                                Approve
-                              </button>
-                            )}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {refundsList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                            No refund requests or records found. Click "Initiate Refund" to issue a refund.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        refundsList.map((ref) => (
+                          <tr key={ref.id} className="hover:bg-slate-50/80">
+                            <td className="py-3 px-4 font-bold text-[#FA5A36]">{ref.refundId}</td>
+                            <td className="py-3 px-4 text-slate-500 font-medium">{ref.orderId}</td>
+                            <td className="py-3 px-4">
+                              <span className="font-bold text-slate-900 block">{ref.user}</span>
+                              {ref.userEmail && (
+                                <span className="text-[10px] text-slate-400 block">{ref.userEmail}</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-rose-600">₹{Number(ref.amount).toLocaleString('en-IN')}</td>
+                            <td className="py-3 px-4 text-slate-600 max-w-xs">{ref.reason}</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  ref.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                }`}
+                              >
+                                {ref.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {ref.status === 'PENDING' && (
+                                <button
+                                  onClick={async () => {
+                                    await superAdminApi.processRefund(ref.id, 'APPROVED');
+                                    success('Refund Approved', `Refund ${ref.refundId} processed successfully and deducted from revenue.`);
+                                    loadData(true);
+                                  }}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] cursor-pointer shadow-xs transition"
+                                >
+                                  Approve
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* =========================================================================
               VIEW 7: PAYOUTS MANAGEMENT (100% Dynamic from DB - Strict Lifecycle)
@@ -4667,9 +4788,9 @@ export const SuperAdminDashboard: React.FC = () => {
               </button>
               <button
                 type="button"
-                disabled={processingVerification}
+                disabled={processingVerification || !verificationRejectReason.trim()}
                 onClick={handleRejectInstructor}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer transition disabled:opacity-60"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingVerification ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
@@ -5034,6 +5155,238 @@ export const SuperAdminDashboard: React.FC = () => {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Initiate Direct Refund Modal (Perfect Popup Dialog) */}
+      {showInitiateRefundModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95">
+            {/* Sticky Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 bg-white">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-[#FA5A36] flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 text-base leading-tight truncate">Initiate Direct Refund</h3>
+                  <p className="text-xs text-slate-500 leading-tight truncate">Record a refund & automatically deduct amount from platform revenue</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInitiateRefundModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer transition shrink-0 ml-2"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleInitiateRefundSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* Mode Selection */}
+                <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setRefundRecipientType('ORDER')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                      refundRecipientType === 'ORDER' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Select from Existing Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundRecipientType('USER')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                      refundRecipientType === 'USER' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Select User / Student Directly
+                  </button>
+                </div>
+
+                {/* Order Picker Mode */}
+                {refundRecipientType === 'ORDER' && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">Select Order to Refund *</label>
+                    <select
+                      value={refundSelectedOrderId}
+                      onChange={(e) => {
+                        const selectedOrdId = e.target.value;
+                        setRefundSelectedOrderId(selectedOrdId);
+                        const ord = ordersList.find((o) => o.id === selectedOrdId || o.orderId === selectedOrdId);
+                        if (ord) {
+                          setRefundAmountInput(ord.amount || '');
+                          const matchedUser = usersList.find(
+                            (u) => u.email === ord.userEmail || u.name === ord.user || (u as any)._id === (ord as any).userId
+                          );
+                          if (matchedUser) {
+                            setRefundSelectedUserId(matchedUser.id || matchedUser._id);
+                          } else if ((ord as any).userId) {
+                            setRefundSelectedUserId(typeof (ord as any).userId === 'string' ? (ord as any).userId : (ord as any).userId?._id);
+                          }
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FA5A36] focus:bg-white transition"
+                      required={refundRecipientType === 'ORDER'}
+                    >
+                      <option value="">-- Choose an Order --</option>
+                      {ordersList.map((ord) => (
+                        <option key={ord.id} value={ord.id}>
+                          {ord.orderId} • {ord.user} • ₹{ord.amount} ({ord.status})
+                        </option>
+                      ))}
+                    </select>
+                    {ordersList.length === 0 && (
+                      <p className="text-[11px] text-amber-600">No completed orders loaded. Switch to "Select User Directly".</p>
+                    )}
+                  </div>
+                )}
+
+                {/* User Selection */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">Whom you refund (Student / User) *</label>
+                    {usersList.length > 5 && (
+                      <span className="text-[10px] text-slate-400">Search name or email</span>
+                    )}
+                  </div>
+                  {usersList.length > 5 && (
+                    <div className="relative mb-1.5">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Type to filter users..."
+                        value={refundUserSearch}
+                        onChange={(e) => setRefundUserSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#FA5A36]"
+                      />
+                    </div>
+                  )}
+                  <select
+                    value={refundSelectedUserId}
+                    onChange={(e) => setRefundSelectedUserId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FA5A36] focus:bg-white transition"
+                    required
+                  >
+                    <option value="">-- Select Recipient User / Student --</option>
+                    {usersList
+                      .filter((u) => {
+                        if (!refundUserSearch.trim()) return true;
+                        const q = refundUserSearch.toLowerCase();
+                        return (
+                          u.email?.toLowerCase().includes(q) ||
+                          u.name?.toLowerCase().includes(q) ||
+                          `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((u) => (
+                        <option key={u.id || u._id} value={u.id || u._id}>
+                          {u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email} ({u.email}) - {u.role || 'STUDENT'}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Refund Amount */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">Refund Amount (₹ INR) *</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-sm">₹</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={refundAmountInput}
+                      onChange={(e) => setRefundAmountInput(e.target.value)}
+                      placeholder="e.g. 499.00"
+                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FA5A36] focus:bg-white transition"
+                      required
+                    />
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200/60 flex items-start gap-2 text-[11px] text-rose-800">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Instant Revenue Deduction:</strong> Upon submitting, ₹{Number(refundAmountInput) || 0} will be recorded and subtracted immediately from Platform Revenue & GMV.
+                    </span>
+                  </div>
+                </div>
+
+                {/* What is need of refund */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">What is the need / reason of refund? *</label>
+                    <span className="text-[10px] text-slate-400 font-medium">Select preset or type</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      'Course Satisfaction Guarantee',
+                      'Accidental Duplicate Purchase',
+                      'Webinar Rescheduled / Cancelled',
+                      'Content Quality Issue',
+                      'Student Requested within 7-Day Policy',
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setRefundReasonInput(preset)}
+                        className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer transition"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={refundReasonInput}
+                    onChange={(e) => setRefundReasonInput(e.target.value)}
+                    placeholder="Specify the reason or explanation for this refund..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#FA5A36] focus:bg-white transition resize-none"
+                    required
+                  />
+                </div>
+
+                {/* Auto Approve Toggle */}
+                <div className="p-3 bg-emerald-50 border border-emerald-200/70 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <div>
+                      <span className="text-xs font-bold text-emerald-950 block">Instant Ledger Execution</span>
+                      <span className="text-[10px] text-emerald-700">Approve immediately and deduct from Platform Revenue</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={refundAutoApprove}
+                    onChange={(e) => setRefundAutoApprove(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded-md focus:ring-emerald-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Sticky Footer Actions */}
+              <div className="shrink-0 px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowInitiateRefundModal(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 cursor-pointer transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingRefund}
+                  className="px-5 py-2 bg-[#FA5A36] hover:bg-[#E04D2B] text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-xs transition disabled:opacity-50"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>{submittingRefund ? 'Processing...' : 'Process Refund & Deduct Revenue'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

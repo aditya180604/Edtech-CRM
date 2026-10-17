@@ -161,9 +161,40 @@ export const webinarsApi = {
     return res.data;
   },
 
-  // Register for a webinar
-  async register(webinarId: string): Promise<{ success: boolean; data: { registered: boolean; registrationsCount: number; message: string } }> {
+  // Register for a webinar (Free)
+  async register(webinarId: string): Promise<{ success: boolean; data: { registered: boolean; registrationsCount: number; message: string; requiresPayment?: boolean; price?: number } }> {
     const res = await apiClient.post(`/webinars/${webinarId}/register`);
+    return res.data;
+  },
+
+  // Create Cashfree checkout session for a paid webinar
+  async createCheckoutOrder(webinarId: string): Promise<{
+    success: boolean;
+    data: {
+      requiresPayment?: boolean;
+      orderId?: string;
+      cfOrderId?: string;
+      paymentSessionId?: string;
+      environment?: string;
+      price?: number;
+      registered?: boolean;
+      message?: string;
+    };
+  }> {
+    const res = await apiClient.post(`/webinars/${webinarId}/checkout`);
+    return res.data;
+  },
+
+  // Verify Cashfree payment for a webinar ticket
+  async verifyPayment(webinarId: string, orderId: string): Promise<{
+    success: boolean;
+    data: {
+      registered: boolean;
+      paymentId?: string;
+      message: string;
+    };
+  }> {
+    const res = await apiClient.post(`/webinars/${webinarId}/verify-payment`, { orderId });
     return res.data;
   },
 

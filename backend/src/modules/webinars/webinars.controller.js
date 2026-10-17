@@ -31,6 +31,21 @@ export class WebinarsController {
     return ApiResponse.success(res, result, 'Successfully registered for webinar.');
   });
 
+  static createCheckoutOrder = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const result = await WebinarsService.createWebinarCheckoutOrder(id, userId);
+    return ApiResponse.success(res, result, 'Webinar checkout session created successfully.');
+  });
+
+  static verifyPayment = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const { orderId } = req.body;
+    const result = await WebinarsService.verifyWebinarPayment(id, userId, orderId);
+    return ApiResponse.success(res, result, 'Payment verified successfully.');
+  });
+
   static getLiveRoom = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
     const userId = req.user?.userId || null;

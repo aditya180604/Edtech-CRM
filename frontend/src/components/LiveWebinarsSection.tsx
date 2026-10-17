@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Users, Video, ArrowRight, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Calendar, Clock, Users, Video, ArrowRight, CheckCircle2, ExternalLink, CreditCard } from 'lucide-react';
+import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { webinarsApi, type WebinarItem } from '../api/webinars';
 import { useAuth } from '../context/AuthContext';
 import { useAuthModal } from '../context/AuthModalContext';
@@ -52,25 +53,98 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
       return;
     }
 
+    const webinarId = webinar.id || webinar._id;
+
+    // CASE A: FREE WEBINAR (0 or not set) -> Run exactly as old flow without payment!
+    if (!webinar.price || Number(webinar.price) <= 0) {
+      try {
+        setRegisteringId(webinarId);
+        const res = await webinarsApi.register(webinarId);
+        if (res.success) {
+          setLocalRegistered((prev) => ({ ...prev, [webinarId]: true }));
+          success('Success', `You have successfully registered for "${webinar.title}"! You will receive a notification on your dashboard when the session starts.`);
+          window.dispatchEvent(new Event('webinarsChanged'));
+          await fetchWebinars();
+        }
+      } catch (err: any) {
+        console.error('Webinar registration failed:', err);
+        toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
+      } finally {
+        setRegisteringId(null);
+      }
+      return;
+    }
+
+    // CASE B: PAID WEBINAR -> Cashfree Sandbox Checkout
     try {
-      setRegisteringId(webinar.id || webinar._id);
-      const res = await webinarsApi.register(webinar.id || webinar._id);
-      if (res.success) {
-        setLocalRegistered((prev) => ({ ...prev, [webinar.id || webinar._id]: true }));
-        success('Success', `You have successfully registered for "${webinar.title}"! You will receive a notification on your dashboard when the session starts.`);
-        // Notify all views (Instructor dashboard, navbar, cards) to update registration counts live!
-        window.dispatchEvent(new Event('webinarsChanged'));
-        await fetchWebinars();
+      setRegisteringId(webinarId);
+      info('Initializing Payment', `Creating secure Cashfree checkout for ₹${webinar.price}...`);
+
+      const checkoutRes = await webinarsApi.createCheckoutOrder(webinarId);
+      if (!checkoutRes.success) {
+        throw new Error(checkoutRes.data?.message || 'Could not initialize checkout');
+      }
+
+      // If server confirmed already registered
+      if (checkoutRes.data?.registered) {
+        setLocalRegistered((prev) => ({ ...prev, [webinarId]: true }));
+        success('Already Registered', `You are already registered for "${webinar.title}".`);
+        return;
+      }
+
+      const { paymentSessionId, orderId, environment } = checkoutRes.data;
+      if (!paymentSessionId || !orderId) {
+        throw new Error('Cashfree payment session was not returned by server.');
+      }
+
+      const cfMode =
+        ((environment || '').toLowerCase() === 'production' ||
+         (import.meta.env.VITE_CASHFREE_ENV || '').toLowerCase() === 'production')
+          ? 'production'
+          : 'sandbox';
+
+      const cashfree: any = await loadCashfree({ mode: cfMode });
+      if (!cashfree) {
+        throw new Error('Unable to load Cashfree payment SDK.');
+      }
+
+      await cashfree.checkout({
+        paymentSessionId,
+        redirectTarget: '_modal',
+      });
+
+      // Verify payment with backend
+      try {
+        const verifyRes = await webinarsApi.verifyPayment(webinarId, orderId);
+        if (verifyRes.success) {
+          setLocalRegistered((prev) => ({ ...prev, [webinarId]: true }));
+          success(
+            'Payment Verified & Confirmed!',
+            `You have successfully purchased your ticket for "${webinar.title}". Your room link is unlocked.`
+          );
+          window.dispatchEvent(new Event('webinarsChanged'));
+          await fetchWebinars();
+        }
+      } catch (vErr: any) {
+        console.error('Payment verification failed:', vErr);
+        toastError('Payment Verification', vErr.response?.data?.message || 'Payment not completed.');
       }
     } catch (err: any) {
-      console.error('Webinar registration failed:', err);
-      toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
+      console.error('Webinar checkout error:', err);
+      toastError('Payment Error', err.response?.data?.message || err.message || 'Payment was cancelled or failed.');
     } finally {
       setRegisteringId(null);
     }
   };
 
   const handleJoinLive = (webinar: WebinarItem) => {
+    const isRegistered = webinar.isUserRegistered || localRegistered[webinar.id || webinar._id];
+    if ((webinar.price || 0) > 0 && !isRegistered) {
+      info('Ticket Required', `Please complete ticket payment of ₹${webinar.price} to join this live workshop.`);
+      handleRegister(webinar);
+      return;
+    }
+
     if (webinar.meetingUrl) {
       if (webinar.meetingUrl.startsWith('/webinars/live/') || webinar.meetingUrl.startsWith('/webinar/live/')) {
         navigate(webinar.meetingUrl);
@@ -219,10 +293,21 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
                   <button
                     type="button"
                     onClick={() => handleJoinLive(webinar)}
-                    className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-semibold text-xs rounded-2xl shadow-sm shadow-[#FA5A36]/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    disabled={isRegistering}
+                    className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-semibold text-xs rounded-2xl shadow-sm shadow-[#FA5A36]/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-75"
                   >
-                    <ExternalLink className="w-4 h-4" />
-                    <span>🔴 Join Live Session Now</span>
+                    {isRegistering ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4" />
+                        <span>
+                          {(webinar.price || 0) > 0 && !isRegistered
+                            ? `Pay ₹${webinar.price.toLocaleString('en-IN')} & Join Live`
+                            : '🔴 Join Live Session Now'}
+                        </span>
+                      </>
+                    )}
                   </button>
                 ) : isRegistered ? (
                   /* Already Registered State */
@@ -246,7 +331,11 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>
-                        <span>Register Now</span>
+                        <span>
+                          {(webinar.price || 0) > 0
+                            ? `Pay ₹${webinar.price.toLocaleString('en-IN')} & Register`
+                            : 'Register Now'}
+                        </span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}

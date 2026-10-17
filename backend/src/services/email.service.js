@@ -437,7 +437,7 @@ export async function sendInstructorApplicationApprovedEmail({
     <div class="content">
       <p style="font-size: 15px; margin-top: 0;">Dear <strong>${instructorName || 'Instructor'}</strong>,</p>
       <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-        We are thrilled to let you know that your professional credentials and verification documents have been reviewed and approved by the Super Admin team.
+        We are thrilled to let you know that your professional credentials and verification documents have been reviewed and approved by our team.
       </p>
 
       <div class="success-box">
@@ -476,9 +476,11 @@ export async function sendInstructorApplicationRejectedEmail({
   instructorName,
   reason,
   resubmitUrl,
+  refundAmount,
 }) {
   const appOrigin = getAppOrigin();
   const targetUrl = resubmitUrl || `${appOrigin}/instructor/onboarding`;
+  const formattedRefundAmount = refundAmount ? `₹${Number(refundAmount).toLocaleString('en-IN')}` : null;
 
   const html = `
 <!DOCTYPE html>
@@ -491,8 +493,9 @@ export async function sendInstructorApplicationRejectedEmail({
     .header { background: #881337; padding: 32px 28px; text-align: center; color: #ffffff; }
     .badge { display: inline-block; padding: 6px 14px; background: rgba(251, 113, 133, 0.2); color: #fb7185; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
     .content { padding: 32px 28px; }
-    .reason-box { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 20px; margin: 24px 0; color: #9f1239; }
-    .btn { display: block; text-align: center; background: #e11d48; color: #ffffff !important; padding: 14px 28px; border-radius: 10px; font-weight: 700; text-decoration: none; margin: 28px 0 12px; }
+    .reason-box { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 20px; margin: 20px 0; color: #9f1239; }
+    .refund-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px; margin: 20px 0; color: #166534; font-size: 13px; line-height: 1.6; }
+    .notice-box { background: #fefce8; border: 1px solid #fef08a; border-radius: 12px; padding: 16px; margin: 20px 0; color: #854d0e; font-size: 13px; line-height: 1.6; }
     .footer { padding: 20px 28px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #f1f5f9; background: #f8fafc; }
   </style>
 </head>
@@ -509,18 +512,23 @@ export async function sendInstructorApplicationRejectedEmail({
       </p>
 
       <div class="reason-box">
-        <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700;">Reviewer Feedback:</h4>
+        <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700;">Reason for Rejection:</h4>
         <p style="margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap;">${reason || 'The submitted credentials could not be verified according to our platform verification standards.'}</p>
       </div>
 
-      <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-        You are welcome to update your professional details, attach revised verification documents, and re-submit your profile for review.
-      </p>
+      <div class="refund-box">
+        <h4 style="margin: 0 0 6px 0; font-size: 14px; font-weight: 700;">Registration Fee Refund Notice:</h4>
+        <p style="margin: 0;">
+          Your registration payment ${formattedRefundAmount ? `of <strong>${formattedRefundAmount}</strong> ` : ''}has been rejected and will be refunded back to your original payment source within <strong>5 to 6 working days</strong>.
+        </p>
+      </div>
 
-      <a href="${targetUrl}" class="btn">Update Profile & Re-Submit</a>
+      <div class="notice-box">
+        <strong>Please note:</strong> If you wanted to apply again this will happen only after 2 days.
+      </div>
 
       <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px;">
-        If you have questions or believe this decision was made in error, please reply to this email to reach our faculty support team.
+        If you have questions or need further clarification, please reply directly to this email to reach our faculty support team.
       </p>
     </div>
     <div class="footer">
@@ -600,6 +608,95 @@ export async function sendInstructorChangesRequestedEmail({
   return sendEmail({
     to,
     subject: `Action Required: Revisions Requested for Your Instructor Application — VStudyOnline`,
+    html,
+  });
+}
+
+/**
+ * 7. Instructor Registration Fee Receipt Email (Itemized Payment Receipt)
+ */
+export async function sendInstructorFeeReceiptEmail({
+  to,
+  instructorName,
+  amount,
+  orderId,
+  paymentId,
+  paidAt,
+  currency = 'INR',
+}) {
+  const appOrigin = getAppOrigin();
+  const targetUrl = `${appOrigin}/instructor/pending-verification`;
+  const formattedDate = paidAt
+    ? new Date(paidAt).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : new Date().toLocaleDateString('en-IN');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+    .card { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { background: #0f172a; padding: 32px 28px; text-align: center; color: #ffffff; }
+    .badge { display: inline-block; padding: 6px 14px; background: rgba(52, 211, 153, 0.2); color: #34d399; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; }
+    .content { padding: 32px 28px; }
+    .receipt-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0; }
+    .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #cbd5e1; font-size: 14px; }
+    .row:last-child { border-bottom: none; }
+    .total-row { display: flex; justify-content: space-between; padding: 12px 0 0 0; margin-top: 8px; border-top: 2px solid #0f172a; font-size: 16px; font-weight: 800; color: #0f172a; }
+    .btn { display: block; text-align: center; background: #0f172a; color: #ffffff !important; padding: 14px 28px; border-radius: 10px; font-weight: 700; text-decoration: none; margin: 28px 0 12px; }
+    .footer { padding: 20px 28px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #f1f5f9; background: #f8fafc; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="badge">Payment Confirmed</div>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800;">Official Registration Fee Receipt</h1>
+    </div>
+    <div class="content">
+      <p style="font-size: 15px; margin-top: 0;">Dear <strong>${instructorName || 'Instructor'}</strong>,</p>
+      <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+        Thank you for submitting your onboarding payment. Your instructor registration fee has been successfully verified and settled.
+      </p>
+
+      <div class="receipt-box">
+        <div class="row"><span>Item:</span><span><strong>Instructor Account Activation Fee</strong></span></div>
+        <div class="row"><span>Order ID:</span><span><code>${orderId}</code></span></div>
+        ${paymentId ? `<div class="row"><span>Payment Ref (Cashfree):</span><span><code>${paymentId}</code></span></div>` : ''}
+        <div class="row"><span>Date:</span><span>${formattedDate}</span></div>
+        <div class="row"><span>Payment Status:</span><span style="color: #059669; font-weight: 700;">PAID ✓</span></div>
+        <div class="total-row"><span>Total Paid:</span><span>₹${Number(amount).toLocaleString('en-IN')} ${currency}</span></div>
+      </div>
+
+      <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+        Your application has been placed into our verification review queue. You will receive an email update once our team reviews your profile and documents.
+      </p>
+
+      <a href="${targetUrl}" class="btn">View Application Status</a>
+
+      <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px;">
+        This is an official computer-generated receipt from VStudyOnline.
+      </p>
+    </div>
+    <div class="footer">
+      VStudyOnline Faculty Registration &bull; Payment Receipt
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `Official Payment Receipt: Instructor Registration Fee (₹${Number(amount).toLocaleString('en-IN')}) — VStudyOnline`,
     html,
   });
 }

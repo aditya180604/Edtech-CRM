@@ -8,12 +8,17 @@ import {
   Award,
   BookOpen,
   Zap,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { catalogApi } from '../api/catalog';
+import { coursesApi } from '../api/courses';
 
 export const HeroSection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchWarning, setSearchWarning] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [popularKeywords, setPopularKeywords] = useState<string[]>([
     'React',
     'Python',
@@ -38,10 +43,47 @@ export const HeroSection: React.FC = () => {
       });
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchTerm.trim()) {
-      navigate(`/courses?search=${encodeURIComponent(searchTerm)}`);
+    const query = searchTerm.trim();
+    if (!query) {
+      setSearchWarning('Course not found or enter a valid field');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchWarning(null);
+
+    try {
+      const matchedCat = popularKeywords.find(
+        (k) => k.toLowerCase() === query.toLowerCase()
+      );
+
+      const res = await coursesApi.getCatalog({
+        category: matchedCat || undefined,
+        search: matchedCat ? undefined : query,
+        limit: 1,
+      });
+
+      if (res.success && res.data?.courses && res.data.courses.length > 0) {
+        if (matchedCat) {
+          navigate(`/courses?category=${encodeURIComponent(matchedCat)}`);
+        } else {
+          const courseCat = res.data.courses[0]?.category;
+          if (courseCat && courseCat.toLowerCase() === query.toLowerCase()) {
+            navigate(`/courses?category=${encodeURIComponent(courseCat)}`);
+          } else {
+            navigate(`/courses?search=${encodeURIComponent(query)}`);
+          }
+        }
+      } else {
+        setSearchWarning('Course not found or enter a valid field');
+      }
+    } catch (err) {
+      console.warn('Hero course search error:', err);
+      setSearchWarning('Course not found or enter a valid field');
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -84,26 +126,47 @@ export const HeroSection: React.FC = () => {
             {/* Search Bar: Clean mobile layout matching Image 3 & Image 4 */}
             <form
               onSubmit={handleSearch}
-              className="w-full max-w-xl flex flex-col sm:flex-row gap-2.5 mb-4 sm:mb-5"
+              className="w-full max-w-xl flex flex-col sm:flex-row gap-2.5 mb-2 sm:mb-2.5"
             >
               <div className="flex-1 bg-white p-3 sm:p-2.5 rounded-2xl border border-slate-200/90 shadow-sm focus-within:border-[#FA5A36] focus-within:ring-2 focus-within:ring-[#FFF5F2] flex items-center gap-2.5 transition-all">
                 <Search className="w-5 h-5 text-slate-400 pl-0.5 shrink-0" />
                 <input
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    if (searchWarning) setSearchWarning(null);
+                  }}
                   placeholder="What do you want to learn today?"
                   className="w-full bg-transparent text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:outline-none"
                 />
               </div>
               <button
                 type="submit"
-                className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-3 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-sm sm:text-base rounded-2xl sm:rounded-xl transition-all shadow-md shadow-[#FA5A36]/25 shrink-0 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02]"
+                disabled={isSearching}
+                className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-3 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] disabled:opacity-75 disabled:cursor-not-allowed text-white font-semibold text-sm sm:text-base rounded-2xl sm:rounded-xl transition-all shadow-md shadow-[#FA5A36]/25 shrink-0 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02]"
               >
-                <span>Search</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSearching ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Searching...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Search</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
+
+            {/* Warning Message below Search Bar */}
+            {searchWarning && (
+              <div className="w-full max-w-xl mb-3 px-3.5 py-2 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-rose-600 animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{searchWarning}</span>
+              </div>
+            )}
 
             {/* Popular Category Chips (Dynamic) */}
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-0.5 sm:pt-1">

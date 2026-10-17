@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import { SuperAdminService } from './superAdmin.service.js';
 import { ApiResponse, asyncHandler } from '../../utils/apiResponse.js';
 
@@ -110,6 +112,14 @@ export class SuperAdminController {
   static getRefunds = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getRefundsList();
     return ApiResponse.success(res, data, 'Refunds retrieved successfully.');
+  });
+
+  static createRefund = asyncHandler(async (req, res) => {
+    const data = await SuperAdminService.createRefund({
+      ...req.body,
+      actorId: req.user.userId,
+    });
+    return ApiResponse.created(res, data, 'Refund initiated and revenue updated successfully.');
   });
 
   static processRefund = asyncHandler(async (req, res) => {
@@ -276,13 +286,88 @@ export class SuperAdminController {
 
   static getInstructorDocument = asyncHandler(async (req, res) => {
     const { id, docId } = req.params;
-    const { filePath, fileName, fileType } = await SuperAdminService.getInstructorDocumentStream(id, docId);
+    const { view } = req.query;
 
-    res.setHeader('Content-Type', fileType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName || 'document')}"`);
-    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    try {
+      const { filePath, fileName, fileType } = await SuperAdminService.getInstructorDocumentStream(id, docId);
+      const absolutePath = path.resolve(filePath);
 
-    return res.sendFile(filePath);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({
+          success: false,
+          message: `Document file "${fileName || 'document'}" not found on server storage.`,
+        });
+      }
+
+      const ext = path.extname(absolutePath).toLowerCase();
+
+      // If viewing in browser/preview modal and file is a Word document (.docx/.doc)
+      if (view === 'true' && (ext === '.docx' || ext === '.doc')) {
+        try {
+          const mammothModule = await import('mammoth');
+          const mammoth = mammothModule.default || mammothModule;
+          const converted = await mammoth.convertToHtml({ path: absolutePath });
+          const styledHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${fileName || 'Document'}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 32px 16px;
+    }
+    .document-page {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 48px;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+      box-sizing: border-box;
+    }
+    h1, h2, h3, h4 { color: #0f172a; margin-top: 1.4em; margin-bottom: 0.5em; }
+    p { margin: 0.8em 0; }
+    table { width: 100%; border-collapse: collapse; margin: 1.5em 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 10px 14px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+    a { color: #4f46e5; }
+  </style>
+</head>
+<body>
+  <div class="document-page">
+    ${converted.value || '<p>No content found in document.</p>'}
+  </div>
+</body>
+</html>`;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent((fileName || 'document').replace(/\.docx?$/i, '.html'))}"`);
+          res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+          return res.send(styledHtml);
+        } catch (err) {
+          console.warn('Word document HTML conversion fallback:', err);
+        }
+      }
+
+      res.setHeader('Content-Type', fileType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `${view === 'true' ? 'inline' : 'attachment'}; filename="${encodeURIComponent(fileName || 'document')}"`);
+      res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+
+      return res.sendFile(absolutePath);
+    } catch (err) {
+      console.error('[SuperAdmin getInstructorDocument error]', err);
+      return res.status(404).json({
+        success: false,
+        message: err.message || 'Verification document not found.',
+      });
+    }
   });
 
   // 12. Instructor Registration Fee Management & Audit Ledger

@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import { InstructorService } from './instructor.service.js';
 import { ApiResponse, asyncHandler } from '../../utils/apiResponse.js';
 import { ROLES } from '../../config/constants.js';
@@ -244,14 +246,29 @@ export class InstructorController {
     const { docId } = req.params;
     const userId = getEffectiveUserId(req);
     const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
-    const { filePath, fileName, fileType } = await InstructorService.getVerificationDocumentStream(
-      userId,
-      docId,
-      isSuperAdmin
-    );
-    res.setHeader('Content-Type', fileType);
-    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    return res.sendFile(filePath);
+    try {
+      const { filePath, fileName, fileType } = await InstructorService.getVerificationDocumentStream(
+        userId,
+        docId,
+        isSuperAdmin
+      );
+      const absolutePath = path.resolve(filePath);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({
+          success: false,
+          message: `Document file "${fileName || 'document'}" not found on server storage.`,
+        });
+      }
+      res.setHeader('Content-Type', fileType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName || 'document')}"`);
+      return res.sendFile(absolutePath);
+    } catch (err) {
+      console.error('[Instructor getDocument error]', err);
+      return res.status(404).json({
+        success: false,
+        message: err.message || 'Verification document not found.',
+      });
+    }
   });
 
   static getReadinessReport = asyncHandler(async (req, res) => {

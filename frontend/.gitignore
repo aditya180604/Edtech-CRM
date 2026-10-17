@@ -10,7 +10,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite/
+*.tsbuildinfo
 *.local
+*.tmp
+*.bak
 
 # Editor directories and files
 .vscode/*

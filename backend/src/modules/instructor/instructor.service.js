@@ -30,6 +30,7 @@ import { CashfreeService } from '../../services/cashfree.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
 import { ReadinessScoringService } from './readinessScoring.service.js';
 import { LearningPathService } from '../learningPaths/learningPath.service.js';
+import { sendInstructorFeeReceiptEmail } from '../../services/email.service.js';
 
 export class InstructorService {
   /**
@@ -124,8 +125,8 @@ export class InstructorService {
     const totalStudentsCount = uniqueStudentIds.size;
 
     // Calculate Average Rating
-    const totalRatingSum = reviews.reduce((acc, r) => acc + (r.rating || 5), 0);
-    const averageRating = reviews.length > 0 ? Number((totalRatingSum / reviews.length).toFixed(1)) : 5.0;
+    const totalRatingSum = reviews.reduce((acc, r) => acc + (r.rating || 0), 0);
+    const averageRating = reviews.length > 0 ? Number((totalRatingSum / reviews.length).toFixed(1)) : 0.0;
 
     // Students by Course distribution (Donut chart data)
     const colors = ['#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'];
@@ -777,6 +778,9 @@ export class InstructorService {
       const regCount = Array.isArray(w.registrations) ? w.registrations.length : 0;
       const attCount = Array.isArray(w.attendance) ? w.attendance.length : (Array.isArray(w.attendanceLogs) ? w.attendanceLogs.length : 0);
       const registrationsCount = Math.max(regCount, attCount);
+      const ticketPrice = w.price || 0;
+      const netPerTicket = w.instructorEarnings || Math.round(ticketPrice * 0.90);
+      const totalEarned = ticketPrice > 0 ? netPerTicket * registrationsCount : 0;
 
       return {
         ...w,
@@ -786,6 +790,8 @@ export class InstructorService {
         isTimingLocked: !canEditTiming,
         registrationsCount,
         attendanceCount: attCount,
+        ticketPrice,
+        totalEarned,
       };
     });
 
@@ -807,6 +813,8 @@ export class InstructorService {
       ? Number((reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / reviews.length).toFixed(1))
       : 0.0;
 
+    const totalWebinarEarnings = enrichedWebinars.reduce((sum, w) => sum + (w.totalEarned || 0), 0);
+
     return {
       webinars: enrichedWebinars,
       counts: {
@@ -820,6 +828,7 @@ export class InstructorService {
           const aLen = Array.isArray(w.attendance) ? w.attendance.length : (Array.isArray(w.attendanceLogs) ? w.attendanceLogs.length : 0);
           return acc + Math.max(rLen, aLen);
         }, 0),
+        totalWebinarEarnings,
         averageRating,
       },
     };
@@ -1204,7 +1213,7 @@ export class InstructorService {
 
     const avgRating = reviews.length > 0
       ? Number((reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length).toFixed(1))
-      : 5.0;
+      : 0.0;
 
     let totalGrossRevenue = 0;
 
@@ -1218,7 +1227,7 @@ export class InstructorService {
       const cReviews = reviews.filter((r) => r.courseId?.toString() === c._id.toString());
       const cRating = cReviews.length > 0
         ? Number((cReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / cReviews.length).toFixed(1))
-        : 5.0;
+        : (c.rating ? Number(c.rating).toFixed(1) : 0.0);
 
       // Find order items and earnings corresponding to this course
       const courseOrderItemIds = orderItems
@@ -1691,8 +1700,15 @@ export class InstructorService {
       throw new Error('File size exceeds the 5MB maximum limit.');
     }
 
-    const uploadsDir = path.resolve('uploads/verification_docs');
-    if (!fs.existsSync(uploadsDir)) {
+    const candidateDirs = [
+      path.resolve('backend/uploads/verification_docs'),
+      path.resolve('uploads/verification_docs'),
+      path.resolve(process.cwd(), 'backend/uploads/verification_docs'),
+      path.resolve(process.cwd(), 'uploads/verification_docs'),
+    ];
+    let uploadsDir = candidateDirs.find((d) => fs.existsSync(d));
+    if (!uploadsDir) {
+      uploadsDir = path.resolve('uploads/verification_docs');
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
@@ -1822,30 +1838,51 @@ export class InstructorService {
 
     if (!doc) throw new Error('Verification document record not found.');
 
-    const uploadsDir = path.resolve('uploads/verification_docs');
+    const candidateDirs = [
+      path.resolve('uploads/verification_docs'),
+      path.resolve('backend/uploads/verification_docs'),
+      path.resolve(process.cwd(), 'uploads/verification_docs'),
+      path.resolve(process.cwd(), 'backend/uploads/verification_docs'),
+    ].filter((dir, idx, arr) => arr.indexOf(dir) === idx && fs.existsSync(dir));
+
     let fullPath = null;
 
-    // 1. Try diskPath directly
+    // 1. Try diskPath directly across all candidate directories
     if (doc.diskPath) {
-      const candidate = path.join(uploadsDir, doc.diskPath);
-      if (fs.existsSync(candidate)) fullPath = candidate;
+      for (const dir of candidateDirs) {
+        const candidate = path.join(dir, doc.diskPath);
+        if (fs.existsSync(candidate)) {
+          fullPath = candidate;
+          break;
+        }
+      }
     }
 
-    // 2. Try looking in uploadsDir if diskPath was missing or moved
-    if (!fullPath && fs.existsSync(uploadsDir)) {
-      const dirFiles = fs.readdirSync(uploadsDir);
+    // 2. Try looking in candidate directories if diskPath was missing or moved
+    if (!fullPath && candidateDirs.length > 0) {
       const url = doc.documentUrl || doc.fileUrl || '';
       const tokenMatch = url.match(/doc_[a-zA-Z0-9_]+/);
       const token = tokenMatch ? tokenMatch[0] : (doc.docId || null);
 
-      if (token) {
-        const match = dirFiles.find((f) => f.includes(token));
-        if (match) fullPath = path.join(uploadsDir, match);
-      }
+      for (const dir of candidateDirs) {
+        try {
+          const dirFiles = fs.readdirSync(dir);
+          if (token) {
+            const match = dirFiles.find((f) => f.includes(token));
+            if (match) {
+              fullPath = path.join(dir, match);
+              break;
+            }
+          }
 
-      if (!fullPath && doc.fileName) {
-        const match = dirFiles.find((f) => f.endsWith(doc.fileName) || f.includes(doc.fileName));
-        if (match) fullPath = path.join(uploadsDir, match);
+          if (!fullPath && doc.fileName) {
+            const match = dirFiles.find((f) => f.endsWith(doc.fileName) || f.includes(doc.fileName));
+            if (match) {
+              fullPath = path.join(dir, match);
+              break;
+            }
+          }
+        } catch (_) {}
       }
     }
 
@@ -2207,6 +2244,23 @@ export class InstructorService {
 
     if (notificationDocs.length > 0) {
       await Notification.insertMany(notificationDocs).catch((e) => console.warn('[Notification Warning]:', e.message));
+    }
+
+    // Send Official Payment Receipt Email to Instructor
+    if (user?.email) {
+      try {
+        await sendInstructorFeeReceiptEmail({
+          to: user.email,
+          instructorName,
+          amount: feeRecord.amount,
+          orderId: targetOrderId,
+          paymentId: String(paymentId),
+          paidAt: feeRecord.paidAt,
+          currency: feeRecord.currency || 'INR',
+        });
+      } catch (receiptEmailErr) {
+        console.warn('[Instructor Receipt Email Error (transient)]:', receiptEmailErr.message);
+      }
     }
 
     return {

@@ -37,6 +37,7 @@ import {
   X,
 } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 
 import {
   webinarsApi,
@@ -3393,19 +3394,69 @@ export const LiveWebinarRoomPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={async () => {
+                    const webinarId = roomState.id || roomState._id;
+                    // If free, register directly
+                    if (!roomState.price || Number(roomState.price) <= 0) {
+                      try {
+                        const res = await webinarsApi.register(webinarId);
+                        if (res.success) {
+                          success('Registration Complete', 'You now have full access to this live workshop!');
+                          await fetchRoom();
+                        }
+                      } catch (err: any) {
+                        toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
+                      }
+                      return;
+                    }
+
+                    // If paid, launch Cashfree checkout
                     try {
-                      const res = await webinarsApi.register(roomState.id);
-                      if (res.success) {
-                        success('Registration Complete', 'You now have full access to this live workshop!');
+                      info('Initializing Payment', `Creating secure Cashfree checkout for ₹${roomState.price}...`);
+                      const checkoutRes = await webinarsApi.createCheckoutOrder(webinarId);
+                      if (!checkoutRes.success) {
+                        throw new Error(checkoutRes.data?.message || 'Could not initialize checkout');
+                      }
+
+                      if (checkoutRes.data?.registered) {
+                        success('Access Unlocked', 'You already have access to this room.');
+                        await fetchRoom();
+                        return;
+                      }
+
+                      const { paymentSessionId, orderId, environment } = checkoutRes.data;
+                      if (!paymentSessionId || !orderId) {
+                        throw new Error('Cashfree payment session was not returned.');
+                      }
+
+                      const cfMode =
+                        ((environment || '').toLowerCase() === 'production' ||
+                         (import.meta.env.VITE_CASHFREE_ENV || '').toLowerCase() === 'production')
+                          ? 'production'
+                          : 'sandbox';
+
+                      const cashfree: any = await loadCashfree({ mode: cfMode });
+                      if (!cashfree) {
+                        throw new Error('Unable to initialize Cashfree SDK.');
+                      }
+
+                      await cashfree.checkout({
+                        paymentSessionId,
+                        redirectTarget: '_modal',
+                      });
+
+                      const verifyRes = await webinarsApi.verifyPayment(webinarId, orderId);
+                      if (verifyRes.success) {
+                        success('Payment Verified!', 'Ticket confirmed! Entering the live room now...');
                         await fetchRoom();
                       }
                     } catch (err: any) {
-                      toastError('Registration Failed', err.response?.data?.message || 'Could not complete registration.');
+                      console.error('Room paywall checkout error:', err);
+                      toastError('Payment Failed', err.response?.data?.message || err.message || 'Payment not completed.');
                     }
                   }}
                   className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#FA5A36]/30 transition cursor-pointer"
                 >
-                  Register & Join Live Room Now
+                  {(roomState.price || 0) > 0 ? `Pay ₹${roomState.price.toLocaleString('en-IN')} & Join Live Room` : 'Register & Join Live Room Now'}
                 </button>
                 <button
                   type="button"

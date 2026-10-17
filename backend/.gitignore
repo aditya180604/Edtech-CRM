@@ -31,3 +31,13 @@ __tests__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# User Uploads & Temporary Media
+uploads/
+uploads/*
+!uploads/.gitkeep
+!uploads/**/.gitkeep
+temp/
+receipts/
+*.tmp
+*.bak

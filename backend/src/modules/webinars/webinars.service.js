@@ -196,6 +196,203 @@ export class WebinarsService {
   }
 
   /**
+   * Create Cashfree Checkout Order for paid webinar registration
+   */
+  static async createWebinarCheckoutOrder(webinarId, userId) {
+    const webinar = await this.findWebinarDoc(webinarId);
+    if (!webinar) throw new Error('Webinar not found');
+
+    // If webinar is free (price === 0), register directly with no payment required
+    if (!webinar.price || webinar.price <= 0) {
+      return this.registerStudent(webinar._id, userId);
+    }
+
+    const user = await User.findById(userId).lean();
+    if (!user) throw new Error('User not found');
+
+    // Check if already registered
+    const isAlreadyRegistered = Array.isArray(webinar.registrations) && webinar.registrations.some(
+      (id) => id.toString() === userId.toString()
+    );
+    if (isAlreadyRegistered) {
+      return {
+        success: true,
+        registered: true,
+        alreadyRegistered: true,
+        message: 'You are already registered for this webinar.',
+      };
+    }
+
+    // Capacity check
+    if ((webinar.registrations?.length || 0) >= (webinar.capacity || 100)) {
+      throw new Error('Webinar has reached maximum capacity');
+    }
+
+    const { CashfreeService } = await import('../../services/cashfree.service.js');
+    const { cashfreeConfig } = await import('../../config/cashfree.js');
+
+    const orderId = `cf_wb_${webinar._id.toString().slice(-6)}_${Date.now().toString(36)}`;
+
+    const cfOrder = await CashfreeService.createOrder({
+      orderId,
+      orderAmount: webinar.price,
+      currency: webinar.currency || 'INR',
+      customerId: user._id.toString(),
+      customerName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Student',
+      customerEmail: user.email,
+      customerPhone: user.phone || '9999999999',
+      orderNote: `Ticket for Webinar: ${webinar.title}`,
+    });
+
+    return {
+      success: true,
+      requiresPayment: true,
+      orderId: cfOrder.orderId,
+      cfOrderId: cfOrder.cfOrderId,
+      paymentSessionId: cfOrder.paymentSessionId,
+      environment: cfOrder.environment || cashfreeConfig.env,
+      price: webinar.price,
+      currency: webinar.currency || 'INR',
+    };
+  }
+
+  /**
+   * Verify Cashfree Payment and enroll student into webinar
+   */
+  static async verifyWebinarPayment(webinarId, userId, orderId) {
+    if (!orderId) throw new Error('Order ID is required for verification');
+
+    const webinar = await this.findWebinarDoc(webinarId);
+    if (!webinar) throw new Error('Webinar not found');
+
+    const user = await User.findById(userId).lean();
+    if (!user) throw new Error('User not found');
+
+    const { CashfreeService } = await import('../../services/cashfree.service.js');
+    const cfStatusResult = await CashfreeService.getOrderPaymentStatus(orderId);
+
+    if (cfStatusResult.status !== 'SUCCESS') {
+      throw new Error(`Payment verification failed with status: ${cfStatusResult.status}`);
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    if (!Array.isArray(webinar.registrations)) webinar.registrations = [];
+
+    const isAlreadyRegistered = webinar.registrations.some(
+      (id) => id.toString() === userId.toString()
+    );
+
+    if (!isAlreadyRegistered) {
+      webinar.registrations.push(userObjectId);
+      await webinar.save();
+
+      // 1. Calculate 10% Platform Fee and 90% Instructor Net Payout
+      const price = webinar.price || 0;
+      const platformFee = Math.round(price * 0.10);
+      const netEarning = price - platformFee;
+
+      const {
+        InstructorEarning,
+        FinancialLedger,
+        Order,
+        AuditLog,
+        Notification,
+      } = await import('../../models/index.js');
+      const { TRANSACTION_TYPES, ORDER_STATUS, PAYMENT_STATUS } = await import('../../config/constants.js');
+
+      // 2. Create Order record for Super Admin Orders & GMV audit
+      const orderDoc = await Order.create({
+        orderId: `ORD-WB-${Date.now().toString(36).toUpperCase()}`,
+        userId: userObjectId,
+        items: [
+          {
+            itemType: 'WEBINAR',
+            productId: webinar._id,
+            title: `Webinar: ${webinar.title}`,
+            instructorId: webinar.instructorId,
+            unitPrice: price,
+            finalPrice: price,
+          },
+        ],
+        subtotal: price,
+        finalAmount: price,
+        currency: webinar.currency || 'INR',
+        paymentStatus: PAYMENT_STATUS.SUCCESS,
+        orderStatus: ORDER_STATUS.COMPLETED,
+        provider: 'CASHFREE',
+        paymentId: cfStatusResult.paymentId || orderId,
+        providerOrderId: orderId,
+      }).catch((e) => {
+        console.warn('[Webinar Order Creation non-fatal]:', e.message);
+        return null;
+      });
+
+      // 3. Create InstructorEarning record (90% net payout to instructor balance)
+      await InstructorEarning.create({
+        instructorId: webinar.instructorId,
+        orderId: orderDoc ? orderDoc._id : new mongoose.Types.ObjectId(),
+        orderItemId: webinar._id,
+        grossAmount: price,
+        discountAmount: 0,
+        refundAmount: 0,
+        paymentFee: 0,
+        platformCommission: platformFee, // 10% Platform share
+        netEarning: netEarning,          // 90% Instructor Net Payout
+        currency: webinar.currency || 'INR',
+        status: 'AVAILABLE',
+      }).catch((e) => console.warn('[Webinar InstructorEarning non-fatal]:', e.message));
+
+      // 4. Create FinancialLedger record for 10% Platform Fee (credited to Super Admin platform)
+      await FinancialLedger.create({
+        ledgerId: `LEDGER-WB-${Date.now()}`,
+        userId: webinar.instructorId,
+        orderId: orderDoc ? orderDoc._id : undefined,
+        type: TRANSACTION_TYPES.PLATFORM_FEE,
+        amount: platformFee,
+        currency: webinar.currency || 'INR',
+        direction: 'CREDIT',
+        referenceId: cfStatusResult.paymentId || orderId,
+        description: `Webinar 10% Platform Fee collected for "${webinar.title}" (Student: ${user.email})`,
+      }).catch((e) => console.warn('[Webinar FinancialLedger non-fatal]:', e.message));
+
+      // 5. Create AuditLog for Super Admin activity monitoring
+      await AuditLog.create({
+        auditId: `audit_wb_${Date.now()}`,
+        actorId: userObjectId,
+        action: 'WEBINAR_TICKET_PURCHASE',
+        targetModel: 'Webinar',
+        targetId: webinar._id,
+        description: `Student ${user.email} purchased ticket for webinar "${webinar.title}" for ₹${price} (Platform Fee: ₹${platformFee}, Instructor: ₹${netEarning})`,
+      }).catch((e) => console.warn('[Webinar AuditLog non-fatal]:', e.message));
+
+      // 6. In-App Notification for Student
+      try {
+        await Notification.create({
+          notificationId: `notif_${webinar._id}_${userId}_${Date.now()}`,
+          userId: userObjectId,
+          type: 'WEBINAR_REGISTERED',
+          title: `Ticket Confirmed: ${webinar.title}`,
+          message: `Your ticket for "${webinar.title}" is confirmed! The live room unlocks at ${new Date(webinar.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+          meetingUrl: webinar.meetingUrl || `/webinars/live/${webinar.roomCode}`,
+          entityType: 'WEBINAR',
+          entityId: webinar._id,
+          isRead: false,
+          createdAt: new Date(),
+        });
+      } catch (e) {
+        // ignore duplicate
+      }
+    }
+
+    return {
+      success: true,
+      registered: true,
+      paymentId: cfStatusResult.paymentId,
+      message: 'Payment verified and ticket confirmed successfully!',
+    };
+  }
+
+  /**
    * Get single webinar details
    */
   static async getWebinarByIdOrSlug(identifier, userId = null) {

@@ -77,6 +77,19 @@ frontend/**/*.spec.jsx
 .temp/
 .tmp/
 .cache/
+.vite/
+*.tsbuildinfo
+*.bak
+*.orig
+
+# User Uploads & Runtime Generated Files
+uploads/
+backend/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/**/.gitkeep
+backend/receipts/
+backend/temp/
 
 # Archives and Large Bundles
 *.zip

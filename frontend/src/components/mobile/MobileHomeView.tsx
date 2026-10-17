@@ -20,6 +20,8 @@ import {
   Video,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { coursesApi, type TopicItem } from '../../api/courses';
 import { catalogApi, type CatalogStat, type CatalogInstructor, type CatalogLearningPath } from '../../api/catalog';
@@ -35,6 +37,8 @@ export const MobileHomeView: React.FC = () => {
 
   // Search & chips state
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchWarning, setSearchWarning] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const searchKeywords = ['React', 'Python', 'Data Science', 'AI & ML', 'Cloud', 'UI/UX Design'];
 
   // Stats State
@@ -112,10 +116,47 @@ export const MobileHomeView: React.FC = () => {
     }).catch(console.warn).finally(() => setInstructorsLoading(false));
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchTerm.trim()) {
-      navigate(`/courses?search=${encodeURIComponent(searchTerm)}`);
+    const query = searchTerm.trim();
+    if (!query) {
+      setSearchWarning('Course not found or enter a valid field');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchWarning(null);
+
+    try {
+      const matchedCat = searchKeywords.find(
+        (k) => k.toLowerCase() === query.toLowerCase()
+      );
+
+      const res = await coursesApi.getCatalog({
+        category: matchedCat || undefined,
+        search: matchedCat ? undefined : query,
+        limit: 1,
+      });
+
+      if (res.success && res.data?.courses && res.data.courses.length > 0) {
+        if (matchedCat) {
+          navigate(`/courses?category=${encodeURIComponent(matchedCat)}`);
+        } else {
+          const courseCat = res.data.courses[0]?.category;
+          if (courseCat && courseCat.toLowerCase() === query.toLowerCase()) {
+            navigate(`/courses?category=${encodeURIComponent(courseCat)}`);
+          } else {
+            navigate(`/courses?search=${encodeURIComponent(query)}`);
+          }
+        }
+      } else {
+        setSearchWarning('Course not found or enter a valid field');
+      }
+    } catch (err) {
+      console.warn('Mobile hero search error:', err);
+      setSearchWarning('Course not found or enter a valid field');
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -218,25 +259,46 @@ export const MobileHomeView: React.FC = () => {
           </p>
 
           {/* Search Form matching Image 3: Input + Full-width Button below */}
-          <form onSubmit={handleSearch} className="w-full space-y-2.5 mb-4">
+          <form onSubmit={handleSearch} className="w-full space-y-2.5 mb-2.5">
             <div className="w-full bg-white px-3.5 py-3 rounded-2xl border border-slate-200 shadow-xs focus-within:border-[#FA5A36] focus-within:ring-2 focus-within:ring-[#FFF5F2] flex items-center gap-2.5">
               <Search className="w-5 h-5 text-slate-400 shrink-0" />
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  if (searchWarning) setSearchWarning(null);
+                }}
                 placeholder="What do you want to learn today?"
                 className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] text-white font-semibold text-sm rounded-2xl transition-all shadow-md shadow-[#FA5A36]/25 flex items-center justify-center gap-2 cursor-pointer"
+              disabled={isSearching}
+              className="w-full py-3.5 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] disabled:opacity-75 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-2xl transition-all shadow-md shadow-[#FA5A36]/25 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Search</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSearching ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                <>
+                  <span>Search</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
+
+          {/* Warning Message below Search Bar */}
+          {searchWarning && (
+            <div className="w-full -mt-1 mb-3 px-3.5 py-2 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-rose-600 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{searchWarning}</span>
+            </div>
+          )}
 
           {/* Popular Categories */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 mb-6">

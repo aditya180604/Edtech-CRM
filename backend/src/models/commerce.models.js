@@ -159,8 +159,10 @@ export const Payment = mongoose.models.Payment || mongoose.model('Payment', paym
 // ==========================================
 const refundSchema = new mongoose.Schema(
   {
-    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
-    paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', required: true },
+    refundId: { type: String, unique: true, sparse: true, index: true },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: false, index: true },
+    orderNumber: { type: String },
+    paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', required: false },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     amount: { type: Number, required: true },
     currency: { type: String, default: 'INR' },

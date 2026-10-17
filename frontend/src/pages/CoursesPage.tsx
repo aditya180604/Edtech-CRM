@@ -13,20 +13,27 @@ import {
   GraduationCap,
   Users,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 import { coursesApi, type CatalogFilterItem } from '../api/courses';
 import { featuredCoursesData } from '../data/mockData';
 import { SyllabusModal } from '../components/SyllabusModal';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { Course } from '../types';
 
 export const CoursesPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlCategory = searchParams.get('category');
+  const urlLevel = searchParams.get('level');
+  const urlSearch = searchParams.get('search');
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedLevel, setSelectedLevel] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>(urlCategory || 'All');
+  const [selectedLevel, setSelectedLevel] = useState<string>(urlLevel || 'All');
+  const [searchQuery, setSearchQuery] = useState<string>(urlSearch || '');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(urlSearch || '');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [selectedSyllabusCourse, setSelectedSyllabusCourse] = useState<Course | null>(null);
@@ -48,6 +55,30 @@ export const CoursesPage: React.FC = () => {
     { name: 'Advanced', count: 0 },
   ]);
 
+  // Synchronize component state whenever URL query params change (e.g. navigation from Hero search)
+  useEffect(() => {
+    const cat = searchParams.get('category');
+    const lvl = searchParams.get('level');
+    const q = searchParams.get('search');
+
+    if (cat) {
+      setSelectedCategory(cat);
+    } else {
+      setSelectedCategory('All');
+    }
+
+    if (lvl) {
+      setSelectedLevel(lvl);
+    } else {
+      setSelectedLevel('All');
+    }
+
+    if (q !== null && q !== undefined) {
+      setSearchQuery(q);
+      setDebouncedSearch(q);
+    }
+  }, [searchParams]);
+
   // Debounce search query input by 300ms to eliminate excessive network latency
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -56,12 +87,46 @@ export const CoursesPage: React.FC = () => {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
+  const handleCategoryChange = (catName: string) => {
+    setSelectedCategory(catName);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (catName.toLowerCase() === 'all') {
+        next.delete('category');
+      } else {
+        next.set('category', catName);
+      }
+      return next;
+    });
+  };
+
+  const handleLevelChange = (lvlName: string) => {
+    setSelectedLevel(lvlName);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (lvlName.toLowerCase() === 'all') {
+        next.delete('level');
+      } else {
+        next.set('level', lvlName);
+      }
+      return next;
+    });
+  };
+
+  const handleClearAll = () => {
+    setSelectedCategory('All');
+    setSelectedLevel('All');
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setSearchParams({});
+  };
+
   const loadCourses = useCallback(async () => {
     try {
       setLoading(true);
       const res = await coursesApi.getCatalog({
-        category: selectedCategory === 'All' ? undefined : selectedCategory,
-        level: selectedLevel === 'All' ? undefined : selectedLevel,
+        category: selectedCategory.toLowerCase() === 'all' ? undefined : selectedCategory,
+        level: selectedLevel.toLowerCase() === 'all' ? undefined : selectedLevel,
         search: debouncedSearch.trim() || undefined,
       });
 
@@ -81,7 +146,9 @@ export const CoursesPage: React.FC = () => {
     } catch (err) {
       console.warn('Using client-side fallback courses:', err);
       const filtered = featuredCoursesData.filter((c) => {
-        const matchCat = selectedCategory === 'All' || c.category.toLowerCase() === selectedCategory.toLowerCase();
+        const matchCat =
+          selectedCategory.toLowerCase() === 'all' ||
+          c.category.toLowerCase() === selectedCategory.toLowerCase();
         const matchSearch = c.title.toLowerCase().includes(debouncedSearch.toLowerCase());
         return matchCat && matchSearch;
       });
@@ -136,11 +203,7 @@ export const CoursesPage: React.FC = () => {
                 <h2 className="text-sm font-semibold text-slate-900">Filters</h2>
               </div>
               <button
-                onClick={() => {
-                  setSelectedCategory('All');
-                  setSelectedLevel('All');
-                  setSearchQuery('');
-                }}
+                onClick={handleClearAll}
                 className="text-xs font-medium text-[#FA5A36] hover:text-[#E04322] cursor-pointer"
               >
                 Clear All
@@ -163,7 +226,7 @@ export const CoursesPage: React.FC = () => {
                         type="radio"
                         name="category"
                         checked={selectedCategory.toLowerCase() === cat.name.toLowerCase()}
-                        onChange={() => setSelectedCategory(cat.name)}
+                        onChange={() => handleCategoryChange(cat.name)}
                         className="w-4 h-4 text-[#FA5A36] focus:ring-[#FA5A36] border-slate-300 cursor-pointer"
                       />
                       <span className="group-hover:text-[#FA5A36]">{cat.name}</span>
@@ -189,7 +252,7 @@ export const CoursesPage: React.FC = () => {
                         type="radio"
                         name="level"
                         checked={selectedLevel.toLowerCase() === lvl.name.toLowerCase()}
-                        onChange={() => setSelectedLevel(lvl.name)}
+                        onChange={() => handleLevelChange(lvl.name)}
                         className="w-4 h-4 text-[#FA5A36] focus:ring-[#FA5A36] border-slate-300 cursor-pointer"
                       />
                       <span className="group-hover:text-[#FA5A36]">{lvl.name}</span>
@@ -215,6 +278,12 @@ export const CoursesPage: React.FC = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9.5 pr-4 py-2 bg-slate-50 text-xs text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-2 focus:ring-[#FFF5F2] focus:bg-white transition-all"
                 />
+                {debouncedSearch.trim() && !loading && courses.length === 0 && (
+                  <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 animate-in fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>Course not found or enter a valid field</span>
+                  </div>
+                )}
               </div>
               <span className="text-xs font-medium text-slate-500">
                 {loading ? 'Searching courses...' : `Showing ${courses.length} courses`}
@@ -243,7 +312,7 @@ export const CoursesPage: React.FC = () => {
             ) : courses.length === 0 ? (
               <div className="py-20 text-center text-slate-500 bg-white rounded-2xl border border-slate-100 shadow-xs space-y-2">
                 <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
-                <p className="text-sm font-semibold text-slate-800">No courses found matching your criteria</p>
+                <p className="text-sm font-semibold text-slate-800">Course not found or enter a valid field</p>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto font-normal">Try selecting "All" categories or changing your search terms.</p>
               </div>
             ) : (

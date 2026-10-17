@@ -29,5 +29,7 @@ router.post('/room/:roomCode/reopen', optionalAuthenticate, WebinarsController.r
 // Details & Student / User Registration Endpoints
 router.get('/:id', optionalAuthenticate, WebinarsController.getDetails);
 router.post('/:id/register', authenticate, WebinarsController.register);
+router.post('/:id/checkout', authenticate, WebinarsController.createCheckoutOrder);
+router.post('/:id/verify-payment', authenticate, WebinarsController.verifyPayment);
 
 export const webinarsRoutes = router;

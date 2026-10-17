@@ -64,6 +64,7 @@ export class SuperAdminService {
       pendingVerificationsCount,
       verifiedPlatformFees,
       allEarnings,
+      allRefundsList,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ role: ROLES.STUDENT }),
@@ -94,6 +95,7 @@ export class SuperAdminService {
       InstructorProfile.countDocuments({ verificationStatus: { $in: ['PENDING', 'UNDER_REVIEW'] } }),
       PlatformFee.find({ payment_status: 'SUCCESS' }).lean(),
       InstructorEarning.find().lean(),
+      Refund.find({ status: { $ne: 'REJECTED' } }).select('amount status').lean(),
     ]);
 
     // Calculate GMV (Gross Merchandise Value) across all completed orders
@@ -103,14 +105,18 @@ export class SuperAdminService {
       const itemsSum = ord.items?.reduce((s, i) => s + (i.finalPrice || i.price || 0), 0) || 0;
       return sum + itemsSum;
     }, 0);
-    const gmv = rawGMV;
+
+    // Deduct refunded amounts immediately from gross revenue and GMV
+    const totalRefundsDeducted = (allRefundsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const gmv = Math.max(0, Math.round(rawGMV - totalRefundsDeducted));
 
     // Platform Commission (20%) from student course purchases + 10% Publishing Fees
     const recordedCommissions = allEarnings.reduce((sum, e) => sum + (e.platformCommission || 0), 0);
-    const studentOrderRevenue = recordedCommissions > 0 ? recordedCommissions : Math.round(gmv * 0.20);
+    const studentOrderRevenue = recordedCommissions > 0 ? recordedCommissions : Math.round(rawGMV * 0.20);
     const platformFeesRevenue = verifiedPlatformFees.reduce((sum, fee) => sum + (fee.amount || 0), 0);
-    const platformRevenue = studentOrderRevenue + Math.round(platformFeesRevenue);
-    const takeRate = gmv > 0 ? ((studentOrderRevenue / gmv) * 100).toFixed(1) : '20.0';
+    const grossRevenue = studentOrderRevenue + Math.round(platformFeesRevenue);
+    const platformRevenue = Math.max(0, Math.round(grossRevenue - totalRefundsDeducted));
+    const takeRate = gmv > 0 ? ((studentOrderRevenue / (rawGMV || 1)) * 100).toFixed(1) : '20.0';
 
     // Compute Category breakdown dynamically from actual courses
     const categoryCountMap = {};
@@ -165,6 +171,7 @@ export class SuperAdminService {
         orders: totalOrders,
         ordersGrowth: '+11.2%',
         refunds: refundsCount,
+        totalRefundedAmount: totalRefundsDeducted,
         payouts: payoutsCount,
         pendingVerifications: pendingVerificationsCount,
       },
@@ -1154,11 +1161,13 @@ export class SuperAdminService {
     if (recipientEmail) {
       try {
         const appOrigin = getAppOrigin();
+        const refundAmount = profile.registrationFeeAmount || user?.registrationFeeAmount || 0;
         const emailRes = await sendInstructorApplicationRejectedEmail({
           to: recipientEmail,
           instructorName: recipientName,
           reason: reason.trim(),
           resubmitUrl: `${appOrigin}/instructor/onboarding`,
+          refundAmount,
         });
         historyItem.notificationSent = true;
         historyItem.notificationMessageId = emailRes?.messageId;
@@ -1519,19 +1528,123 @@ export class SuperAdminService {
 
     return refunds.map((ref) => ({
       id: ref._id.toString(),
+      _id: ref._id.toString(),
       refundId: ref.refundId || `#REF${ref._id.toString().slice(-6).toUpperCase()}`,
-      orderId: ref.orderId?.orderId || (ref.orderId?._id ? `#ORD${ref.orderId._id.toString().slice(-6).toUpperCase()}` : 'N/A'),
+      orderId: ref.orderId?.orderId || ref.orderNumber || (ref.orderId?._id ? `#ORD${ref.orderId._id.toString().slice(-6).toUpperCase()}` : 'DIRECT-REFUND'),
       user: [ref.userId?.firstName, ref.userId?.lastName].filter(Boolean).join(' ') || ref.userId?.email || 'Student',
+      userEmail: ref.userId?.email || '',
+      userId: ref.userId?._id?.toString() || (typeof ref.userId === 'string' ? ref.userId : ''),
       amount: ref.amount || 0,
       reason: ref.reason || 'Student refund request',
       status: ref.status || 'PENDING',
       date: ref.createdAt ? new Date(ref.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A',
+      createdAt: ref.createdAt,
     }));
+  }
+
+  static async createRefund({ userId, orderId, orderNumber, amount, reason, status = 'APPROVED', actorId }) {
+    if (!userId) {
+      throw new Error('User/Student recipient is required for refund processing.');
+    }
+    const refundAmount = Number(amount);
+    if (!refundAmount || refundAmount <= 0) {
+      throw new Error('Please specify a valid refund amount greater than 0.');
+    }
+
+    // Resolve user (can be ObjectId or email or ID string)
+    let user = null;
+    if (mongoose.isValidObjectId(userId)) {
+      user = await User.findById(userId);
+    } else {
+      user = await User.findOne({ email: String(userId).trim() });
+    }
+    if (!user) {
+      throw new Error('Target user account for refund was not found.');
+    }
+
+    // Resolve order if provided
+    let linkedOrder = null;
+    if (orderId) {
+      if (mongoose.isValidObjectId(orderId)) {
+        linkedOrder = await Order.findById(orderId);
+      } else {
+        linkedOrder = await Order.findOne({ orderId: String(orderId).trim() });
+      }
+    } else if (orderNumber) {
+      linkedOrder = await Order.findOne({ orderId: String(orderNumber).trim() });
+    }
+
+    const uniqueCode = Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+    const formattedRefundId = `#REF${uniqueCode}`;
+    const refundStatus = (status || 'APPROVED').toUpperCase();
+
+    const refundDoc = await Refund.create({
+      refundId: formattedRefundId,
+      orderId: linkedOrder ? linkedOrder._id : null,
+      orderNumber: linkedOrder ? linkedOrder.orderId : (orderNumber || 'DIRECT-REFUND'),
+      userId: user._id,
+      amount: refundAmount,
+      currency: 'INR',
+      reason: reason ? String(reason).trim() : 'Super Admin initiated refund adjustment',
+      status: refundStatus,
+      processedBy: actorId,
+      processedAt: new Date(),
+    });
+
+    // If status is APPROVED / COMPLETED / PROCESSED, create financial ledger debit
+    if (['APPROVED', 'COMPLETED', 'PROCESSED'].includes(refundStatus)) {
+      await FinancialLedger.create({
+        type: 'REFUND',
+        amount: refundAmount,
+        direction: 'DEBIT',
+        userId: user._id,
+        orderId: linkedOrder ? linkedOrder._id : undefined,
+        referenceId: refundDoc._id.toString(),
+        currency: 'INR',
+        description: `Super Admin refund: ${reason || 'Direct adjustment'}`,
+      });
+
+      // Mark order status if linked
+      if (linkedOrder) {
+        linkedOrder.orderStatus = 'REFUNDED';
+        linkedOrder.paymentStatus = 'REFUNDED';
+        await linkedOrder.save();
+      }
+    }
+
+    await AuditLog.create({
+      actorId,
+      action: 'INITIATE_SUPER_ADMIN_REFUND',
+      resourceType: 'Refund',
+      resourceId: refundDoc._id.toString(),
+      metadata: {
+        refundId: formattedRefundId,
+        amount: refundAmount,
+        userId: user._id.toString(),
+        reason,
+        orderId: linkedOrder ? linkedOrder._id.toString() : null,
+      },
+    });
+
+    return {
+      id: refundDoc._id.toString(),
+      _id: refundDoc._id.toString(),
+      refundId: formattedRefundId,
+      orderId: linkedOrder?.orderId || refundDoc.orderNumber || 'DIRECT-REFUND',
+      user: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+      userEmail: user.email,
+      userId: user._id.toString(),
+      amount: refundAmount,
+      reason: refundDoc.reason,
+      status: refundStatus,
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      createdAt: refundDoc.createdAt,
+    };
   }
 
   static async processRefund(refundId, { status, actorId }) {
     const ref = await Refund.findByIdAndUpdate(refundId, { status: status.toUpperCase() }, { new: true });
-    if (ref) {
+    if (ref && ['APPROVED', 'COMPLETED', 'PROCESSED'].includes(status.toUpperCase())) {
       await FinancialLedger.create({
         type: 'REFUND',
         amount: ref.amount || 0,
