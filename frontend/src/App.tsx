@@ -25,6 +25,7 @@ import { OfferingDetailPage } from './pages/OfferingDetailPage';
 import { StudentProfilePage } from './pages/StudentProfilePage';
 import { StudentOnboardingPage } from './pages/StudentOnboardingPage';
 import { LiveWebinarRoomPage } from './pages/LiveWebinarRoomPage';
+import { WebinarLobbyPage } from './pages/WebinarLobbyPage';
 import { SkillPassportPage } from './pages/SkillPassportPage';
 import { MentorshipDirectoryPage } from './pages/mentorship/MentorshipDirectoryPage';
 
@@ -91,6 +92,7 @@ export const App: React.FC = () => {
             <Route path="/instructors" element={<InstructorsPage />} />
             <Route path="/mentorship" element={<MentorshipDirectoryPage />} />
             <Route path="/webinars" element={<WebinarsPage />} />
+            <Route path="/webinars/lobby/:roomCode" element={<WebinarLobbyPage />} />
             <Route path="/webinars/live/:roomCode" element={<LiveWebinarRoomPage />} />
             <Route path="/webinar/live/:roomCode" element={<LiveWebinarRoomPage />} />
             <Route path="/cart" element={<CartPage />} />

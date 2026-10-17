@@ -80,6 +80,8 @@ export interface LiveRoomState {
   actualStartedAt?: string | null;
   actualEndedAt?: string | null;
   status: 'SCHEDULED' | 'STARTING' | 'LIVE' | 'COMPLETED' | 'CANCELLED';
+  restartCount?: number;
+  canRestart?: boolean;
   price: number;
   currency: string;
   capacity: number;
@@ -110,7 +112,9 @@ export interface LiveRoomState {
     email: string;
     avatar?: string | null;
     role: string;
+    admissionStatus?: 'WAITING' | 'ADMITTED' | 'LEFT' | 'ENDED' | 'HOST' | null;
   } | null;
+  instructorOnline?: boolean;
   resources: LiveResource[];
   chatMessages: LiveChatMessage[];
   qa: LiveQA[];
@@ -140,6 +144,26 @@ export interface LiveKitTokenResponse {
     avatar?: string | null;
     role: 'HOST' | 'STUDENT';
   };
+}
+
+export interface WebinarLobbyState {
+  roomCode: string;
+  title: string;
+  status: LiveRoomState['status'];
+  startTime: string;
+  endTime: string;
+  instructor: LiveRoomState['instructor'];
+  instructorOnline: boolean;
+  isHost: boolean;
+  admissionStatus: 'WAITING' | 'ADMITTED' | 'LEFT' | 'ENDED' | 'HOST' | null;
+  waitingCount?: number;
+  waitingParticipants?: Array<{
+    userId: string;
+    name: string;
+    email: string;
+    avatar?: string | null;
+    joinedAt: string;
+  }>;
 }
 
 export const webinarsApi = {
@@ -204,6 +228,21 @@ export const webinarsApi = {
     return res.data;
   },
 
+  async joinLobby(roomCode: string): Promise<{ success: boolean; data: { status: string; roomCode: string } }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/lobby/join`);
+    return res.data;
+  },
+
+  async getLobbyState(roomCode: string): Promise<{ success: boolean; data: WebinarLobbyState }> {
+    const res = await apiClient.get(`/webinars/room/${roomCode}/lobby`);
+    return res.data;
+  },
+
+  async admitStudent(roomCode: string, userId: string): Promise<{ success: boolean; data: { userId: string; status: string } }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/admit/${userId}`);
+    return res.data;
+  },
+
   async getLiveKitToken(roomCode: string): Promise<{ success: boolean; data: LiveKitTokenResponse }> {
     const res = await apiClient.post(`/webinars/room/${roomCode}/token`);
     return res.data;
@@ -216,6 +255,14 @@ export const webinarsApi = {
 
   async endWebinar(roomCode: string): Promise<{ success: boolean; data: any }> {
     const res = await apiClient.post(`/webinars/room/${roomCode}/end`);
+    return res.data;
+  },
+
+  async restartWebinar(roomCode: string): Promise<{
+    success: boolean;
+    data: { success: boolean; status: string; restartCount: number; notificationsSent: boolean; message: string };
+  }> {
+    const res = await apiClient.post(`/webinars/room/${roomCode}/restart`);
     return res.data;
   },
 
@@ -289,7 +336,7 @@ export const webinarsApi = {
     return res.data;
   },
 
-  async reopenOrRejoinRoom(roomCode: string): Promise<{ success: boolean; data?: any }> {
+  async reopenOrRejoinRoom(roomCode: string): Promise<{ success: boolean; data?: { success: boolean; status: string; message: string } }> {
     const res = await apiClient.post(`/webinars/room/${roomCode}/reopen`);
     return res.data;
   },

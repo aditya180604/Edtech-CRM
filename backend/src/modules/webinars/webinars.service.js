@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import { AccessToken } from 'livekit-server-sdk';
-import { Webinar, User, Booking } from '../../models/index.js';
+import { Webinar, User, Booking, Notification } from '../../models/index.js';
 import { runWebinarExpiryCheck } from './webinarExpiry.cron.js';
+import { publishWebinarAdmission, publishWebinarLobbyUpdate } from '../../services/realtime.service.js';
 
 // In-memory heartbeat presence map for rooms: roomCode -> Map(userIdString, lastSeenTimestamp)
 const roomPresenceHeartbeatMap = new Map();
@@ -14,6 +15,18 @@ const roomSignalQueueMap = new Map();
 
 // In-memory latest offer map: roomCode -> { signal, senderId, timestamp }
 const roomLatestOfferMap = new Map();
+const PRESENCE_TIMEOUT_MS = 15000;
+
+function throwWebinarAccessError(message, statusCode = 403) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  throw error;
+}
+
+function isRoomUserOnline(roomCode, userId) {
+  const lastSeen = roomPresenceHeartbeatMap.get(roomCode)?.get(userId?.toString());
+  return Boolean(lastSeen && Date.now() - lastSeen < PRESENCE_TIMEOUT_MS);
+}
 
 export class WebinarsService {
   /**
@@ -455,75 +468,69 @@ export class WebinarsService {
     const instructorName = `${instructor.firstName || 'Instructor'} ${instructor.lastName || ''}`.trim();
     const instructorAvatar = instructor.profilePhoto || null;
     const instructorHeadline = instructor.headline || 'Lead Instructor & Workshop Host';
+    const roomCode = populated.roomCode || `wb-${populated._id.toString().slice(-8)}`;
 
     const registeredUserIds = Array.isArray(populated.registrations)
       ? populated.registrations.map((id) => id?.toString())
       : [];
 
     let isHost = false;
-    let isSuperAdmin = false;
     let isRegistered = false;
     let currentUser = null;
+    let admissionStatus = null;
 
     if (userId) {
       const user = await User.findById(userId).lean();
       if (user) {
+        const participant = (populated.waitingParticipants || []).find(
+          (entry) => entry.userId?.toString() === userId.toString()
+        );
+        admissionStatus = participant?.status || null;
         currentUser = {
           id: user._id.toString(),
           name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
           email: user.email,
           avatar: user.profilePhoto || null,
           role: user.role,
+          admissionStatus,
         };
-        isSuperAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
-        isHost = isSuperAdmin || (instructor._id && instructor._id.toString() === userId.toString());
+        isHost = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ||
+          (instructor._id && instructor._id.toString() === userId.toString());
         isRegistered = isHost || registeredUserIds.includes(userId.toString());
+        if (isHost || admissionStatus === 'ADMITTED') {
+          if (!roomPresenceHeartbeatMap.has(roomCode)) {
+            roomPresenceHeartbeatMap.set(roomCode, new Map());
+          }
+          roomPresenceHeartbeatMap.get(roomCode).set(userId.toString(), Date.now());
+          if (isHost) roomPresenceHeartbeatMap.get(roomCode).set('HOST', Date.now());
+        }
       }
     }
 
-    const isFree = (populated.price || 0) === 0;
-    const hasAccess = isHost || isRegistered || isFree;
-
-    // Automatically record attendance & registration when user with access joins
-    if (userId && (hasAccess || isHost)) {
-      try {
-        let changed = false;
-        const liveDoc = await Webinar.findById(webinar._id);
-        if (liveDoc) {
-          if (!Array.isArray(liveDoc.attendanceLogs)) liveDoc.attendanceLogs = [];
-          if (!Array.isArray(liveDoc.attendance)) liveDoc.attendance = [];
-          if (!Array.isArray(liveDoc.registrations)) liveDoc.registrations = [];
-
-          const userObjId = new mongoose.Types.ObjectId(userId);
-          if (!liveDoc.attendance.some((id) => id.toString() === userId.toString())) {
-            liveDoc.attendance.push(userObjId);
-            changed = true;
-          }
-          if (!liveDoc.registrations.some((id) => id.toString() === userId.toString())) {
-            liveDoc.registrations.push(userObjId);
-            changed = true;
-          }
-
-          const existingLog = liveDoc.attendanceLogs.find(
-            (log) => log.userId?.toString() === userId.toString() && !log.leftAt
-          );
-          if (!existingLog && currentUser) {
-            liveDoc.attendanceLogs.push({
-              userId: userObjId,
-              userName: currentUser.name || 'Student',
-              userEmail: currentUser.email || '',
-              role: isHost ? 'HOST' : 'STUDENT',
-              joinedAt: new Date(),
-              durationMinutes: 0,
-            });
-            changed = true;
-          }
-          if (changed) {
-            await liveDoc.save();
-          }
+    const hasAccess = isHost || isRegistered;
+    const canViewClassroom = isHost || admissionStatus === 'ADMITTED';
+    if (userId && (isHost || admissionStatus === 'ADMITTED')) {
+      const liveDoc = await Webinar.findById(webinar._id);
+      if (liveDoc) {
+        if (!Array.isArray(liveDoc.attendance)) liveDoc.attendance = [];
+        if (!liveDoc.attendance.some((id) => id.toString() === userId.toString())) {
+          liveDoc.attendance.push(new mongoose.Types.ObjectId(userId));
         }
-      } catch (e) {
-        // Attendance log silently saved
+        if (!Array.isArray(liveDoc.attendanceLogs)) liveDoc.attendanceLogs = [];
+        const activeLog = liveDoc.attendanceLogs.find(
+          (entry) => entry.userId?.toString() === userId.toString() && !entry.leftAt
+        );
+        if (!activeLog && currentUser) {
+          liveDoc.attendanceLogs.push({
+            userId: new mongoose.Types.ObjectId(userId),
+            userName: currentUser.name || 'Student',
+            userEmail: currentUser.email || '',
+            role: isHost ? 'HOST' : 'STUDENT',
+            joinedAt: new Date(),
+            durationMinutes: 0,
+          });
+        }
+        await liveDoc.save();
       }
     }
 
@@ -569,6 +576,7 @@ export class WebinarsService {
 
     // Format Attendees (Host + Connected Students)
     const attendeesMap = new Map();
+    const instructorOnline = isRoomUserOnline(roomCode, instructor._id) || isRoomUserOnline(roomCode, 'HOST');
     // 1. Host
     if (instructor._id) {
       attendeesMap.set(instructor._id.toString(), {
@@ -576,7 +584,7 @@ export class WebinarsService {
         userName: instructorName,
         userAvatar: instructorAvatar,
         role: 'HOST',
-        isOnline: true,
+        isOnline: instructorOnline,
       });
     }
 
@@ -590,7 +598,7 @@ export class WebinarsService {
             userName: log.userName || 'Student',
             userAvatar: null,
             role: log.role || 'STUDENT',
-            isOnline: !log.leftAt,
+            isOnline: !log.leftAt && isRoomUserOnline(roomCode, idStr),
             joinedAt: log.joinedAt,
           });
         }
@@ -607,7 +615,7 @@ export class WebinarsService {
             userName: reg.firstName ? `${reg.firstName} ${reg.lastName || ''}`.trim() : 'Registered Student',
             userAvatar: reg.profilePhoto || null,
             role: 'STUDENT',
-            isOnline: true,
+            isOnline: false,
           });
         }
       }
@@ -620,13 +628,15 @@ export class WebinarsService {
         userName: currentUser.name,
         userAvatar: currentUser.avatar,
         role: isHost ? 'HOST' : 'STUDENT',
-        isOnline: true,
+        isOnline: isHost || admissionStatus === 'ADMITTED'
+          ? isRoomUserOnline(roomCode, currentUser.id)
+          : false,
       });
     }
 
     const attendees = Array.from(attendeesMap.values());
     const onlineAttendees = attendees.filter((a) => a.isOnline !== false);
-    const onlineCount = Math.max(1, onlineAttendees.length);
+    const onlineCount = onlineAttendees.length;
     const totalAttendanceCount = Math.max(attendees.length, registeredUserIds.length, 1);
 
     // Load private notes for user
@@ -641,7 +651,7 @@ export class WebinarsService {
     return {
       id: populated._id.toString(),
       _id: populated._id.toString(),
-      roomCode: populated.roomCode || `wb-${populated._id.toString().slice(-8)}`,
+      roomCode,
       title: populated.title,
       description: populated.description || '',
       category: populated.category || 'DevOps / Cloud',
@@ -650,13 +660,21 @@ export class WebinarsService {
       actualStartedAt: populated.actualStartedAt || null,
       actualEndedAt: populated.actualEndedAt || null,
       status: populated.status || 'SCHEDULED',
+      restartCount: populated.restartCount || 0,
+      canRestart: Boolean(
+        isHost &&
+        populated.status === 'COMPLETED' &&
+        (populated.restartCount || 0) < 1 &&
+        Date.now() >= new Date(populated.startTime).getTime() &&
+        Date.now() < new Date(populated.endTime).getTime()
+      ),
       price: populated.price || 0,
       currency: populated.currency || 'INR',
       capacity: populated.capacity || 100,
       registrationsCount: totalAttendanceCount,
       attendanceCount: totalAttendanceCount,
       onlineCount,
-      attendees,
+      attendees: canViewClassroom ? attendees : [],
       instructor: {
         id: instructor._id?.toString(),
         name: instructorName,
@@ -664,22 +682,188 @@ export class WebinarsService {
         headline: instructorHeadline,
         bio: instructor.bio || '',
       },
+      instructorOnline,
       hasAccess,
       isHost,
       isRegistered,
       currentUser,
-      resources,
-      chatMessages,
-      qa,
-      raisedHands,
+      resources: canViewClassroom ? resources : [],
+      chatMessages: canViewClassroom ? chatMessages : [],
+      qa: canViewClassroom ? qa : [],
+      raisedHands: canViewClassroom ? raisedHands : [],
       userNotes,
       livekitServerUrl: process.env.LIVEKIT_URL || 'wss://edtech-livekit.internal',
-      hostStreamState: roomBroadcastStateMap.get(populated.roomCode) || {
+      hostStreamState: canViewClassroom ? roomBroadcastStateMap.get(roomCode) || {
         cameraEnabled: true,
         micEnabled: true,
         screenShareActive: false,
-      },
+      } : {},
     };
+  }
+
+  static async joinWebinarLobby(roomCode, userId) {
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (!webinar) throwWebinarAccessError('Webinar room not found', 404);
+
+    const user = await User.findById(userId).lean();
+    if (!user) throwWebinarAccessError('User not found', 404);
+    if (['COMPLETED', 'CANCELLED'].includes(webinar.status)) {
+      throwWebinarAccessError('This webinar is no longer accepting participants', 410);
+    }
+
+    const isHost = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ||
+      webinar.instructorId?.toString() === userId.toString();
+    if (isHost) return { status: 'HOST', roomCode: webinar.roomCode };
+    if (user.role !== 'STUDENT') throwWebinarAccessError('Only registered students can enter the waiting room');
+
+    const isRegistered = (webinar.registrations || []).some((id) => id.toString() === userId.toString());
+    if (!isRegistered) throwWebinarAccessError('Register for this webinar before joining the waiting room');
+
+    const roomParticipants = webinar.waitingParticipants || [];
+    const existing = roomParticipants.find((participant) => participant.userId?.toString() === userId.toString());
+    if (!existing) {
+      const participant = {
+        userId: user._id,
+        userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Student',
+        userEmail: user.email || '',
+        userAvatar: user.profilePhoto || null,
+        status: 'WAITING',
+        joinedAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const added = await Webinar.updateOne(
+        { _id: webinar._id, 'waitingParticipants.userId': { $ne: user._id } },
+        { $push: { waitingParticipants: participant } }
+      );
+      if (!added.modifiedCount) {
+        await Webinar.updateOne(
+          { _id: webinar._id, waitingParticipants: { $elemMatch: { userId: user._id, status: 'LEFT' } } },
+          { $set: { 'waitingParticipants.$.status': 'WAITING', 'waitingParticipants.$.updatedAt': new Date() } }
+        );
+      }
+    } else if (existing.status === 'LEFT') {
+      await Webinar.updateOne(
+        { _id: webinar._id, waitingParticipants: { $elemMatch: { userId: user._id, status: 'LEFT' } } },
+        { $set: { 'waitingParticipants.$.status': 'WAITING', 'waitingParticipants.$.updatedAt': new Date() } }
+      );
+    }
+
+    if (!roomPresenceHeartbeatMap.has(webinar.roomCode)) {
+      roomPresenceHeartbeatMap.set(webinar.roomCode, new Map());
+    }
+    roomPresenceHeartbeatMap.get(webinar.roomCode).set(userId.toString(), Date.now());
+    publishWebinarLobbyUpdate(webinar.instructorId, webinar.roomCode);
+
+    const updated = await Webinar.findById(webinar._id).select('waitingParticipants').lean();
+    const state = updated?.waitingParticipants?.find((participant) => participant.userId?.toString() === userId.toString());
+    return { status: state?.status || 'WAITING', roomCode: webinar.roomCode };
+  }
+
+  static async getWebinarLobbyState(roomCode, userId) {
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (!webinar) throwWebinarAccessError('Webinar room not found', 404);
+    const user = await User.findById(userId).lean();
+    if (!user) throwWebinarAccessError('User not found', 404);
+
+    const isHost = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ||
+      webinar.instructorId?.toString() === userId.toString();
+    if (!isHost && !(webinar.registrations || []).some((id) => id.toString() === userId.toString())) {
+      throwWebinarAccessError('Register for this webinar before joining the waiting room');
+    }
+
+    if (!roomPresenceHeartbeatMap.has(webinar.roomCode)) {
+      roomPresenceHeartbeatMap.set(webinar.roomCode, new Map());
+    }
+    roomPresenceHeartbeatMap.get(webinar.roomCode).set(userId.toString(), Date.now());
+    if (isHost) roomPresenceHeartbeatMap.get(webinar.roomCode).set('HOST', Date.now());
+
+    const populated = await Webinar.findById(webinar._id)
+      .populate('instructorId', 'firstName lastName profilePhoto headline')
+      .select('title status startTime endTime instructorId waitingParticipants')
+      .lean();
+    const instructor = populated.instructorId || {};
+    const participants = populated.waitingParticipants || [];
+    const currentParticipant = participants.find((entry) => entry.userId?.toString() === userId.toString());
+    const waiting = isHost
+      ? participants
+          .filter((entry) => entry.status === 'WAITING')
+          .map((entry) => ({
+            userId: entry.userId.toString(),
+            name: entry.userName,
+            email: entry.userEmail,
+            avatar: entry.userAvatar,
+            joinedAt: entry.joinedAt,
+          }))
+          .sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime())
+      : [];
+
+    return {
+      roomCode: webinar.roomCode,
+      title: populated.title,
+      status: populated.status,
+      startTime: populated.startTime,
+      endTime: populated.endTime,
+      instructor: {
+        id: instructor._id?.toString(),
+        name: `${instructor.firstName || 'Instructor'} ${instructor.lastName || ''}`.trim(),
+        avatar: instructor.profilePhoto || null,
+        headline: instructor.headline || '',
+      },
+      instructorOnline: isRoomUserOnline(webinar.roomCode, webinar.instructorId) ||
+        isRoomUserOnline(webinar.roomCode, 'HOST'),
+      isHost,
+      admissionStatus: isHost ? 'HOST' : currentParticipant?.status || null,
+      waitingCount: isHost ? waiting.length : undefined,
+      waitingParticipants: isHost ? waiting : undefined,
+    };
+  }
+
+  static async admitWebinarStudent(roomCode, hostId, targetUserId) {
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (!webinar) throwWebinarAccessError('Webinar room not found', 404);
+    const host = await User.findById(hostId).lean();
+    const isHost = host && (host.role === 'SUPER_ADMIN' || host.role === 'ADMIN' ||
+      webinar.instructorId?.toString() === hostId.toString());
+    if (!isHost) throwWebinarAccessError('Only the webinar instructor can admit students');
+    if (webinar.status !== 'LIVE') throwWebinarAccessError('Start the webinar before admitting students', 409);
+    if (!(webinar.registrations || []).some((id) => id.toString() === targetUserId.toString())) {
+      throwWebinarAccessError('This student is not registered for the webinar');
+    }
+
+    const participant = (webinar.waitingParticipants || []).find(
+      (entry) => entry.userId?.toString() === targetUserId.toString()
+    );
+    if (!participant || !['WAITING', 'ADMITTED'].includes(participant.status)) {
+      throwWebinarAccessError('This student is not currently waiting', 409);
+    }
+    if (participant.status !== 'ADMITTED') {
+      participant.status = 'ADMITTED';
+      participant.updatedAt = new Date();
+      await webinar.save();
+    }
+
+    publishWebinarAdmission(targetUserId, webinar.roomCode, 'ADMITTED');
+    publishWebinarLobbyUpdate(webinar.instructorId, webinar.roomCode);
+    return { userId: targetUserId.toString(), status: 'ADMITTED' };
+  }
+
+  static async assertWebinarMediaAccess(roomCode, userId) {
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (!webinar) return null;
+    if (!userId) throwWebinarAccessError('Sign in before accessing webinar media');
+    const user = await User.findById(userId).select('role').lean();
+    if (!user) throwWebinarAccessError('User not found', 404);
+    const isHost = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ||
+      webinar.instructorId?.toString() === userId.toString();
+    if (webinar.status !== 'LIVE') throwWebinarAccessError('The webinar is not live', 409);
+    if (isHost) return { webinar, user, isHost: true };
+
+    const isRegistered = (webinar.registrations || []).some((id) => id.toString() === userId.toString());
+    const isAdmitted = (webinar.waitingParticipants || []).some(
+      (entry) => entry.userId?.toString() === userId.toString() && entry.status === 'ADMITTED'
+    );
+    if (!isRegistered || !isAdmitted) throwWebinarAccessError('The instructor has not admitted you to this webinar');
+    return { webinar, user, isHost: false };
   }
 
   /**
@@ -909,24 +1093,25 @@ export class WebinarsService {
       : [];
 
     const isRegistered = isHost || registeredUserIds.includes(userId.toString());
-    const isFree = (webinar.price || 0) === 0;
-
-    // For paid webinars, must be host or registered
-    if (!isHost && !isRegistered && !isFree) {
+    if (!isHost && !isRegistered) {
       return {
         allowed: false,
-        requiresPurchase: true,
+        requiresRegistration: true,
         price: webinar.price,
         currency: webinar.currency || 'INR',
-        message: 'Ticket registration is required to join this live workshop',
+        message: 'Registration is required to join this webinar',
       };
     }
 
-    // Auto-register student if free workshop
-    if (!isRegistered && isFree) {
-      if (!Array.isArray(webinar.registrations)) webinar.registrations = [];
-      webinar.registrations.push(new mongoose.Types.ObjectId(userId));
-      await webinar.save();
+    if (webinar.status !== 'LIVE') {
+      return { allowed: false, message: 'The webinar is not live' };
+    }
+
+    const isAdmitted = isHost || (webinar.waitingParticipants || []).some(
+      (participant) => participant.userId?.toString() === userId.toString() && participant.status === 'ADMITTED'
+    );
+    if (!isAdmitted) {
+      return { allowed: false, requiresAdmission: true, message: 'The instructor has not admitted you yet' };
     }
 
     // Record attendance log
@@ -955,7 +1140,10 @@ export class WebinarsService {
       const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret_livekit_key_2026_edtech';
       const serverUrl = process.env.LIVEKIT_URL || 'wss://edtech-livekit.internal';
 
-      const roomName = webinar.roomCode || `webinar_${webinar._id.toString()}`;
+      const baseRoomName = webinar.roomCode || `webinar_${webinar._id.toString()}`;
+      const roomName = webinar.restartCount
+        ? `${baseRoomName}-restart-${webinar.restartCount}`
+        : baseRoomName;
       const identity = `user_${user._id.toString()}`;
       const userName = `${user.firstName || 'User'} ${user.lastName || ''}`.trim();
       const userRole = isHost ? 'HOST' : 'STUDENT';
@@ -988,7 +1176,7 @@ export class WebinarsService {
         role: userRole,
         isHost,
         roomCode: webinar.roomCode,
-        roomName: webinar.title,
+        roomName,
         webinarStatus: webinar.status || 'SCHEDULED',
         user: {
           id: user._id.toString(),
@@ -1112,6 +1300,9 @@ export class WebinarsService {
     if (!isHost && !isAdmin) {
       throw new Error('Only the instructor or host can start the webinar');
     }
+    if (['COMPLETED', 'CANCELLED'].includes(webinar.status)) {
+      throwWebinarAccessError('A completed or cancelled webinar cannot be restarted', 409);
+    }
 
     webinar.status = 'LIVE';
     webinar.actualStartedAt = new Date();
@@ -1173,7 +1364,24 @@ export class WebinarsService {
       });
     }
 
+    const participantsToNotify = (webinar.waitingParticipants || [])
+      .filter((participant) => ['WAITING', 'ADMITTED'].includes(participant.status))
+      .map((participant) => participant.userId?.toString())
+      .filter(Boolean);
+    (webinar.waitingParticipants || []).forEach((participant) => {
+      if (participant.status === 'WAITING') {
+        participant.status = 'LEFT';
+        participant.updatedAt = now;
+      }
+    });
     await webinar.save();
+    roomSignalQueueMap.delete(webinar.roomCode);
+    roomLatestOfferMap.delete(webinar.roomCode);
+    roomBroadcastStateMap.delete(webinar.roomCode);
+    participantsToNotify.forEach((participantId) =>
+      publishWebinarAdmission(participantId, webinar.roomCode, 'ENDED')
+    );
+    publishWebinarLobbyUpdate(webinar.instructorId, webinar.roomCode);
 
     return {
       success: true,
@@ -1183,6 +1391,106 @@ export class WebinarsService {
       totalQuestions: webinar.qa?.length || 0,
       totalMessages: webinar.chatMessages?.length || 0,
       message: 'Webinar session completed successfully',
+    };
+  }
+
+  static async restartWebinar(roomCode, userId) {
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (!webinar) throwWebinarAccessError('Webinar room not found', 404);
+    const user = await User.findById(userId).select('role').lean();
+    if (!user) throwWebinarAccessError('User not found', 404);
+
+    const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+    const isInstructor = webinar.instructorId?.toString() === userId.toString();
+    if (!isAdmin && !isInstructor) {
+      throwWebinarAccessError('Only the webinar instructor can restart this session');
+    }
+
+    const now = new Date();
+    if (now < new Date(webinar.startTime) || now >= new Date(webinar.endTime)) {
+      throwWebinarAccessError('A webinar can only be restarted between its scheduled start and end times', 409);
+    }
+    if (webinar.status !== 'COMPLETED' || (webinar.restartCount || 0) >= 1) {
+      throwWebinarAccessError('This webinar cannot be restarted again', 409);
+    }
+
+    const restartQuery = {
+      _id: webinar._id,
+      status: 'COMPLETED',
+      $and: [
+        { $or: [{ restartCount: { $lt: 1 } }, { restartCount: { $exists: false } }] },
+        { startTime: { $lte: now } },
+        { endTime: { $gt: now } },
+      ],
+    };
+    if (!isAdmin) restartQuery.instructorId = user._id;
+
+    await Webinar.updateOne(
+      { _id: webinar._id, waitingParticipants: { $exists: false } },
+      { $set: { waitingParticipants: [] } }
+    );
+    const restartedWebinar = await Webinar.findOneAndUpdate(
+      restartQuery,
+      {
+        $set: {
+          status: 'LIVE',
+          actualStartedAt: now,
+          actualEndedAt: null,
+          restartedAt: now,
+          'waitingParticipants.$[].status': 'LEFT',
+          'waitingParticipants.$[].updatedAt': now,
+        },
+        $inc: { restartCount: 1 },
+      },
+      { new: true }
+    );
+    if (!restartedWebinar) {
+      throwWebinarAccessError('This webinar was restarted already or is outside its scheduled time', 409);
+    }
+
+    roomSignalQueueMap.delete(restartedWebinar.roomCode);
+    roomLatestOfferMap.delete(restartedWebinar.roomCode);
+    roomBroadcastStateMap.delete(restartedWebinar.roomCode);
+
+    let notificationsSent = true;
+    const registeredIds = [...new Set(
+      (restartedWebinar.registrations || [])
+        .map((registeredId) => registeredId?.toString())
+        .filter((registeredId) => registeredId && registeredId !== restartedWebinar.instructorId.toString())
+    )];
+    if (registeredIds.length) {
+      try {
+        await Notification.insertMany(
+          registeredIds.map((registeredId) => ({
+            notificationId: `notif_restart_${restartedWebinar._id}_${registeredId}`,
+            userId: new mongoose.Types.ObjectId(registeredId),
+            type: 'WEBINAR_RESTARTED',
+            title: `Webinar Restarted: ${restartedWebinar.title}`,
+            message: `The instructor restarted "${restartedWebinar.title}". You can join the waiting room during the scheduled session time.`,
+            status: 'Started',
+            meetingUrl: `/webinars/lobby/${restartedWebinar.roomCode}`,
+            actionUrl: `/webinars/lobby/${restartedWebinar.roomCode}`,
+            entityType: 'WEBINAR',
+            entityId: restartedWebinar._id,
+            isRead: false,
+            createdAt: now,
+          })),
+          { ordered: false }
+        );
+      } catch (error) {
+        notificationsSent = false;
+        console.error(`[Webinar restart] Session ${restartedWebinar.roomCode} restarted but student notifications could not all be saved:`, error);
+      }
+    }
+
+    publishWebinarLobbyUpdate(restartedWebinar.instructorId, restartedWebinar.roomCode);
+    return {
+      success: true,
+      status: restartedWebinar.status,
+      restartCount: restartedWebinar.restartCount,
+      restartedAt: restartedWebinar.restartedAt,
+      notificationsSent,
+      message: 'Webinar restarted within its scheduled time window',
     };
   }
 
@@ -1218,6 +1526,7 @@ export class WebinarsService {
       throw new Error('Webinar not found');
     }
 
+    await this.assertWebinarMediaAccess(roomCodeOrId, userId);
     const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
 
@@ -1256,6 +1565,7 @@ export class WebinarsService {
 
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) throw new Error('Webinar not found');
+    await this.assertWebinarMediaAccess(roomCodeOrId, userId);
 
     const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
@@ -1291,6 +1601,7 @@ export class WebinarsService {
   static async toggleUpvoteQuestion(roomCodeOrId, userId, qaId) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) throw new Error('Webinar not found');
+    await this.assertWebinarMediaAccess(roomCodeOrId, userId);
 
     if (!Array.isArray(webinar.qa)) webinar.qa = [];
     const question = webinar.qa.find((q) => (q.id === qaId || q._id?.toString() === qaId));
@@ -1325,9 +1636,9 @@ export class WebinarsService {
   static async answerQuestion(roomCodeOrId, userId, qaId) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) throw new Error('Webinar not found');
+    const access = await this.assertWebinarMediaAccess(roomCodeOrId, userId);
 
-    const isHost =
-      (webinar.instructorId && webinar.instructorId.toString() === userId.toString());
+    const isHost = access.isHost;
     const user = await User.findById(userId).lean();
     const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
@@ -1356,6 +1667,7 @@ export class WebinarsService {
   static async toggleRaiseHand(roomCodeOrId, userId) {
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) throw new Error('Webinar not found');
+    await this.assertWebinarMediaAccess(roomCodeOrId, userId);
 
     const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
@@ -1468,12 +1780,28 @@ export class WebinarsService {
    * Leave room attendance log
    */
   static async recordAttendanceLeave(roomCodeOrId, userId) {
-    if (userId && roomCodeOrId && roomPresenceHeartbeatMap.has(roomCodeOrId)) {
-      roomPresenceHeartbeatMap.get(roomCodeOrId).delete(userId.toString());
-    }
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (!webinar) {
+      if (userId && roomCodeOrId && roomPresenceHeartbeatMap.has(roomCodeOrId)) {
+        roomPresenceHeartbeatMap.get(roomCodeOrId).delete(userId.toString());
+      }
       return { success: true };
+    }
+    if (!userId) throwWebinarAccessError('Authentication required to leave the webinar', 401);
+    const userIdString = userId.toString();
+    const isHost = webinar.instructorId?.toString() === userIdString;
+    const isRegistered = (webinar.registrations || []).some((id) => id.toString() === userIdString);
+    if (!isHost && !isRegistered) throwWebinarAccessError('Not authorized to leave this webinar');
+    roomPresenceHeartbeatMap.get(webinar.roomCode)?.delete(userIdString);
+    const lobbyParticipant = (webinar.waitingParticipants || []).find(
+      (participant) => participant.userId?.toString() === userIdString
+    );
+    if (lobbyParticipant?.status === 'WAITING') {
+      lobbyParticipant.status = 'LEFT';
+      lobbyParticipant.updatedAt = new Date();
+      await webinar.save();
+      publishWebinarLobbyUpdate(webinar.instructorId, webinar.roomCode);
+      publishWebinarAdmission(userId, webinar.roomCode, 'LEFT');
     }
     if (!Array.isArray(webinar.attendanceLogs)) return { success: true };
 
@@ -1496,8 +1824,13 @@ export class WebinarsService {
   /**
    * Real-time host broadcast state (camera, mic, screen) update
    */
-  static updateBroadcastState(roomCode, state) {
+  static async updateBroadcastState(roomCode, state, userId) {
     if (!roomCode) return { success: false };
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (webinar) {
+      const access = await this.assertWebinarMediaAccess(roomCode, userId);
+      if (!access.isHost) throwWebinarAccessError('Only the instructor may publish webinar broadcast state');
+    }
     const current = roomBroadcastStateMap.get(roomCode) || {
       cameraEnabled: true,
       micEnabled: true,
@@ -1513,17 +1846,26 @@ export class WebinarsService {
   /**
    * WebRTC Signaling between participants in a room
    */
-  static sendSignal(roomCode, signalPayload, senderId, senderRole) {
+  static async sendSignal(roomCode, signalPayload, senderId) {
     if (!roomCode) return { success: false };
+    const webinar = await this.findWebinarDoc(roomCode);
+    let senderRole = 'PARTICIPANT';
+    if (webinar) {
+      const access = await this.assertWebinarMediaAccess(roomCode, senderId);
+      senderRole = access.isHost ? 'HOST' : 'STUDENT';
+    } else if (senderId) {
+      const sender = await User.findById(senderId).select('role').lean();
+      senderRole = sender?.role || senderRole;
+    }
     if (!roomSignalQueueMap.has(roomCode)) {
       roomSignalQueueMap.set(roomCode, []);
     }
     const queue = roomSignalQueueMap.get(roomCode);
     const signalItem = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      ...signalPayload,
       senderId: senderId || 'anon',
       senderRole: senderRole || 'PARTICIPANT',
-      ...signalPayload,
       timestamp: Date.now(),
     };
     queue.push(signalItem);
@@ -1543,21 +1885,24 @@ export class WebinarsService {
     return { success: true };
   }
 
-  static getSignals(roomCode, since = 0, excludeSenderId = null) {
+  static async getSignals(roomCode, since = 0, excludeSenderId = null, userId = null) {
     if (!roomCode) {
       return { success: true, signals: [] };
     }
+    const webinar = await this.findWebinarDoc(roomCode);
+    if (webinar) await this.assertWebinarMediaAccess(roomCode, userId);
     const queue = roomSignalQueueMap.get(roomCode) || [];
+    const effectiveExcludeSenderId = userId || excludeSenderId;
     const sinceNum = Number(since) || 0;
     let filtered = queue.filter(
-      (s) => s.timestamp > sinceNum && (!excludeSenderId || s.senderId !== excludeSenderId)
+      (s) => s.timestamp > sinceNum && (!effectiveExcludeSenderId || s.senderId !== effectiveExcludeSenderId)
     );
 
     // If joining client has not seen host offer yet, inject latest offer
     const latestOffer = roomLatestOfferMap.get(roomCode);
     if (
       latestOffer &&
-      (!excludeSenderId || latestOffer.senderId !== excludeSenderId) &&
+      (!effectiveExcludeSenderId || latestOffer.senderId !== effectiveExcludeSenderId) &&
       !filtered.some((s) => s.type === 'offer') &&
       Date.now() - latestOffer.timestamp < 30 * 60 * 1000
     ) {
@@ -1590,10 +1935,14 @@ export class WebinarsService {
     }
     const webinar = await this.findWebinarDoc(roomCodeOrId);
     if (webinar) {
-      webinar.status = 'LIVE';
-      webinar.actualEndedAt = null;
-      await webinar.save();
-      return { success: true, status: 'LIVE', message: 'Webinar room reopened' };
+      const user = userId ? await User.findById(userId).select('role').lean() : null;
+      const isHost = user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ||
+        webinar.instructorId?.toString() === userId.toString());
+      if (!isHost) throwWebinarAccessError('Only the webinar instructor can manage the session');
+      if (webinar.status === 'COMPLETED' || webinar.status === 'CANCELLED') {
+        throwWebinarAccessError('This webinar has ended and cannot be reopened', 409);
+      }
+      return { success: true, status: webinar.status, message: 'Webinar session is still active' };
     }
     return { success: false, message: 'Room not found' };
   }

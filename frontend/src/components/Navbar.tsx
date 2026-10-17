@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, GraduationCap, Crown, ShieldCheck, Briefcase, LogOut, LayoutDashboard, Compass, ShoppingCart, Search, Home } from 'lucide-react';
+import { Menu, X, GraduationCap, Crown, ShieldCheck, Briefcase, LogOut, LayoutDashboard, Compass, ShoppingCart, Search, Home, ChevronDown } from 'lucide-react';
 import { useAuthModal } from '../context/AuthModalContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -16,6 +16,7 @@ export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout, getRedirectPathForRole } = useAuth();
   const { itemCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [hasUpcomingWebinars, setHasUpcomingWebinars] = useState<boolean>(false);
 
   // Check for active / scheduled upcoming webinars
@@ -172,38 +173,80 @@ export const Navbar: React.FC = () => {
                 </button>
               </div>
             ) : (
-              /* Authenticated User Profile Badge & Logout */
+              /* Authenticated User Profile Badge with Dropdown */
               <div className="hidden sm:flex items-center gap-3">
                 <NotificationBell />
-                <Link
-                  to={dashboardPath}
-                  className="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-[#FA5A36] text-white font-medium text-xs flex items-center justify-center shadow-xs">
-                    {userInitials}
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs font-medium text-slate-900 leading-tight">
-                      {user?.firstName || 'User'} {user?.lastName || ''}
-                    </p>
-                    {roleInfo && RoleIcon && (
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.2 rounded-md border ${roleInfo.bg}`}>
-                        <RoleIcon className="w-2.5 h-2.5" />
-                        {roleInfo.label}
-                      </span>
-                    )}
-                  </div>
-                </Link>
 
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl border border-transparent hover:border-red-100 transition-colors cursor-pointer"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProfileDropdownOpen(!profileDropdownOpen);
+                    }}
+                    className="flex items-center gap-2.5 p-1.5 pr-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors cursor-pointer select-none group"
+                    title="Profile & Options"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-[#FA5A36] text-white font-medium text-xs flex items-center justify-center shadow-xs">
+                      {userInitials}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xs font-medium text-slate-900 leading-tight">
+                        {user?.firstName || 'User'} {user?.lastName || ''}
+                      </p>
+                      {roleInfo && RoleIcon && (
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.2 rounded-md border ${roleInfo.bg}`}>
+                          <RoleIcon className="w-2.5 h-2.5" />
+                          {roleInfo.label}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Profile Dropdown Menu */}
+                  {profileDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setProfileDropdownOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-100 shadow-xl p-2 z-50 space-y-1 animate-in fade-in slide-in-from-top-1">
+                        <div className="px-3 py-2 border-b border-slate-100">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {user?.firstName || 'User'} {user?.lastName || ''}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {user?.email || ''}
+                          </p>
+                        </div>
+
+                        <Link
+                          to={dashboardPath}
+                          onClick={() => setProfileDropdownOpen(false)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          <LayoutDashboard className="w-4 h-4 text-slate-400" />
+                          <span>Dashboard</span>
+                        </Link>
+
+                        <div className="pt-1 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setProfileDropdownOpen(false);
+                              await handleLogout();
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          >
+                            <LogOut className="w-4 h-4 text-rose-500" />
+                            <span>Sign Out</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 

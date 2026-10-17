@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import {
   Video,
   VideoOff,
@@ -45,10 +45,12 @@ import {
   type LiveChatMessage,
   type LiveQA,
   type RaisedHandItem,
+  type WebinarLobbyState,
 } from '../api/webinars';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCart } from '../context/CartContext';
+import { connectRealtimeSocket } from '../realtime/socket';
 import type { Room as LiveKitRoom } from 'livekit-client';
 
 // =========================================================================
@@ -87,7 +89,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   onLeave,
   onRefreshRoom,
 }) => {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const { success, info, error: toastError } = useToast();
 
   const isHost = role === 'HOST';
@@ -190,6 +192,48 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   // Modals & Controls
   const [showEndModal, setShowEndModal] = useState(false);
   const [isEndingSession, setIsEndingSession] = useState(false);
+  const [waitingParticipants, setWaitingParticipants] = useState<NonNullable<WebinarLobbyState['waitingParticipants']>>([]);
+  const [admittingStudentId, setAdmittingStudentId] = useState<string | null>(null);
+
+  const refreshWaitingParticipants = useCallback(async () => {
+    if (!isHost || isMentorship) return;
+    try {
+      const response = await webinarsApi.getLobbyState(roomState.roomCode);
+      if (response.success && response.data.isHost) {
+        setWaitingParticipants(response.data.waitingParticipants || []);
+      }
+    } catch (error) {
+      console.error('Failed to refresh webinar waiting list:', error);
+    }
+  }, [isHost, isMentorship, roomState.roomCode]);
+
+  useEffect(() => {
+    if (!isHost || isMentorship) return;
+    const socket = connectRealtimeSocket(accessToken);
+    const handleLobbyUpdate = (event: { roomCode?: string }) => {
+      if (event.roomCode === roomState.roomCode) void refreshWaitingParticipants();
+    };
+    socket.on('webinar:lobby-updated', handleLobbyUpdate);
+    void refreshWaitingParticipants();
+    const refreshInterval = window.setInterval(() => void refreshWaitingParticipants(), 3000);
+    return () => {
+      window.clearInterval(refreshInterval);
+      socket.off('webinar:lobby-updated', handleLobbyUpdate);
+    };
+  }, [accessToken, isHost, isMentorship, refreshWaitingParticipants, roomState.roomCode]);
+
+  const handleAdmitStudent = async (studentId: string) => {
+    try {
+      setAdmittingStudentId(studentId);
+      await webinarsApi.admitStudent(roomState.roomCode, studentId);
+      await refreshWaitingParticipants();
+      success('Student admitted', 'The student may now enter the webinar.');
+    } catch (error: any) {
+      toastError('Admission failed', error.response?.data?.message || 'Could not admit this student.');
+    } finally {
+      setAdmittingStudentId(null);
+    }
+  };
 
   // Real-Time Connected Participants List
   const [activeParticipants, setActiveParticipants] = useState<ParticipantInfo[]>(() => {
@@ -1197,6 +1241,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
         if (res.success && res.data && mounted) {
           if (res.data.status === 'COMPLETED') {
             onWebinarEnded();
+            void onRefreshRoom();
             return;
           }
           if (res.data.chatMessages) setChatMessages(res.data.chatMessages);
@@ -2377,6 +2422,11 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
             >
               <Users className="w-3.5 h-3.5" />
               <span>Attendees</span>
+              {isHost && !isMentorship && waitingParticipants.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-[#FA5A36] text-white font-bold text-[10px] flex items-center justify-center">
+                  {waitingParticipants.length > 9 ? '9+' : waitingParticipants.length}
+                </span>
+              )}
               {raisedHands.length > 0 && (
                 <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center justify-center">
                   {raisedHands.length}
@@ -2559,6 +2609,57 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
           {/* TAB 3: ATTENDEES & RAISED HANDS */}
           {activeTab === 'attendees' && (
             <div className="flex-1 p-4 overflow-y-auto space-y-4 text-xs">
+              {isHost && !isMentorship && (
+                <section className="rounded-2xl border border-[#FA5A36]/20 bg-[#FA5A36]/5 p-3.5">
+                  <div className="mb-2.5 flex items-center justify-between">
+                    <h4 className="flex items-center gap-1.5 text-xs font-extrabold text-white">
+                      <Users className="h-4 w-4 text-[#FA5A36]" />
+                      Waiting students
+                    </h4>
+                    <span className="rounded-full bg-[#FA5A36]/15 px-2.5 py-1 text-[10px] font-bold text-[#ff9a80]">
+                      {waitingParticipants.length} waiting
+                    </span>
+                  </div>
+                  {waitingParticipants.length === 0 ? (
+                    <p className="py-2 text-[11px] text-slate-400">No students are waiting right now.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {waitingParticipants.map((student) => (
+                        <div
+                          key={student.userId}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-900/80 p-2.5"
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            {student.avatar ? (
+                              <img src={student.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                            ) : (
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 font-bold text-slate-200">
+                                {student.name?.[0] || 'S'}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-white">{student.name}</p>
+                              <p className="truncate text-[10px] text-slate-400">{student.email}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleAdmitStudent(student.userId)}
+                            disabled={roomState.status !== 'LIVE' || admittingStudentId === student.userId}
+                            className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-extrabold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {admittingStudentId === student.userId ? 'Admitting…' : 'Admit'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {roomState.status !== 'LIVE' && waitingParticipants.length > 0 && (
+                    <p className="mt-2 text-[10px] text-amber-300">Start the webinar to admit students.</p>
+                  )}
+                </section>
+              )}
+
               {/* Raised Hands Queue */}
               {raisedHands.length > 0 && (
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
@@ -3252,6 +3353,16 @@ export const LiveWebinarRoomPage: React.FC = () => {
     fetchRoom();
   }, [fetchRoom]);
 
+  useEffect(() => {
+    if (!roomState?.isHost || roomState.status !== 'SCHEDULED') return;
+    const heartbeat = window.setInterval(() => {
+      void webinarsApi.getLiveRoom(roomState.roomCode).catch((error) => {
+        console.error('Webinar instructor presence heartbeat failed:', error);
+      });
+    }, 5000);
+    return () => window.clearInterval(heartbeat);
+  }, [roomState?.isHost, roomState?.roomCode, roomState?.status]);
+
   // Host Starts Webinar Action
   const handleStartWebinar = async () => {
     if (!roomCode) return;
@@ -3400,7 +3511,7 @@ export const LiveWebinarRoomPage: React.FC = () => {
                       try {
                         const res = await webinarsApi.register(webinarId);
                         if (res.success) {
-                          success('Registration Complete', 'You now have full access to this live workshop!');
+                          success('Registration Complete', 'Your registration is confirmed. Enter the webinar waiting room while the instructor prepares.');
                           await fetchRoom();
                         }
                       } catch (err: any) {
@@ -3446,7 +3557,7 @@ export const LiveWebinarRoomPage: React.FC = () => {
 
                       const verifyRes = await webinarsApi.verifyPayment(webinarId, orderId);
                       if (verifyRes.success) {
-                        success('Payment Verified!', 'Ticket confirmed! Entering the live room now...');
+                        success('Payment Verified!', 'Ticket confirmed! Entering the webinar waiting room...');
                         await fetchRoom();
                       }
                     } catch (err: any) {
@@ -3456,7 +3567,7 @@ export const LiveWebinarRoomPage: React.FC = () => {
                   }}
                   className="w-full py-3 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#FA5A36]/30 transition cursor-pointer"
                 >
-                  {(roomState.price || 0) > 0 ? `Pay ₹${roomState.price.toLocaleString('en-IN')} & Join Live Room` : 'Register & Join Live Room Now'}
+                  {(roomState.price || 0) > 0 ? `Pay ₹${roomState.price.toLocaleString('en-IN')} & Enter Waiting Room` : 'Register & Enter Waiting Room'}
                 </button>
                 <button
                   type="button"
@@ -3476,10 +3587,8 @@ export const LiveWebinarRoomPage: React.FC = () => {
   // Session Completed State
   if (hasEnded || roomState.status === 'COMPLETED') {
     const is1on1 = roomState.category === '1-on-1 Mentorship';
-    const nowMs = new Date().getTime();
-    const endMs = roomState.endTime ? new Date(roomState.endTime).getTime() : nowMs + 3600000;
-    // Allow rejoining if it's 1-on-1 mentorship or within scheduled session window (+ 2 hours grace)
-    const canRejoinSession = is1on1 || (nowMs <= endMs + 2 * 3600000);
+    const canRejoinSession = is1on1;
+    const canRestartWebinar = !is1on1 && roomState.isHost && roomState.canRestart;
 
     const handleRejoinSession = async () => {
       try {
@@ -3490,6 +3599,25 @@ export const LiveWebinarRoomPage: React.FC = () => {
       } catch (e) {
         setHasEnded(false);
         await fetchRoom();
+      }
+    };
+
+    const handleRestartWebinar = async () => {
+      try {
+        setIsStartingLive(true);
+        const response = await webinarsApi.restartWebinar(roomState.roomCode);
+        setHasEnded(false);
+        await fetchRoom();
+        if (response.data.notificationsSent) {
+          success('Webinar restarted', 'The webinar is live again. Registered students have been notified in their dashboards.');
+        } else {
+          toastError('Webinar restarted', 'The webinar is live again, but some student notifications could not be saved.');
+        }
+      } catch (error: any) {
+        toastError('Restart unavailable', error.response?.data?.message || 'Could not restart this webinar.');
+        await fetchRoom();
+      } finally {
+        setIsStartingLive(false);
       }
     };
 
@@ -3520,13 +3648,35 @@ export const LiveWebinarRoomPage: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span>Rejoin Access:</span>
-              <strong className={canRejoinSession ? 'text-emerald-400' : 'text-slate-400'}>
-                {canRejoinSession ? 'Available Within Time Window' : 'Closed'}
+              <strong className={canRejoinSession || canRestartWebinar ? 'text-emerald-400' : 'text-slate-400'}>
+                {canRejoinSession ? 'Available' : canRestartWebinar ? 'Restart available in scheduled window' : 'Closed'}
               </strong>
             </div>
           </div>
 
-          {canRejoinSession ? (
+          {canRestartWebinar ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                You can restart this webinar once before its scheduled end time. Registered students will be notified.
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRestartWebinar()}
+                disabled={isStartingLive}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FA5A36] py-3 text-xs font-bold text-white shadow-lg shadow-[#FA5A36]/30 transition hover:bg-[#e04825] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${isStartingLive ? 'animate-spin' : ''}`} />
+                <span>{isStartingLive ? 'Restarting webinar…' : 'Restart Webinar'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/instructor')}
+                className="w-full rounded-2xl bg-slate-800 py-2.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white"
+              >
+                Back to Instructor Dashboard
+              </button>
+            </div>
+          ) : canRejoinSession ? (
             <div className="space-y-3">
               <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
                 <span>The session is within its scheduled time period. You can rejoin as many times as you need!</span>
@@ -3559,6 +3709,14 @@ export const LiveWebinarRoomPage: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (
+    !roomState.isHost &&
+    roomState.category !== '1-on-1 Mentorship' &&
+    roomState.currentUser?.admissionStatus !== 'ADMITTED'
+  ) {
+    return <Navigate to={`/webinars/lobby/${roomState.roomCode}`} replace />;
   }
 
   // Host Preflight Studio (When Host is preparing before broadcast)

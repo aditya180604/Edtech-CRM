@@ -32,7 +32,20 @@ const webinarSchema = new mongoose.Schema(
     status: { type: String, default: 'SCHEDULED', index: true }, // SCHEDULED, LIVE, COMPLETED, CANCELLED
     actualStartedAt: { type: Date },
     actualEndedAt: { type: Date },
+    restartCount: { type: Number, default: 0 },
+    restartedAt: { type: Date },
     registrations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    waitingParticipants: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        userName: { type: String, required: true },
+        userEmail: { type: String, default: '' },
+        userAvatar: { type: String, default: null },
+        status: { type: String, enum: ['WAITING', 'ADMITTED', 'LEFT'], default: 'WAITING' },
+        joinedAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now },
+      },
+    ],
     attendance: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     attendanceLogs: [
       {

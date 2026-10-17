@@ -53,6 +53,24 @@ export class WebinarsController {
     return ApiResponse.success(res, roomState, 'Live webinar room state retrieved successfully.');
   });
 
+  static joinWebinarLobby = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const result = await WebinarsService.joinWebinarLobby(roomCode, req.user.userId);
+    return ApiResponse.success(res, result, 'Waiting-room status retrieved successfully.');
+  });
+
+  static getWebinarLobbyState = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const result = await WebinarsService.getWebinarLobbyState(roomCode, req.user.userId);
+    return ApiResponse.success(res, result, 'Webinar lobby state retrieved successfully.');
+  });
+
+  static admitWebinarStudent = asyncHandler(async (req, res) => {
+    const { roomCode, userId } = req.params;
+    const result = await WebinarsService.admitWebinarStudent(roomCode, req.user.userId, userId);
+    return ApiResponse.success(res, result, 'Student admitted to the webinar.');
+  });
+
   static getLiveKitToken = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
     const userId = req.user.userId;
@@ -75,6 +93,12 @@ export class WebinarsController {
     const userId = req.user.userId;
     const result = await WebinarsService.endWebinar(roomCode, userId);
     return ApiResponse.success(res, result, 'Webinar ended successfully.');
+  });
+
+  static restartWebinar = asyncHandler(async (req, res) => {
+    const { roomCode } = req.params;
+    const result = await WebinarsService.restartWebinar(roomCode, req.user.userId);
+    return ApiResponse.success(res, result, 'Webinar restarted successfully.');
   });
 
   static sendChatMessage = asyncHandler(async (req, res) => {
@@ -132,7 +156,7 @@ export class WebinarsController {
 
   static recordAttendanceLeave = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
-    const userId = req.user?.userId || req.body.userId;
+    const userId = req.user?.userId || null;
     if (userId) {
       await WebinarsService.recordAttendanceLeave(roomCode, userId);
     }
@@ -141,22 +165,20 @@ export class WebinarsController {
 
   static updateBroadcastState = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
-    const result = WebinarsService.updateBroadcastState(roomCode, req.body);
+    const result = await WebinarsService.updateBroadcastState(roomCode, req.body, req.user?.userId || null);
     return ApiResponse.success(res, result, 'Broadcast state updated.');
   });
 
   static sendSignal = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
-    const senderId = req.user?.userId || req.body.senderId || 'anon';
-    const senderRole = req.user?.role || req.body.senderRole || 'PARTICIPANT';
-    const result = WebinarsService.sendSignal(roomCode, req.body, senderId, senderRole);
+    const result = await WebinarsService.sendSignal(roomCode, req.body, req.user?.userId || null);
     return ApiResponse.success(res, result, 'Signal sent.');
   });
 
   static getSignals = asyncHandler(async (req, res) => {
     const { roomCode } = req.params;
     const { since, excludeSenderId } = req.query;
-    const result = WebinarsService.getSignals(roomCode, since, excludeSenderId);
+    const result = await WebinarsService.getSignals(roomCode, since, excludeSenderId, req.user?.userId || null);
     return ApiResponse.success(res, result, 'Signals retrieved.');
   });
 

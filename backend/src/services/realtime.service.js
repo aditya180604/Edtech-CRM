@@ -57,3 +57,13 @@ export function publishNotification(notification) {
 export function publishConsultationRatingUpdate(ratingUpdate) {
   io?.to('mentorship:directory').emit('consultation:rating-updated', ratingUpdate);
 }
+
+export function publishWebinarLobbyUpdate(userId, roomCode) {
+  if (!io || !userId || !roomCode) return;
+  io.to(`user:${userId.toString()}`).emit('webinar:lobby-updated', { roomCode });
+}
+
+export function publishWebinarAdmission(userId, roomCode, status) {
+  if (!io || !userId || !roomCode) return;
+  io.to(`user:${userId.toString()}`).emit('webinar:admission-updated', { roomCode, status });
+}

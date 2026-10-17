@@ -10,14 +10,19 @@ function getTransporter() {
 
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT || 587);
-  // In Nodemailer: secure = false on port 587 enables STARTTLS (matching HR-Recruitment-Agent)
-  // secure = true is only for legacy implicit SSL on port 465
-  const secure = process.env.SMTP_SECURE === 'true' || (port === 465 && process.env.SMTP_SECURE !== 'false');
+
+  // In Nodemailer: secure = false on port 587 enables STARTTLS; secure = true for port 465 (SSL)
+  // Also supports SMTP_USE_TLS if provided in environment variables
+  const secure =
+    process.env.SMTP_SECURE === 'true' ||
+    (port === 465 && process.env.SMTP_SECURE !== 'false');
+
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_APP_PASSWORD;
+  // Support both standard SMTP_PASSWORD and SMTP_APP_PASSWORD
+  const pass = process.env.SMTP_APP_PASSWORD || process.env.SMTP_PASSWORD;
 
   if (!user || !pass) {
-    throw new Error('SMTP credentials are required. Configure SMTP_USER and SMTP_APP_PASSWORD.');
+    throw new Error('SMTP credentials are required. Configure SMTP_USER and SMTP_APP_PASSWORD (or SMTP_PASSWORD).');
   }
 
   transporterInstance = nodemailer.createTransport({
@@ -28,6 +33,12 @@ function getTransporter() {
       user,
       pass,
     },
+    tls: {
+      rejectUnauthorized: false, // Prevents certificate rejection in containerized / production cloud environments
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
   });
 
   return transporterInstance;
@@ -45,8 +56,9 @@ export async function sendEmail({ to, subject, html, text, attachments }) {
   }
 
   const transporter = getTransporter();
-  const fromName = process.env.EMAIL_FROM_NAME || 'VStudyOnline';
-  const fromAddress = process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER;
+  const fromName = process.env.EMAIL_FROM_NAME || 'EduTechCRM';
+  const fromAddress =
+    process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_FROM || process.env.SMTP_USER;
 
   const mailOptions = {
     from: {

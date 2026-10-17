@@ -139,20 +139,25 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
 
   const handleJoinLive = (webinar: WebinarItem) => {
     const isRegistered = webinar.isUserRegistered || localRegistered[webinar.id || webinar._id];
-    if ((webinar.price || 0) > 0 && !isRegistered) {
-      info('Ticket Required', `Please complete ticket payment of ₹${webinar.price} to join this live workshop.`);
+    if (!isRegistered) {
+      info(
+        webinar.price > 0 ? 'Ticket Required' : 'Registration Required',
+        webinar.price > 0
+          ? `Please complete ticket payment of ₹${webinar.price} to join this live workshop.`
+          : 'Please register for this webinar before joining the waiting room.'
+      );
       handleRegister(webinar);
       return;
     }
 
     if (webinar.meetingUrl) {
       if (webinar.meetingUrl.startsWith('/webinars/live/') || webinar.meetingUrl.startsWith('/webinar/live/')) {
-        navigate(webinar.meetingUrl);
+        navigate(webinar.meetingUrl.replace('/webinar/live/', '/webinars/lobby/').replace('/webinars/live/', '/webinars/lobby/'));
       } else {
         window.open(webinar.meetingUrl, '_blank', 'noopener,noreferrer');
       }
     } else if (webinar.roomCode) {
-      navigate(`/webinars/live/${webinar.roomCode}`);
+      navigate(`/webinars/lobby/${webinar.roomCode}`);
     } else {
       info('Session Starting', 'The instructor is launching the live session. Please refresh in a moment.');
     }

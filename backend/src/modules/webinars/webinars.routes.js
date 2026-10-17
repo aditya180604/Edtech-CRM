@@ -10,9 +10,13 @@ router.get('/', optionalAuthenticate, WebinarsController.getCatalog);
 
 // Live Webinar Classroom & LiveKit Real-Time Routes
 router.get('/room/:roomCode', optionalAuthenticate, WebinarsController.getLiveRoom);
+router.post('/room/:roomCode/lobby/join', authenticate, WebinarsController.joinWebinarLobby);
+router.get('/room/:roomCode/lobby', authenticate, WebinarsController.getWebinarLobbyState);
+router.post('/room/:roomCode/admit/:userId', authenticate, WebinarsController.admitWebinarStudent);
 router.post('/room/:roomCode/token', authenticate, WebinarsController.getLiveKitToken);
 router.post('/room/:roomCode/start', authenticate, WebinarsController.startWebinar);
 router.post('/room/:roomCode/end', authenticate, WebinarsController.endWebinar);
+router.post('/room/:roomCode/restart', authenticate, WebinarsController.restartWebinar);
 router.post('/room/:roomCode/chat', authenticate, WebinarsController.sendChatMessage);
 router.post('/room/:roomCode/qa', authenticate, WebinarsController.submitQuestion);
 router.post('/room/:roomCode/qa/:qaId/upvote', authenticate, WebinarsController.toggleUpvoteQuestion);
