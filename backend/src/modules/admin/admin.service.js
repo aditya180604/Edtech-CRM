@@ -937,4 +937,45 @@ export class AdminService {
       message: 'Profile updated successfully.',
     };
   }
+
+  static async changeAdminPassword(adminUserId, { currentPassword, newPassword, confirmPassword }) {
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Current password and new password are required.', 400);
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      throw new AppError('New password and confirm password do not match.', 400);
+    }
+
+    if (newPassword.length < 8) {
+      throw new AppError('New password must be at least 8 characters long.', 400);
+    }
+
+    const user = await User.findById(adminUserId).select('+passwordHash');
+    if (!user) throw new AppError('Admin account not found.', 404);
+
+    // Verify current password
+    if (user.passwordHash) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        throw new AppError('Current password provided does not match your existing password.', 400);
+      }
+    }
+
+    // Hash and store new password
+    user.passwordHash = await User.hashPassword(newPassword);
+    await user.save();
+
+    await AuditLogger.log({
+      actorId: adminUserId,
+      action: 'ADMIN_PASSWORD_UPDATED',
+      resourceType: 'USER',
+      resourceId: adminUserId,
+      newValue: { email: user.email },
+    });
+
+    return {
+      message: 'Password changed successfully. Please keep your new credentials secure.',
+    };
+  }
 }

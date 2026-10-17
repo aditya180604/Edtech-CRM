@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../../api/admin';
 import type { AdminDashboardData } from '../../api/admin';
-import { AdminSidebar } from '../../components/admin/AdminSidebar';
+import { AdminSidebar, hasAdminTabPermission } from '../../components/admin/AdminSidebar';
 import type { AdminTab } from '../../components/admin/AdminSidebar';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminOverviewTab } from '../../components/admin/tabs/AdminOverviewTab';
@@ -16,7 +16,7 @@ import { AdminSupportTab } from '../../components/admin/tabs/AdminSupportTab';
 import { AdminReportsTab } from '../../components/admin/tabs/AdminReportsTab';
 import { AdminNotificationsTab } from '../../components/admin/tabs/AdminNotificationsTab';
 import { AdminSettingsTab } from '../../components/admin/tabs/AdminSettingsTab';
-import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, Lock, ShieldAlert } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -143,48 +143,80 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Dynamic Tab Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto">
-          {currentTab === 'overview' && (
-            <AdminOverviewTab
-              data={dashboardData}
-              isLoading={isLoadingDashboard}
-              onNavigateTab={(t) => setCurrentTab(t)}
-            />
-          )}
+          {!hasAdminTabPermission(currentTab, user) ? (
+            <div className="bg-white p-8 sm:p-12 rounded-3xl border border-slate-200/80 shadow-xs max-w-xl mx-auto text-center space-y-4 my-12 animate-in fade-in">
+              <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-md shadow-rose-500/10">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold text-slate-900">Access Restricted</h2>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  You do not possess the required operational privilege to access the{' '}
+                  <strong className="text-slate-800 capitalize">{currentTab}</strong> module.
+                </p>
+              </div>
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-800 text-left max-w-md mx-auto">
+                <p className="font-semibold mb-1">Administrative Scopes Notice</p>
+                <p className="text-[11px] text-amber-700">
+                  Operational privileges are governed strictly by the Super Admin under the principle of least privilege. If you require access to this section, please contact your Super Admin.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  onClick={() => setCurrentTab('overview')}
+                  className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#e04825] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm shadow-[#FA5A36]/30"
+                >
+                  Return to Overview
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {currentTab === 'overview' && (
+                <AdminOverviewTab
+                  data={dashboardData}
+                  isLoading={isLoadingDashboard}
+                  onNavigateTab={(t) => setCurrentTab(t)}
+                  user={user}
+                />
+              )}
 
-          {currentTab === 'students' && (
-            <AdminStudentsTab onNotify={showToast} />
-          )}
+              {currentTab === 'students' && (
+                <AdminStudentsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'instructors' && (
-            <AdminInstructorsTab onNotify={showToast} />
-          )}
+              {currentTab === 'instructors' && (
+                <AdminInstructorsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'courses' && (
-            <AdminCoursesTab onNotify={showToast} />
-          )}
+              {currentTab === 'courses' && (
+                <AdminCoursesTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'payments' && (
-            <AdminPaymentsTab onNotify={showToast} />
-          )}
+              {currentTab === 'payments' && (
+                <AdminPaymentsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'consultations' && (
-            <AdminConsultationsTab onNotify={showToast} />
-          )}
+              {currentTab === 'consultations' && (
+                <AdminConsultationsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'support' && (
-            <AdminSupportTab onNotify={showToast} />
-          )}
+              {currentTab === 'support' && (
+                <AdminSupportTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'reports' && (
-            <AdminReportsTab onNotify={showToast} />
-          )}
+              {currentTab === 'reports' && (
+                <AdminReportsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'notifications' && (
-            <AdminNotificationsTab onNotify={showToast} />
-          )}
+              {currentTab === 'notifications' && (
+                <AdminNotificationsTab onNotify={showToast} />
+              )}
 
-          {currentTab === 'settings' && (
-            <AdminSettingsTab onNotify={showToast} currentUser={user} />
+              {currentTab === 'settings' && (
+                <AdminSettingsTab onNotify={showToast} currentUser={user} />
+              )}
+            </>
           )}
         </main>
       </div>

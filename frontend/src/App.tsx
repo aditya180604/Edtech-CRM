@@ -264,7 +264,7 @@ export const App: React.FC = () => {
               path="/super-admin/instructor/:instructorId"
               element={
                 <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-                  <InstructorDashboard />
+                  <SuperAdminInstructorDashboardPage />
                 </ProtectedRoute>
               }
             />

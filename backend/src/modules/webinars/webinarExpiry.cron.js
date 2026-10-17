@@ -16,17 +16,10 @@ export async function runWebinarExpiryCheck() {
       {
         status: { $in: ['SCHEDULED', 'LIVE'] },
         $or: [
-          // 1. End time has passed
+          // 1. Scheduled end time has passed
           { endTime: { $lte: now } },
-          // 2. Started 2 or more hours ago
-          { startTime: { $lte: twoHoursAgo } },
-          // 3. Created 2 or more hours ago and start time has arrived
-          {
-            $and: [
-              { createdAt: { $lte: twoHoursAgo } },
-              { startTime: { $lte: now } },
-            ],
-          },
+          // 2. Safety fallback: start time is more than 6 hours in the past
+          { startTime: { $lte: new Date(now.getTime() - 6 * 60 * 60 * 1000) } },
         ],
       },
       {

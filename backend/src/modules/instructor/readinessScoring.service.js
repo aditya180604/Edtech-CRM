@@ -282,25 +282,33 @@ export class ReadinessScoringService {
   }
 
   /**
-   * Get Readiness Report with Strict Payment Gating
-   * Before Payment -> Returns completeness guidance ONLY (no score number)
-   * After Payment  -> Returns full numerical score (0-100), breakdown, and recommendations
+   * Get Readiness Report with Quality Prediction & Transparency
+   * Provides predicted approval likelihood and lagging fields so candidates know where they stand.
    */
   static getGatedReadinessReport(profile = {}, user = {}) {
     const isPaid = Boolean(profile.registrationFeePaid || user.registrationFeePaid);
     const evaluation = this.evaluateApplication(profile, user);
+    const approvalChance = evaluation.score >= 80 ? 'High' : evaluation.score >= 55 ? 'Moderate' : 'Low';
 
     if (!isPaid) {
       return {
         isPaid: false,
         isScoreLocked: true,
+        score: evaluation.score,
+        predictedScore: evaluation.score,
+        approvalChance,
+        approvalProbability: evaluation.score,
+        breakdown: evaluation.breakdown,
+        missingItems: evaluation.missingItems,
+        laggingFields: evaluation.missingItems,
+        recommendations: evaluation.recommendations,
         guidance: {
           missingItems: evaluation.missingItems,
           recommendations: evaluation.recommendations,
           completedCount: 6 - (evaluation.missingItems.length > 0 ? 1 : 0),
-          message: 'Your numerical Application Readiness Score unlocks upon verified registration fee payment.',
+          message: 'Your predicted readiness score is shown below. Complete any lagging items to maximize your chances of admin approval.',
         },
-        readinessStatus: 'LOCKED_PENDING_PAYMENT',
+        readinessStatus: evaluation.score >= 80 ? 'HIGH' : evaluation.score >= 50 ? 'MODERATE' : 'INCOMPLETE',
       };
     }
 
@@ -308,8 +316,12 @@ export class ReadinessScoringService {
       isPaid: true,
       isScoreLocked: false,
       score: evaluation.score,
+      predictedScore: evaluation.score,
+      approvalChance,
+      approvalProbability: evaluation.score,
       breakdown: evaluation.breakdown,
       missingItems: evaluation.missingItems,
+      laggingFields: evaluation.missingItems,
       recommendations: evaluation.recommendations,
       scoringRuleVersion: evaluation.scoringRuleVersion,
       calculatedAt: evaluation.calculatedAt,

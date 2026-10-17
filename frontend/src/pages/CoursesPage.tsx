@@ -123,46 +123,6 @@ export const CoursesPage: React.FC = () => {
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
             Find the right courses, atomic topics, and certifications for your career.
           </p>
-
-          {/* Top Category Tabs matching Screen 2 */}
-          <div className="flex items-center gap-2 pt-4 overflow-x-auto pb-1 scrollbar-none">
-            <Link
-              to="/courses"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-white bg-[#FA5A36] shadow-2xs shrink-0"
-            >
-              All
-            </Link>
-            <Link
-              to="/courses"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shrink-0"
-            >
-              Courses
-            </Link>
-            <Link
-              to="/topics"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shrink-0"
-            >
-              Topics
-            </Link>
-            <Link
-              to="/instructors"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shrink-0"
-            >
-              Instructors
-            </Link>
-            <Link
-              to="/learning-paths"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shrink-0"
-            >
-              Learning Paths
-            </Link>
-            <Link
-              to="/webinars"
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shrink-0"
-            >
-              Webinars
-            </Link>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

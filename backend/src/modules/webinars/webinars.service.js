@@ -54,11 +54,6 @@ export class WebinarsService {
     const query = {
       status: { $in: ['SCHEDULED', 'LIVE'] },
       endTime: { $gt: now },
-      startTime: { $gt: twoHoursAgo },
-      $or: [
-        { startTime: { $gt: now } }, // Future scheduled
-        { createdAt: { $gt: twoHoursAgo } }, // Live today, created < 2 hrs ago
-      ],
     };
 
     if (category && category !== 'ALL') {
@@ -85,18 +80,16 @@ export class WebinarsService {
         const instructorName = `${instructor.firstName || 'Instructor'} ${instructor.lastName || ''}`.trim();
         const startTime = new Date(w.startTime);
         const endTime = new Date(w.endTime);
-        const createdAt = new Date(w.createdAt);
 
-        const isWithin2HoursOfStart = (now.getTime() - startTime.getTime()) < 2 * 60 * 60 * 1000;
-        const isWithin2HoursOfCreation = (now.getTime() - createdAt.getTime()) < 2 * 60 * 60 * 1000;
-
-        const isLive = w.status === 'LIVE' || (startTime <= now && endTime > now && isWithin2HoursOfStart && isWithin2HoursOfCreation && w.status !== 'COMPLETED');
+        const isLive = w.status === 'LIVE' || (startTime <= now && endTime > now && w.status !== 'COMPLETED');
 
         let computedStatus = w.status;
         if (isLive) {
           computedStatus = 'LIVE';
         } else if (now < startTime) {
           computedStatus = w.status === 'CANCELLED' ? 'CANCELLED' : 'SCHEDULED';
+        } else if (now < endTime && w.status !== 'COMPLETED' && w.status !== 'CANCELLED') {
+          computedStatus = 'SCHEDULED';
         } else {
           computedStatus = 'COMPLETED';
         }
@@ -337,29 +330,8 @@ export class WebinarsService {
       }
     }
 
-    // Default dynamic resources if none attached
-    const resources = Array.isArray(populated.resources) && populated.resources.length > 0
-      ? populated.resources
-      : [
-          {
-            title: `${populated.title} - Session Slides.pdf`,
-            url: '#',
-            type: 'PDF',
-            size: '2.4 MB',
-          },
-          {
-            title: 'Hands-on Practice Starter Kit.zip',
-            url: '#',
-            type: 'ZIP',
-            size: '15.8 MB',
-          },
-          {
-            title: 'Official Reference Architecture.pdf',
-            url: '#',
-            type: 'PDF',
-            size: '1.1 MB',
-          },
-        ];
+    // Dynamic resources if attached
+    const resources = Array.isArray(populated.resources) ? populated.resources : [];
 
     // Format chat messages
     const chatMessages = (populated.chatMessages || []).map((msg) => ({

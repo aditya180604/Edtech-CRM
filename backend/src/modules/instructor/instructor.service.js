@@ -1610,16 +1610,35 @@ export class InstructorService {
       submittedAt: new Date(),
     };
 
+    const existingProfile = await InstructorProfile.findOne({ userId });
+
     if (governmentId && typeof governmentId === 'object') {
+      const existingGov = existingProfile?.governmentId || {};
       profilePayload.governmentId = {
+        ...existingGov,
         ...governmentId,
-        uploadedAt: new Date(),
-        status: 'PENDING',
+        diskPath: governmentId.diskPath || existingGov.diskPath,
+        docId: governmentId.docId || existingGov.docId,
+        uploadedAt: existingGov.uploadedAt || new Date(),
+        status: existingGov.status || 'PENDING',
       };
+    } else if (existingProfile?.governmentId) {
+      profilePayload.governmentId = existingProfile.governmentId;
     }
 
     if (Array.isArray(verificationDocuments) && verificationDocuments.length > 0) {
-      profilePayload.verificationDocuments = verificationDocuments;
+      const existingDocs = existingProfile?.verificationDocuments || [];
+      profilePayload.verificationDocuments = verificationDocuments.map((doc) => {
+        const match = existingDocs.find((ed) => ed.documentType === doc.documentType || ed.fileName === doc.fileName);
+        return {
+          ...(match ? (typeof match.toObject === 'function' ? match.toObject() : match) : {}),
+          ...doc,
+          diskPath: doc.diskPath || match?.diskPath,
+          docId: doc.docId || match?.docId,
+        };
+      });
+    } else if (existingProfile?.verificationDocuments?.length) {
+      profilePayload.verificationDocuments = existingProfile.verificationDocuments;
     }
 
     const profile = await InstructorProfile.findOneAndUpdate(
@@ -1656,9 +1675,16 @@ export class InstructorService {
    * 15b. Secure Private Document Upload
    */
   static async uploadVerificationDocument(userId, { documentType, idType, fileName, fileType, dataUrl, fileSize, title }) {
-    const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedMimeTypes.includes(fileType)) {
-      throw new Error('Invalid file type. Only PDF, JPEG, PNG, and WebP files are supported.');
+    const allowedMimeTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (fileType && !allowedMimeTypes.includes(fileType)) {
+      throw new Error('Invalid file type. Only PDF, DOC, DOCX, JPEG, PNG, and WebP files are supported.');
     }
     const maxBytes = 5 * 1024 * 1024; // 5 MB
     if (fileSize && fileSize > maxBytes) {
@@ -1763,25 +1789,92 @@ export class InstructorService {
 
     if (!profile) throw new Error('Instructor profile not found.');
 
+    const target = String(docId || '').trim();
     let doc = null;
-    if (profile.governmentId?.documentUrl?.includes(docId) || profile.governmentId?.diskPath?.includes(docId)) {
+
+    const isGovRequest =
+      ['GOVERNMENT_ID', 'GOVT_ID', 'ID_PROOF', 'PASSPORT', 'AADHAAR', 'DRIVING_LICENSE', 'VOTER_ID'].includes(target.toUpperCase()) ||
+      Boolean(profile.governmentId?.documentUrl?.includes(target)) ||
+      Boolean(profile.governmentId?.diskPath?.includes(target)) ||
+      Boolean(profile.governmentId?.fileName && profile.governmentId.fileName === target);
+
+    if (isGovRequest && profile.governmentId && (profile.governmentId.fileName || profile.governmentId.documentUrl || profile.governmentId.diskPath)) {
       doc = profile.governmentId;
-    } else if (Array.isArray(profile.verificationDocuments)) {
-      doc = profile.verificationDocuments.find(
-        (d) => d.fileUrl?.includes(docId) || d.diskPath?.includes(docId) || d._id?.toString() === docId
-      );
+    } else if (Array.isArray(profile.verificationDocuments) && profile.verificationDocuments.length > 0) {
+      doc = profile.verificationDocuments.find((d) => {
+        if (!d) return false;
+        return (
+          d._id?.toString() === target ||
+          d.id === target ||
+          d.docId === target ||
+          d.documentType === target ||
+          (d.fileUrl && d.fileUrl.includes(target)) ||
+          (d.diskPath && d.diskPath.includes(target)) ||
+          (d.fileName && d.fileName === target)
+        );
+      });
     }
 
-    if (!doc || !doc.diskPath) throw new Error('Verification document not found.');
+    // Fallback: If still not matched, check if governmentId is available
+    if (!doc && profile.governmentId && (profile.governmentId.fileName || profile.governmentId.documentUrl)) {
+      doc = profile.governmentId;
+    }
+
+    if (!doc) throw new Error('Verification document record not found.');
 
     const uploadsDir = path.resolve('uploads/verification_docs');
-    const fullPath = path.join(uploadsDir, doc.diskPath);
-    if (!fs.existsSync(fullPath)) throw new Error('Document file missing on server.');
+    let fullPath = null;
+
+    // 1. Try diskPath directly
+    if (doc.diskPath) {
+      const candidate = path.join(uploadsDir, doc.diskPath);
+      if (fs.existsSync(candidate)) fullPath = candidate;
+    }
+
+    // 2. Try looking in uploadsDir if diskPath was missing or moved
+    if (!fullPath && fs.existsSync(uploadsDir)) {
+      const dirFiles = fs.readdirSync(uploadsDir);
+      const url = doc.documentUrl || doc.fileUrl || '';
+      const tokenMatch = url.match(/doc_[a-zA-Z0-9_]+/);
+      const token = tokenMatch ? tokenMatch[0] : (doc.docId || null);
+
+      if (token) {
+        const match = dirFiles.find((f) => f.includes(token));
+        if (match) fullPath = path.join(uploadsDir, match);
+      }
+
+      if (!fullPath && doc.fileName) {
+        const match = dirFiles.find((f) => f.endsWith(doc.fileName) || f.includes(doc.fileName));
+        if (match) fullPath = path.join(uploadsDir, match);
+      }
+    }
+
+    if (!fullPath || !fs.existsSync(fullPath)) {
+      throw new Error(`Document file "${doc.fileName || 'document'}" is missing on the server storage.`);
+    }
+
+    // Auto-fix diskPath on profile if it was missing
+    if (!doc.diskPath) {
+      doc.diskPath = path.basename(fullPath);
+      profile.save().catch(() => {});
+    }
+
+    // Determine correct MIME type
+    let resolvedFileType = doc.fileType;
+    if (!resolvedFileType || resolvedFileType === 'application/octet-stream') {
+      const ext = path.extname(fullPath).toLowerCase();
+      if (ext === '.pdf') resolvedFileType = 'application/pdf';
+      else if (ext === '.png') resolvedFileType = 'image/png';
+      else if (ext === '.jpg' || ext === '.jpeg') resolvedFileType = 'image/jpeg';
+      else if (ext === '.docx') resolvedFileType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (ext === '.doc') resolvedFileType = 'application/msword';
+      else resolvedFileType = 'application/octet-stream';
+    }
 
     return {
       filePath: fullPath,
-      fileName: doc.fileName || 'document',
-      fileType: doc.fileType || 'application/octet-stream',
+      fileName: doc.fileName || path.basename(fullPath),
+      fileType: resolvedFileType,
     };
   }
 

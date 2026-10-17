@@ -333,4 +333,9 @@ export const adminApi = {
     const res = await apiClient.patch('/admin/me', data);
     return res.data;
   },
+
+  async changePassword(data: { currentPassword: string; newPassword: string; confirmPassword?: string }): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.patch('/admin/change-password', data);
+    return res.data;
+  },
 };

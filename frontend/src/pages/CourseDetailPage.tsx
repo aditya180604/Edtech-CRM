@@ -48,6 +48,7 @@ import {
   HelpCircle,
   Download,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 
 export interface UniversalVideoSource {
@@ -66,21 +67,23 @@ export const resolveUniversalVideoSource = (rawUrl?: string): UniversalVideoSour
 
   // 1. YouTube
   if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+    const ytParams = '?enablejsapi=1&rel=0';
+
     const embedMatch = trimmed.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/i);
     if (embedMatch && embedMatch[1]) {
-      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${embedMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${embedMatch[1]}${ytParams}`, serviceName: 'YouTube', originalUrl: trimmed };
     }
     const vParamMatch = trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/i);
     if (vParamMatch && vParamMatch[1]) {
-      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${vParamMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${vParamMatch[1]}${ytParams}`, serviceName: 'YouTube', originalUrl: trimmed };
     }
     const shortMatch = trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/i);
     if (shortMatch && shortMatch[1]) {
-      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${shortMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${shortMatch[1]}${ytParams}`, serviceName: 'YouTube', originalUrl: trimmed };
     }
     const specialMatch = trimmed.match(/youtube\.com\/(?:shorts|live)\/([a-zA-Z0-9_-]{11})/i);
     if (specialMatch && specialMatch[1]) {
-      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${specialMatch[1]}`, serviceName: 'YouTube', originalUrl: trimmed };
+      return { type: 'embed', embedUrl: `https://www.youtube.com/embed/${specialMatch[1]}${ytParams}`, serviceName: 'YouTube', originalUrl: trimmed };
     }
     return {
       type: 'invalid_service',
@@ -195,38 +198,43 @@ export const CourseDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { user } = useAuth();
-  const { success } = useToast();
+  const { success, error: toastError } = useToast();
   const isMobile = useIsMobile(500);
-  const progressStorageKey = `edtech_course_progress_${user?._id || user?.id || 'guest'}_${slug}`;
-  const [lessonProgress, setLessonProgress] = useState<{
-    storageKey: string;
-    lessonIds: string[];
-  }>(() => {
+  const userProgressKey = `edtech_course_progress_${user?._id || user?.id || 'guest'}_${slug}`;
+  const globalProgressKey = `edtech_course_progress_global_${slug}`;
+  const watchedStorageKey = `edtech_watched_lessons_${slug}`;
+
+  const loadSavedCompletedIds = useCallback((): string[] => {
     try {
-      const stored = localStorage.getItem(progressStorageKey);
-      const parsed = stored ? JSON.parse(stored) : [];
-      return {
-        storageKey: progressStorageKey,
-        lessonIds: Array.isArray(parsed) ? parsed : [],
-      };
+      const uStored = localStorage.getItem(userProgressKey);
+      const gStored = localStorage.getItem(globalProgressKey);
+      const uArr = uStored ? JSON.parse(uStored) : [];
+      const gArr = gStored ? JSON.parse(gStored) : [];
+      return Array.from(new Set([...(Array.isArray(uArr) ? uArr : []), ...(Array.isArray(gArr) ? gArr : [])]));
     } catch {
-      return { storageKey: progressStorageKey, lessonIds: [] };
+      return [];
     }
-  });
-  const completedLessonIds =
-    lessonProgress.storageKey === progressStorageKey ? lessonProgress.lessonIds : [];
+  }, [userProgressKey, globalProgressKey]);
+
+  const [completedLessonIds, setCompletedLessonIdsState] = useState<string[]>(() => loadSavedCompletedIds());
+  const completedLessonIdsRef = React.useRef<string[]>(completedLessonIds);
+
+  useEffect(() => {
+    completedLessonIdsRef.current = completedLessonIds;
+  }, [completedLessonIds]);
+
   const setCompletedLessonIds = useCallback(
     (next: string[] | ((previous: string[]) => string[])) => {
-      setLessonProgress((current) => {
-        const previous =
-          current.storageKey === progressStorageKey ? current.lessonIds : [];
-        return {
-          storageKey: progressStorageKey,
-          lessonIds: typeof next === 'function' ? next(previous) : next,
-        };
+      setCompletedLessonIdsState((prev) => {
+        const nextIds = typeof next === 'function' ? next(prev) : next;
+        try {
+          localStorage.setItem(userProgressKey, JSON.stringify(nextIds));
+          localStorage.setItem(globalProgressKey, JSON.stringify(nextIds));
+        } catch {}
+        return nextIds;
       });
     },
-    [progressStorageKey]
+    [userProgressKey, globalProgressKey]
   );
   const [courseData, setCourseData] = useState<CourseDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -280,13 +288,12 @@ export const CourseDetailPage: React.FC = () => {
               }
             }).catch(() => {});
           }
-          const completedIds = Array.isArray(res.data.completedLessonIds)
+          const backendIds = Array.isArray(res.data.completedLessonIds)
             ? res.data.completedLessonIds
             : [];
-          setCompletedLessonIds(completedIds);
-          try {
-            localStorage.setItem(progressStorageKey, JSON.stringify(completedIds));
-          } catch {}
+          const localIds = loadSavedCompletedIds();
+          const merged = Array.from(new Set([...backendIds, ...localIds]));
+          setCompletedLessonIds(merged);
           // Expand all modules by default matching layout
           const initialExp: Record<string, boolean> = {};
           (res.data.syllabus || []).forEach((m) => {
@@ -301,7 +308,7 @@ export const CourseDetailPage: React.FC = () => {
       }
     };
     fetchDetails();
-  }, [progressStorageKey, setCompletedLessonIds, slug]);
+  }, [loadSavedCompletedIds, setCompletedLessonIds, slug]);
 
   const fallbackCourse =
     featuredCoursesData.find((c) => c.slug === slug) || featuredCoursesData[0];
@@ -477,87 +484,253 @@ export const CourseDetailPage: React.FC = () => {
   }, [syllabus]);
 
   const [activeLesson, setActiveLesson] = useState<any>(null);
+  const activeLessonRef = React.useRef<any>(activeLesson);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const ytPlayerRef = React.useRef<any>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState<number>(0);
+  const [watchedLessonIds, setWatchedLessonIds] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem(watchedStorageKey);
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const markLessonWatched = useCallback((id: string) => {
+    setWatchedLessonIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      try {
+        localStorage.setItem(watchedStorageKey, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [watchedStorageKey]);
+
+  const [hasStartedCourse, setHasStartedCourse] = useState<boolean>(false);
 
   useEffect(() => {
-    if (allLessons.length > 0 && !activeLesson) {
-      setActiveLesson(allLessons[0]);
-    }
-  }, [allLessons, activeLesson]);
+    activeLessonRef.current = activeLesson;
+  }, [activeLesson]);
 
-  // Load reviews and QA when enrolled
+  // Load YouTube IFrame API script dynamically if not present
   useEffect(() => {
-    if (isEnrolled && slug) {
-      coursesApi
-        .getMyReview(slug)
-        .then((res) => {
-          if (res.success && res.data) {
-            const data: any = res.data;
-            const rev = data.review !== undefined ? data.review : data;
-            if (rev) {
-              setExistingReview(rev);
-              setUserRating(rev.rating || 5);
-              setReviewComment(rev.comment || rev.review || '');
-            }
-          }
-        })
-        .catch(() => {});
-
-      coursesApi
-        .getQuestions(slug)
-        .then((res) => {
-          if (res.success && Array.isArray(res.data)) {
-            setQuestions(res.data);
-          }
-        })
-        .catch(() => {});
+    if (typeof window !== 'undefined' && !(window as any).YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
     }
-  }, [isEnrolled, slug]);
+  }, []);
+
+  // Synchronize active lesson whenever syllabus / allLessons loads
+  useEffect(() => {
+    if (allLessons.length > 0) {
+      const exists = activeLesson && allLessons.some((l) => l.id === activeLesson.id);
+      if (!exists) {
+        const firstIncomplete = allLessons.find((l) => !completedLessonIds.includes(l.id)) || allLessons[0];
+        setActiveLesson(firstIncomplete);
+      }
+    }
+  }, [allLessons, activeLesson, completedLessonIds]);
 
   const progressPercent =
     allLessons.length > 0
       ? Math.round((completedLessonIds.length / allLessons.length) * 100)
       : 0;
 
-  const handleToggleLessonComplete = async (lessonId: string) => {
-    if (!slug) return;
-    const isCurrentlyCompleted = completedLessonIds.includes(lessonId);
-    const nextCompleted = !isCurrentlyCompleted;
+  const hasVideo = Boolean(activeLesson?.videoUrl?.trim());
+  const isLessonCompleted = Boolean(activeLesson && completedLessonIds.includes(activeLesson.id));
+  const isLessonWatched = Boolean(activeLesson && watchedLessonIds.includes(activeLesson.id));
+  const canMarkComplete = !hasVideo || isLessonCompleted || isLessonWatched;
 
-    // Optimistic UI update
-    setCompletedLessonIds((prev) => {
-      const next = isCurrentlyCompleted
-        ? prev.filter((id) => id !== lessonId)
-        : [...prev, lessonId];
+  const handleToggleLessonComplete = useCallback(
+    async (lessonId: string, forceComplete = false) => {
+      if (!slug) return;
+      const isCurrentlyCompleted = completedLessonIdsRef.current.includes(lessonId);
+      if (forceComplete && isCurrentlyCompleted) return;
+
+      // Gated completion rule: Student cannot manually mark as complete without watching the full video
+      if (!isCurrentlyCompleted && !forceComplete && hasVideo && !watchedLessonIds.includes(lessonId)) {
+        toastError('Please finish watching the entire video to mark this lesson as complete.');
+        return;
+      }
+
+      const nextCompleted = forceComplete ? true : !isCurrentlyCompleted;
+
+      // Optimistic UI update
+      setCompletedLessonIds((prev) => {
+        const next = nextCompleted
+          ? (prev.includes(lessonId) ? prev : [...prev, lessonId])
+          : prev.filter((id) => id !== lessonId);
+        return next;
+      });
+
       try {
-        localStorage.setItem(progressStorageKey, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+        const res = await coursesApi.updateProgress(slug, {
+          lessonId,
+          topicId: activeLessonRef.current?.topicId,
+          completed: nextCompleted,
+        });
+        if (res.success && res.data) {
+          if (Array.isArray(res.data.completedLessonIds)) {
+            setCompletedLessonIds(res.data.completedLessonIds);
+            try {
+              localStorage.setItem(userProgressKey, JSON.stringify(res.data.completedLessonIds));
+              localStorage.setItem(globalProgressKey, JSON.stringify(res.data.completedLessonIds));
+            } catch {}
+          }
+          if (nextCompleted) {
+            if (forceComplete) {
+              success('Lesson auto-completed! You finished watching the video lecture.');
+            } else {
+              success('Lesson marked as completed! Progress synced.');
+            }
+          } else {
+            success('Lesson marked as incomplete.');
+          }
+        }
+      } catch (err: any) {
+        console.warn('Progress sync error:', err);
+      }
+    },
+    [slug, hasVideo, watchedLessonIds, userProgressKey, globalProgressKey, setCompletedLessonIds, success, toastError]
+  );
+
+  // Auto-complete lesson automatically when full video is viewed
+  const handleAutoMarkComplete = useCallback(
+    (targetId?: string) => {
+      const id = targetId || activeLessonRef.current?.id;
+      if (!id) return;
+      markLessonWatched(id);
+      if (!completedLessonIdsRef.current.includes(id)) {
+        handleToggleLessonComplete(id, true);
+      }
+    },
+    [handleToggleLessonComplete, markLessonWatched]
+  );
+
+  // Initialize YouTube Iframe API connection and listener
+  const initYouTubePlayer = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const iframe = document.getElementById('active-lesson-youtube-iframe') as HTMLIFrameElement | null;
+    if (!iframe) return;
 
     try {
-      const res = await coursesApi.updateProgress(slug, {
-        lessonId,
-        topicId: activeLesson?.topicId,
-        completed: nextCompleted,
-      });
-      if (res.success && res.data) {
-        if (Array.isArray(res.data.completedLessonIds)) {
-          setCompletedLessonIds(res.data.completedLessonIds);
-          try {
-            localStorage.setItem(
-              progressStorageKey,
-              JSON.stringify(res.data.completedLessonIds)
-            );
-          } catch {}
+      iframe.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), '*');
+    } catch {}
+
+    const YT = (window as any).YT;
+    if (YT && YT.Player) {
+      try {
+        if (ytPlayerRef.current?.destroy) {
+          try { ytPlayerRef.current.destroy(); } catch {}
         }
-        if (nextCompleted) {
-          success('Lesson marked as completed! Progress synced.');
-        } else {
-          success('Lesson marked as incomplete.');
-        }
+        ytPlayerRef.current = new YT.Player('active-lesson-youtube-iframe', {
+          events: {
+            onStateChange: (event: any) => {
+              // 0 = YT.PlayerState.ENDED
+              if (event.data === 0) {
+                handleAutoMarkComplete();
+              }
+            },
+          },
+        });
+      } catch (e) {
+        console.warn('YT Player init notice:', e);
       }
-    } catch (err: any) {
-      console.warn('Progress sync error:', err);
+    }
+  }, [handleAutoMarkComplete]);
+
+  // Periodic progress tracker for YouTube player
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+        try {
+          const curr = ytPlayerRef.current.getCurrentTime();
+          const dur = ytPlayerRef.current.getDuration();
+          if (typeof curr === 'number') setCurrentVideoTime(curr);
+          if (dur > 0 && (curr >= dur * 0.95 || curr >= dur - 2)) {
+            handleAutoMarkComplete();
+          }
+        } catch {}
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [handleAutoMarkComplete]);
+
+  // Listen for YouTube postMessage API video completion & timeupdate events
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (!data) return;
+
+        const currentId = activeLessonRef.current?.id;
+        if (!currentId) return;
+
+        if (data.event === 'onStateChange' && (data.info === 0 || data.data === 0)) {
+          handleAutoMarkComplete(currentId);
+        } else if (data.event === 'infoDelivery' && data.info) {
+          if (data.info.playerState === 0) {
+            handleAutoMarkComplete(currentId);
+          }
+          if (typeof data.info.currentTime === 'number') {
+            setCurrentVideoTime(data.info.currentTime);
+          }
+          if (
+            typeof data.info.currentTime === 'number' &&
+            typeof data.info.duration === 'number' &&
+            data.info.duration > 0
+          ) {
+            if (data.info.currentTime >= data.info.duration * 0.95 || data.info.currentTime >= data.info.duration - 2) {
+              handleAutoMarkComplete(currentId);
+            }
+          }
+        }
+      } catch {
+        // Safe to ignore non-JSON messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleAutoMarkComplete]);
+
+  // In-video 10-second rewind handler (No forward button is provided per strict requirement)
+  const handleRewind10Seconds = () => {
+    // 1. YouTube API player
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.seekTo === 'function') {
+      try {
+        const current = typeof ytPlayerRef.current.getCurrentTime === 'function' ? ytPlayerRef.current.getCurrentTime() : currentVideoTime;
+        const newTime = Math.max(0, (current || 0) - 10);
+        ytPlayerRef.current.seekTo(newTime, true);
+        setCurrentVideoTime(newTime);
+        return;
+      } catch {}
+    }
+
+    // 2. Direct HTML5 video
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+      return;
+    }
+
+    // 3. Fallback iframe postMessage
+    const iframe = iframeRef.current || (document.getElementById('active-lesson-youtube-iframe') as HTMLIFrameElement | null);
+    if (iframe && iframe.contentWindow) {
+      const newTime = Math.max(0, (currentVideoTime || 0) - 10);
+      iframe.contentWindow.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func: 'seekTo',
+          args: [newTime, true],
+        }),
+        '*'
+      );
+      setCurrentVideoTime(newTime);
     }
   };
 
@@ -634,6 +807,7 @@ export const CourseDetailPage: React.FC = () => {
     if (!activeLesson) return;
     const currentIndex = allLessons.findIndex((l) => l.id === activeLesson.id);
     if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
+      setHasStartedCourse(true);
       setActiveLesson(allLessons[currentIndex + 1]);
     }
   };
@@ -642,6 +816,7 @@ export const CourseDetailPage: React.FC = () => {
     if (!activeLesson) return;
     const currentIndex = allLessons.findIndex((l) => l.id === activeLesson.id);
     if (currentIndex > 0) {
+      setHasStartedCourse(true);
       setActiveLesson(allLessons[currentIndex - 1]);
     }
   };
@@ -759,104 +934,215 @@ export const CourseDetailPage: React.FC = () => {
             <div className="lg:col-span-8 space-y-4 sm:space-y-5">
               {/* Active Video Player Screen */}
               <div className="relative aspect-video w-full rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 shadow-md flex flex-col justify-center items-center">
-                {(() => {
-                  const rawUrl = activeLesson?.videoUrl?.trim();
-                  if (!rawUrl) {
-                    return (
-                      <div className="text-center p-6 sm:p-8 space-y-3">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
-                          <Video className="w-6 h-6 sm:w-8 sm:h-8" />
-                        </div>
-                        <h3 className="text-sm sm:text-base font-extrabold text-white">{activeLesson?.title || 'Interactive Lesson'}</h3>
-                        <p className="text-xs text-slate-300 max-w-md mx-auto">
-                          No video file or stream has been attached to this lesson yet by the instructor.
-                        </p>
-                      </div>
-                    );
-                  }
+                {!hasStartedCourse ? (
+                  /* Course Overview Welcome Hub when student first visits the course */
+                  <div className="relative w-full h-full min-h-[280px] sm:min-h-[400px] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6 sm:p-8 flex flex-col justify-between overflow-hidden">
+                    <div className="absolute -top-20 -right-20 w-72 h-72 bg-[#FA5A36]/15 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                  const resolved = resolveUniversalVideoSource(rawUrl);
-
-                  // 1. Valid embedded iframe (YouTube, Vimeo, Loom, Google Drive, Wistia, Dailymotion, or custom embed)
-                  if (resolved?.type === 'embed' && resolved.embedUrl) {
-                    return (
-                      <iframe
-                        src={resolved.embedUrl}
-                        title={activeLesson?.title || `${resolved.serviceName || 'Video'} Lecture`}
-                        className="w-full h-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                        allowFullScreen
-                      />
-                    );
-                  }
-
-                  // 2. Direct video file stream (MP4, WebM, Cloudinary, S3, Firebase)
-                  if (resolved?.type === 'direct' && resolved.directUrl) {
-                    return (
-                      <video
-                        controls
-                        autoPlay={false}
-                        className="w-full h-full object-contain"
-                        src={resolved.directUrl}
-                        key={activeLesson?.id || resolved.directUrl}
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    );
-                  }
-
-                  // 3. Known service but incomplete or missing video ID
-                  if (resolved?.type === 'invalid_service') {
-                    return (
-                      <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-xs">
-                          <Video className="w-6 h-6 sm:w-8 sm:h-8" />
-                        </div>
-                        <h3 className="text-sm sm:text-base font-extrabold text-white">
-                          {resolved.serviceName} Link Missing Video ID
-                        </h3>
-                        <p className="text-xs text-slate-300">
-                          {resolved.errorMessage || 'The instructor link is missing a specific video identifier.'}
-                        </p>
-                        <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2 text-left">
-                          <p className="text-[11px] text-slate-400">Provided Link:</p>
-                          <p className="text-xs text-amber-300 font-mono break-all">{resolved.originalUrl}</p>
-                        </div>
-                        <a
-                          href={resolved.originalUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          Open Link in New Tab
-                        </a>
-                      </div>
-                    );
-                  }
-
-                  // 4. Default fallback: attempt to embed, or offer direct external launch
-                  return (
-                    <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FA5A36]/10 border border-[#FA5A36]/30 flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
-                        <Video className="w-6 h-6 sm:w-8 sm:h-8" />
-                      </div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white">External Lesson Resource</h3>
-                      <p className="text-xs text-slate-300">
-                        This lecture points to an external link provided by the instructor.
-                      </p>
-                      <a
-                        href={rawUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FA5A36] hover:bg-[#E04824] text-white text-xs font-bold transition shadow-md"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Open Video in External Player
-                      </a>
+                    <div className="relative z-10 flex items-center justify-between">
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#FA5A36]/20 text-[#FA5A36] border border-[#FA5A36]/30">
+                        {course.category || 'Classroom'}
+                      </span>
+                      <span className="text-xs text-slate-300 font-medium">
+                        {allLessons.length} Modules & Lessons
+                      </span>
                     </div>
-                  );
-                })()}
+
+                    <div className="relative z-10 text-center my-auto py-3 space-y-3">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-tr from-[#FA5A36] to-orange-400 flex items-center justify-center mx-auto text-white shadow-lg shadow-[#FA5A36]/20">
+                        <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white translate-x-0.5" />
+                      </div>
+                      <div className="max-w-xl mx-auto space-y-1">
+                        <h2 className="text-base sm:text-2xl font-black text-white leading-tight">
+                          {course.title}
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-300 line-clamp-2">
+                          {course.description || 'Welcome to your course! Click Start Learning below or select any lesson from the curriculum to begin.'}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHasStartedCourse(true);
+                            if (!activeLesson && allLessons.length > 0) {
+                              const firstIncomplete = allLessons.find((l) => !completedLessonIds.includes(l.id)) || allLessons[0];
+                              setActiveLesson(firstIncomplete);
+                            }
+                          }}
+                          className="px-6 py-2.5 sm:py-3 rounded-xl bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs sm:text-sm font-bold shadow-lg shadow-[#FA5A36]/30 transition hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                        >
+                          <Play className="w-4 h-4 fill-white" />
+                          <span>{completedLessonIds.length > 0 ? 'Resume Course' : 'Start Learning'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 grid grid-cols-3 gap-2 pt-3 border-t border-slate-700/60 text-center">
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] text-slate-400">Total Lessons</div>
+                        <div className="text-xs sm:text-sm font-bold text-white">{allLessons.length}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] text-slate-400">Completed</div>
+                        <div className="text-xs sm:text-sm font-bold text-emerald-400">{completedLessonIds.length} / {allLessons.length}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] text-slate-400">Status</div>
+                        <div className="text-xs sm:text-sm font-bold text-white">{progressPercent}% Done</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* In-Video 10-Second Rewind Control (Overlay in Top-Right - NO Title Clash & NO FORWARD BUTTON) */}
+                    {hasVideo && (
+                      <div className="absolute top-3 right-3 z-30 pointer-events-auto">
+                        <button
+                          type="button"
+                          onClick={handleRewind10Seconds}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-black text-white text-xs font-extrabold backdrop-blur-md border border-[#FA5A36] shadow-xl transition active:scale-95 cursor-pointer hover:border-orange-400"
+                          title="Rewind video 10 seconds"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-[#FA5A36]" />
+                          <span>10s Rewind</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {(() => {
+                      const rawUrl = activeLesson?.videoUrl?.trim();
+                      if (!rawUrl) {
+                        return (
+                          <div className="text-center p-6 sm:p-8 space-y-3">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
+                              <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                            </div>
+                            <h3 className="text-sm sm:text-base font-extrabold text-white">{activeLesson?.title || 'Interactive Lesson'}</h3>
+                            <p className="text-xs text-slate-300 max-w-md mx-auto">
+                              No video file or stream has been attached to this lesson yet by the instructor.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      const resolved = resolveUniversalVideoSource(rawUrl);
+
+                      // 1. Valid embedded iframe (YouTube, Vimeo, Loom, Google Drive, Wistia, Dailymotion, or custom embed)
+                      if (resolved?.type === 'embed' && resolved.embedUrl) {
+                        return (
+                          <>
+                            <iframe
+                              key={activeLesson?.id || resolved.embedUrl}
+                              id="active-lesson-youtube-iframe"
+                              ref={iframeRef}
+                              src={resolved.embedUrl}
+                              title={activeLesson?.title || `${resolved.serviceName || 'Video'} Lecture`}
+                              className="w-full h-full border-0"
+                              referrerPolicy="strict-origin-when-cross-origin"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                              allowFullScreen
+                              onLoad={initYouTubePlayer}
+                            />
+                            {resolved.originalUrl && (
+                              <div className="absolute bottom-2 right-2 z-20 pointer-events-auto opacity-75 hover:opacity-100 transition">
+                                <a
+                                  href={resolved.originalUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/80 hover:bg-black text-slate-300 hover:text-white text-[11px] font-semibold border border-white/10 backdrop-blur-sm shadow-md"
+                                  title="Open in external player if embed is restricted"
+                                >
+                                  <ExternalLink className="w-3 h-3 text-[#FA5A36]" />
+                                  <span>Open in {resolved.serviceName || 'External'}</span>
+                                </a>
+                              </div>
+                            )}
+                          </>
+                        );
+                      }
+
+                      // 2. Direct video file stream (MP4, WebM, Cloudinary, S3, Firebase)
+                      if (resolved?.type === 'direct' && resolved.directUrl) {
+                        return (
+                          <video
+                            ref={videoRef}
+                            controls
+                            controlsList="nodownload"
+                            autoPlay
+                            className="w-full h-full object-contain"
+                            src={resolved.directUrl}
+                            key={activeLesson?.id || resolved.directUrl}
+                            onEnded={() => handleAutoMarkComplete(activeLesson?.id)}
+                            onTimeUpdate={(e) => {
+                              const el = e.currentTarget;
+                              if (el.currentTime) setCurrentVideoTime(el.currentTime);
+                              if (el.duration && (el.currentTime >= el.duration * 0.95 || el.currentTime >= el.duration - 2)) {
+                                handleAutoMarkComplete(activeLesson?.id);
+                              }
+                            }}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        );
+                      }
+
+                      // 3. Known service but incomplete or missing video ID
+                      if (resolved?.type === 'invalid_service') {
+                        return (
+                          <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-xs">
+                              <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                            </div>
+                            <h3 className="text-sm sm:text-base font-extrabold text-white">
+                              {resolved.serviceName} Link Missing Video ID
+                            </h3>
+                            <p className="text-xs text-slate-300">
+                              {resolved.errorMessage || 'The instructor link is missing a specific video identifier.'}
+                            </p>
+                            <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2 text-left">
+                              <p className="text-[11px] text-slate-400">Provided Link:</p>
+                              <p className="text-xs text-amber-300 font-mono break-all">{resolved.originalUrl}</p>
+                            </div>
+                            <a
+                              href={resolved.originalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Open Link in New Tab
+                            </a>
+                          </div>
+                        );
+                      }
+
+                      // 4. Default fallback: attempt to embed, or offer direct external launch
+                      return (
+                        <div className="text-center p-6 sm:p-8 space-y-3 max-w-md">
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#FA5A36]/10 border border-[#FA5A36]/30 flex items-center justify-center mx-auto text-[#FA5A36] shadow-xs">
+                            <Video className="w-6 h-6 sm:w-8 sm:h-8" />
+                          </div>
+                          <h3 className="text-sm sm:text-base font-extrabold text-white">External Lesson Resource</h3>
+                          <p className="text-xs text-slate-300">
+                            This lecture points to an external link provided by the instructor.
+                          </p>
+                          <a
+                            href={rawUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FA5A36] hover:bg-[#E04824] text-white text-xs font-bold transition shadow-md"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open Video in External Player
+                          </a>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
 
               {/* Player Control Bar */}
@@ -874,9 +1160,24 @@ export const CourseDetailPage: React.FC = () => {
                   <h2 className="text-sm sm:text-lg font-black text-slate-900 truncate">
                     {activeLesson?.title || 'Select a lesson to begin'}
                   </h2>
-                  <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-500 pt-0.5">
-                    <Clock className="w-3.5 h-3.5 text-[#FA5A36]" />
-                    <span>Duration: {activeLesson?.duration || 20} mins</span>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs text-slate-500 pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-[#FA5A36]" />
+                      <span>Duration: {activeLesson?.duration || 20} mins</span>
+                    </div>
+                    {hasVideo && (
+                      isLessonWatched || isLessonCompleted ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          Video Completed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          <Lock className="w-3 h-3 text-amber-600" />
+                          Watch Video to Unlock Complete
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
 
@@ -893,23 +1194,48 @@ export const CourseDetailPage: React.FC = () => {
                     <span className="text-xs font-bold hidden min-[400px]:inline sm:hidden">Prev</span>
                   </button>
 
-                  {activeLesson && (
+                  {/* Dedicated 10-Second Backward Button in Control Bar (Clear & Accessible - NO FORWARD BUTTON) */}
+                  {hasVideo && (
                     <button
                       type="button"
-                      onClick={() => handleToggleLessonComplete(activeLesson.id)}
-                      className={`flex-1 sm:flex-none justify-center px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                        completedLessonIds.includes(activeLesson.id)
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-[#FA5A36] hover:bg-[#E04322] text-white'
-                      }`}
+                      onClick={handleRewind10Seconds}
+                      className="p-2 sm:px-3 sm:py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FA5A36] border border-[#FFCCC2] text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                      title="Rewind video 10 seconds"
                     >
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>
-                        {completedLessonIds.includes(activeLesson.id)
-                          ? 'Completed'
-                          : 'Mark as Complete'}
-                      </span>
+                      <RotateCcw className="w-4 h-4 shrink-0" />
+                      <span className="hidden min-[400px]:inline">-10s Back</span>
                     </button>
+                  )}
+
+                  {activeLesson && (
+                    canMarkComplete ? (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLessonComplete(activeLesson.id)}
+                        className={`flex-1 sm:flex-none justify-center px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                          completedLessonIds.includes(activeLesson.id)
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-[#FA5A36] hover:bg-[#E04322] text-white'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>
+                          {completedLessonIds.includes(activeLesson.id)
+                            ? 'Completed'
+                            : 'Mark as Complete'}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="flex-1 sm:flex-none justify-center px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 opacity-60 cursor-not-allowed bg-slate-100 text-slate-500 border border-slate-200"
+                        title="You must watch the full video before marking this lesson as complete"
+                      >
+                        <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        <span>Watch Video to Complete</span>
+                      </button>
+                    )
                   )}
 
                   <button
@@ -1240,7 +1566,8 @@ export const CourseDetailPage: React.FC = () => {
                                   <button
                                     key={lessonId}
                                     type="button"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      setHasStartedCourse(true);
                                       setActiveLesson({
                                         id: lessonId,
                                         title: les.title,
@@ -1250,8 +1577,8 @@ export const CourseDetailPage: React.FC = () => {
                                         topicTitle: top.title,
                                         topicId: top._id || top.id,
                                         resources: Array.isArray(les.resources) && les.resources.length > 0 ? les.resources : [],
-                                      })
-                                    }
+                                      });
+                                    }}
                                     className={`w-full p-2 sm:p-2.5 rounded-lg text-left flex items-center justify-between gap-2 transition cursor-pointer text-xs ${
                                       isSelected
                                         ? 'bg-[#FA5A36] text-white font-bold shadow-xs'

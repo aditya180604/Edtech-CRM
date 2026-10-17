@@ -63,8 +63,10 @@ router.get('/analytics', InstructorController.getAnalytics);
 router.get('/profile', InstructorController.getProfile);
 router.put('/profile', InstructorController.updateProfile);
 router.post('/profile/onboarding', InstructorController.completeOnboarding);
+router.post('/documents', InstructorController.uploadDocument);
 router.post('/documents/upload', InstructorController.uploadDocument);
 router.get('/documents/:docId', InstructorController.getDocument);
 router.get('/readiness-report', InstructorController.getReadinessReport);
 
 export const instructorRoutes = router;
+

@@ -221,6 +221,63 @@ export const InstructorLobbyPage: React.FC = () => {
 
   const isPaid = Boolean(feeInfo?.registrationFeePaid || profileData?.registrationFeePaid);
 
+  // Computed Predicted Approval Readiness Score (0-100)
+  const predictedScore = (() => {
+    if (typeof readinessReport?.predictedScore === 'number') return readinessReport.predictedScore;
+    if (typeof readinessReport?.score === 'number' && readinessReport.score > 0) return readinessReport.score;
+    let pts = 0;
+    if (user?.profilePhoto || profileData?.profilePhoto) pts += 10;
+    if (user?.firstName || profileData?.fullName) pts += 10;
+    if (profileData?.currentJobTitle || !profileData?.isEmployed) pts += 10;
+    if (profileData?.expertise?.length >= 3) pts += 15;
+    else if (profileData?.expertise?.length >= 1) pts += 8;
+    if (profileData?.bio?.length >= 100) pts += 15;
+    else if (profileData?.bio?.length >= 20) pts += 8;
+    if (profileData?.linkedinUrl && profileData?.githubUrl) pts += 10;
+    else if (profileData?.linkedinUrl || profileData?.githubUrl) pts += 5;
+    if (profileData?.governmentId?.documentUrl) pts += 15;
+    if (profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV')) pts += 15;
+    return Math.min(100, pts);
+  })();
+
+  // Lagging Fields List
+  const laggingItems: string[] = (() => {
+    if (Array.isArray(readinessReport?.laggingFields) && readinessReport.laggingFields.length > 0) {
+      return readinessReport.laggingFields as string[];
+    }
+    if (Array.isArray(readinessReport?.missingItems) && readinessReport.missingItems.length > 0) {
+      return readinessReport.missingItems as string[];
+    }
+    const missing: string[] = [];
+    if (!profileData?.profilePhoto && !user?.profilePhoto) {
+      missing.push('Professional Headshot / Profile Photo');
+    }
+    if (!profileData?.bio || profileData.bio.length < 50) {
+      missing.push('Expanded Professional Bio (recommend 50+ characters)');
+    }
+    if (!profileData?.expertise || profileData.expertise.length < 3) {
+      missing.push('At least 3 core technical skill tags');
+    }
+    if (!profileData?.linkedinUrl) {
+      missing.push('LinkedIn Profile URL');
+    }
+    if (!profileData?.githubUrl) {
+      missing.push('GitHub Profile URL');
+    }
+    if (!profileData?.governmentId?.documentUrl) {
+      missing.push('Government-Issued ID Proof document');
+    }
+    if (!profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV')) {
+      missing.push('Curriculum Vitae / Resume (PDF)');
+    }
+    if (!profileData?.verificationDocuments?.some((d: any) => ['EMPLOYMENT_PROOF', 'CERTIFICATION'].includes(d.documentType))) {
+      missing.push('Optional Supporting Certificate / Experience Verification');
+    }
+    return missing;
+  })();
+
+  const approvalLikelihood = predictedScore >= 80 ? 'High' : predictedScore >= 55 ? 'Moderate' : 'Low';
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] flex flex-col justify-between font-sans">
       {/* Top Navbar */}
@@ -402,177 +459,199 @@ export const InstructorLobbyPage: React.FC = () => {
             </div>
           )}
 
-          {/* APPLICATION READINESS REPORT SECTION */}
-          <div className="my-6 p-6 rounded-3xl bg-slate-50 border border-slate-200/90 relative z-10">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
+          {/* APPLICATION READINESS & APPROVAL PREDICTION SECTION */}
+          <div className="my-6 p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-sm relative z-10 overflow-hidden">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-5 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
                   <Award className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900">Application Readiness Evaluation</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Comprehensive 100-point metric evaluated against platform quality standards.
+                  <h3 className="font-bold text-base text-slate-900">Predicted Approval Score & Application Quality</h3>
+                  <p className="text-xs text-slate-500">
+                    Live estimation of your likelihood of getting verified and approved by the Super Admin board.
                   </p>
                 </div>
               </div>
 
-              {!isPaid ? (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-200 text-slate-700 text-xs font-bold">
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Score Locked • Payment Gated</span>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                  approvalLikelihood === 'High'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : approvalLikelihood === 'Moderate'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                    : 'bg-rose-100 text-rose-800 border border-rose-200'
+                }`}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{approvalLikelihood} Chance of Approval</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Score Highlight Box */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300">
+                      Approval Probability Index
+                    </span>
+                    <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full border border-indigo-400/30">
+                      AI & Criteria Engine
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl sm:text-5xl font-black tracking-tight text-white">
+                      {predictedScore}%
+                    </span>
+                    <span className="text-sm font-semibold text-indigo-200">
+                      predicted approval rating
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-lg leading-relaxed">
+                    {approvalLikelihood === 'High'
+                      ? 'Your profile, verified links, and submitted documents meet top platform quality benchmarks. High probability of prompt admin approval.'
+                      : approvalLikelihood === 'Moderate'
+                      ? 'Good foundation! Completing the lagging fields below will boost your approval probability to 85%+.'
+                      : 'Important credentials or documents are lagging. We recommend updating your application below to avoid delays.'}
+                  </p>
+                </div>
+
+                <div className="shrink-0 flex flex-col items-center sm:items-end gap-2">
+                  <Link
+                    to="/instructor/onboarding"
+                    className="px-4 py-2.5 bg-[#FA5A36] hover:bg-[#e04825] text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2"
+                  >
+                    <span>Upload / Fix Lagging Files</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300 mb-1.5">
+                  <span>Application Completeness</span>
+                  <span>{predictedScore} / 100 Points</span>
+                </div>
+                <div className="w-full bg-white/10 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      predictedScore >= 80
+                        ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
+                        : predictedScore >= 55
+                        ? 'bg-gradient-to-r from-amber-400 to-orange-400'
+                        : 'bg-gradient-to-r from-rose-500 to-orange-500'
+                    }`}
+                    style={{ width: `${Math.max(5, predictedScore)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Lagging Fields Analysis */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span>Fields & Requirements Analysis</span>
+                </h4>
+                {laggingItems.length > 0 ? (
+                  <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                    {laggingItems.length} {laggingItems.length === 1 ? 'item lagging' : 'items lagging'}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    All requirements satisfied ✓
+                  </span>
+                )}
+              </div>
+
+              {laggingItems.length > 0 ? (
+                <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80">
+                  <p className="text-xs font-bold text-amber-900 mb-2">
+                    Lagging Fields (Updating these increases your chance of admin approval):
+                  </p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {laggingItems.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-amber-800 bg-white/90 p-2.5 rounded-xl border border-amber-100">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span className="font-medium text-[11px]">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3.5 pt-3 border-t border-amber-200/60 flex items-center justify-between">
+                    <span className="text-[11px] text-amber-800">
+                      Want to fix these fields or upload new files?
+                    </span>
+                    <Link
+                      to="/instructor/onboarding"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 hover:text-black underline cursor-pointer"
+                    >
+                      <span>Return to Onboarding Form</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-extrabold">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Score: {readinessReport?.score ?? 90} / 100</span>
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold">All mandatory and recommended documents uploaded!</p>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">Government ID, Resume, LinkedIn, GitHub, and bio are in place.</p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/instructor/onboarding"
+                    className="px-3 py-1.5 bg-white text-emerald-800 font-bold text-xs rounded-lg border border-emerald-200 hover:bg-emerald-50"
+                  >
+                    Review / Edit
+                  </Link>
                 </div>
               )}
             </div>
 
-            {/* If Score is Locked (Pre-Payment View) */}
-            {!isPaid && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3">
-                  <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-amber-900">Numerical Score Locked (Payment Required)</h4>
-                    <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                      Your numerical readiness score is strictly computed upon verified registration fee payment. Review your pre-payment checklist below to ensure all documents are ready for evaluation.
-                    </p>
-                  </div>
+            {/* Category Breakdown */}
+            {readinessReport?.breakdown && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Core Profile</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.coreProfile?.score ?? 30} / {readinessReport.breakdown.coreProfile?.maxScore ?? 30}
+                  </p>
                 </div>
-
-                {/* Pre-Payment Checklist Items */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="font-semibold text-slate-700">1. Core Profile Details & Bio</span>
-                    <span className="text-emerald-600 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" /> Ready
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="font-semibold text-slate-700">2. Technical Expertise Tags</span>
-                    <span className="text-emerald-600 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" /> {profileData?.expertise?.length || 0} Skills
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="font-semibold text-slate-700">3. Government Identity Proof</span>
-                    {profileData?.governmentId ? (
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-4 h-4" /> Uploaded
-                      </span>
-                    ) : (
-                      <span className="text-amber-600 font-bold flex items-center gap-1">
-                        <AlertTriangle className="w-4 h-4" /> Missing
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="font-semibold text-slate-700">4. Curriculum Vitae / Resume</span>
-                    {profileData?.verificationDocuments?.some((d: any) => d.documentType === 'RESUME_CV') ? (
-                      <span className="text-emerald-600 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-4 h-4" /> Uploaded
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-bold">Optional</span>
-                    )}
-                  </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Skills & Subjects</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.skillsAndSubjects?.score ?? 15} / {readinessReport.breakdown.skillsAndSubjects?.maxScore ?? 15}
+                  </p>
                 </div>
-
-                {/* Recommendations */}
-                {readinessReport?.guidance?.recommendations && readinessReport.guidance.recommendations.length > 0 && (
-                  <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-xs">
-                    <span className="font-bold text-slate-800 block mb-1">Pre-Payment Guidance:</span>
-                    <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[11px]">
-                      {readinessReport.guidance.recommendations.map((rec: string, i: number) => (
-                        <li key={i}>{rec}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* If Score is Unlocked (Post-Payment View) */}
-            {isPaid && readinessReport?.breakdown && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Core Profile</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.coreProfile?.score || 30} / {readinessReport.breakdown.coreProfile?.maxScore || 30}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.coreProfile?.score || 30) / (readinessReport.breakdown.coreProfile?.maxScore || 30)) * 100}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Skills & Subjects</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.skillsAndSubjects?.score || 15} / {readinessReport.breakdown.skillsAndSubjects?.maxScore || 15}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.skillsAndSubjects?.score || 15) / (readinessReport.breakdown.skillsAndSubjects?.maxScore || 15)) * 100}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Experience & Bio</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.experienceAndBio?.score || 15} / {readinessReport.breakdown.experienceAndBio?.maxScore || 15}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.experienceAndBio?.score || 15) / (readinessReport.breakdown.experienceAndBio?.maxScore || 15)) * 100}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Professional Links</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.professionalLinks?.score || 10} / {readinessReport.breakdown.professionalLinks?.maxScore || 10}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.professionalLinks?.score || 10) / (readinessReport.breakdown.professionalLinks?.maxScore || 10)) * 100}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Government ID</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.governmentId?.score || 20} / {readinessReport.breakdown.governmentId?.maxScore || 20}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.governmentId?.score || 20) / (readinessReport.breakdown.governmentId?.maxScore || 20)) * 100}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-white rounded-xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Supporting Docs</span>
-                    <p className="font-extrabold text-slate-900 text-sm mt-0.5">
-                      {readinessReport.breakdown.supportingDocuments?.score || 10} / {readinessReport.breakdown.supportingDocuments?.maxScore || 10}
-                    </p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${((readinessReport.breakdown.supportingDocuments?.score || 10) / (readinessReport.breakdown.supportingDocuments?.maxScore || 10)) * 100}%` }}></div>
-                    </div>
-                  </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Experience & Bio</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.experienceAndBio?.score ?? 15} / {readinessReport.breakdown.experienceAndBio?.maxScore ?? 15}
+                  </p>
                 </div>
-
-                {readinessReport.recommendations && readinessReport.recommendations.length > 0 && (
-                  <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-xs">
-                    <span className="font-bold text-slate-800 block mb-1">Readiness Improvement Tips:</span>
-                    <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[11px]">
-                      {readinessReport.recommendations.map((rec: string, i: number) => (
-                        <li key={i}>{rec}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Professional Links</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.professionalLinks?.score ?? 10} / {readinessReport.breakdown.professionalLinks?.maxScore ?? 10}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Government ID</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.governmentId?.score ?? 20} / {readinessReport.breakdown.governmentId?.maxScore ?? 20}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Resume & Documents</span>
+                  <p className="font-extrabold text-slate-900 text-sm mt-0.5">
+                    {readinessReport.breakdown.supportingDocuments?.score ?? 10} / {readinessReport.breakdown.supportingDocuments?.maxScore ?? 10}
+                  </p>
+                </div>
               </div>
             )}
           </div>

@@ -205,8 +205,30 @@ export class SuperAdminService {
   static async getUsersList({ role, search, status, page = 1, limit = 50 }) {
     const query = {};
 
+    // Only approved instructors (whose verificationStatus is VERIFIED or APPROVED) belong in active Users Management & Creators
+    const verifiedInstructorProfiles = await InstructorProfile.find({
+      verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
+    }).select('userId').lean();
+    const verifiedInstructorUserIds = verifiedInstructorProfiles.map((p) => p.userId).filter(Boolean);
+
+    // Candidates still pending admin review in the Instructor Verification queue
+    const unapprovedInstructors = await User.find({
+      role: ROLES.INSTRUCTOR,
+      _id: { $nin: verifiedInstructorUserIds },
+    }).select('_id').lean();
+    const unapprovedInstructorUserIds = unapprovedInstructors.map((u) => u._id);
+
     if (role && role !== 'ALL' && role !== 'All') {
-      query.role = role.toUpperCase();
+      const targetRole = role.toUpperCase();
+      query.role = targetRole;
+      if (targetRole === ROLES.INSTRUCTOR) {
+        query._id = { $in: verifiedInstructorUserIds };
+      }
+    } else {
+      // In the general "All Users" list, exclude candidates waiting for instructor verification approval
+      if (unapprovedInstructorUserIds.length > 0) {
+        query._id = { $nin: unapprovedInstructorUserIds };
+      }
     }
 
     if (status && status !== 'ALL' && status !== 'All') {
@@ -225,7 +247,7 @@ export class SuperAdminService {
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
-    const [users, total, totalAll, totalStudents, totalInstructors, totalAdmins] = await Promise.all([
+    const [users, total, totalStudents, totalInstructors, totalAdmins] = await Promise.all([
       User.find(query)
         .select('-passwordHash -refreshTokenHash -verificationToken')
         .sort({ createdAt: -1 })
@@ -233,11 +255,12 @@ export class SuperAdminService {
         .limit(parseInt(limit, 10))
         .lean(),
       User.countDocuments(query),
-      User.countDocuments(),
       User.countDocuments({ role: ROLES.STUDENT }),
-      User.countDocuments({ role: ROLES.INSTRUCTOR }),
+      User.countDocuments({ role: ROLES.INSTRUCTOR, _id: { $in: verifiedInstructorUserIds } }),
       User.countDocuments({ role: ROLES.ADMIN }),
     ]);
+
+    const totalAll = totalStudents + totalInstructors + totalAdmins;
 
     return {
       users: users.map((u) => ({
@@ -629,7 +652,16 @@ export class SuperAdminService {
    * 3c. Get all registered instructors for course assignment dropdown
    */
   static async getInstructorsList() {
-    const instructors = await User.find({ role: ROLES.INSTRUCTOR, status: { $ne: 'TERMINATED' } })
+    const verifiedProfiles = await InstructorProfile.find({
+      verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
+    }).select('userId').lean();
+    const verifiedIds = verifiedProfiles.map((p) => p.userId).filter(Boolean);
+
+    const instructors = await User.find({
+      role: ROLES.INSTRUCTOR,
+      _id: { $in: verifiedIds },
+      status: { $ne: 'TERMINATED' },
+    })
       .select('firstName lastName email profilePhoto phone bio instructorId')
       .sort({ firstName: 1 })
       .lean();
@@ -814,8 +846,13 @@ export class SuperAdminService {
           currentJobTitle: p.currentJobTitle || '',
           linkedinUrl: p.linkedinUrl || '',
           githubUrl: p.githubUrl || '',
+          portfolioUrl: p.portfolioUrl || '',
+          teachingSubjects: Array.isArray(p.teachingSubjects) ? p.teachingSubjects : [],
+          governmentId: p.governmentId || null,
+          verificationDocuments: Array.isArray(p.verificationDocuments) ? p.verificationDocuments : [],
           registrationFeePaid: Boolean(p.registrationFeePaid || u.registrationFeePaid),
           readinessScore: p.readinessReport?.score ?? null,
+          readinessReport: p.readinessReport || null,
           isCompleted: p.isCompleted !== false,
           verificationStatus: p.verificationStatus || 'PENDING',
           rejectionReason: p.rejectionReason || null,
@@ -2239,6 +2276,7 @@ export class SuperAdminService {
       },
       profile: profile?.profile,
       dashboard: dashboardData,
+      dashboardData: dashboardData,
     };
   }
 

@@ -194,18 +194,35 @@ export const instructorApi = {
       fileType?: string;
       fileSize?: number;
     };
+    verificationDocuments?: Array<{
+      documentType: string;
+      title?: string;
+      fileUrl: string;
+      fileName?: string;
+      fileType?: string;
+      fileSize?: number;
+    }>;
   }) {
     const res = await apiClient.post('/instructor/profile/onboarding', payload);
     return res.data;
   },
 
-  async uploadDocument(file: File, documentType: string, title?: string) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('documentType', documentType);
-    if (title) formData.append('title', title);
-    const res = await apiClient.post('/instructor/documents', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+  async uploadDocument(file: File, documentType: string, title?: string, idType?: string) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+
+    const res = await apiClient.post('/instructor/documents/upload', {
+      documentType,
+      idType,
+      fileName: file.name,
+      fileType: file.type || 'application/pdf',
+      fileSize: file.size,
+      dataUrl,
+      title: title || file.name,
     });
     return res.data;
   },
@@ -216,6 +233,10 @@ export const instructorApi = {
       isPaid: boolean;
       isScoreLocked: boolean;
       score: number | null;
+      predictedScore?: number;
+      approvalChance?: 'High' | 'Moderate' | 'Low' | string;
+      approvalProbability?: number;
+      laggingFields?: string[];
       scoringRuleVersion: string;
       breakdown?: {
         coreProfile: { score: number; maxScore: number; passed: boolean };

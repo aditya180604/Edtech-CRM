@@ -11,6 +11,8 @@ import {
   Mail,
   Phone,
   RefreshCw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { adminApi } from '../../../api/admin';
 import type { AdminProfileData } from '../../../api/admin';
@@ -27,6 +29,14 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({ onNotify, cu
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Password Change State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -69,6 +79,43 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({ onNotify, cu
       onNotify?.(msg, 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      onNotify?.('Please provide both current and new passwords.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      onNotify?.('New password and confirmation do not match.', 'error');
+      return;
+    }
+    if (newPassword.length < 8) {
+      onNotify?.('New password must be at least 8 characters long.', 'error');
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      const res = await adminApi.changePassword({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      if (res.success) {
+        onNotify?.(res.message || 'Password changed successfully.', 'success');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to change password.';
+      onNotify?.(msg, 'error');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -180,6 +227,86 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({ onNotify, cu
             </div>
           </form>
         </div>
+      </div>
+
+      {/* Change Password Card */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-2 mb-2">
+          <Key className="w-5 h-5 text-[#FA5A36]" />
+          <h3 className="text-base font-bold text-slate-900">Change Account Password</h3>
+        </div>
+        <p className="text-xs text-slate-500 mb-5">
+          Update the initial temporary password provided by Super Admin to your personal secure password.
+        </p>
+
+        <form onSubmit={handlePasswordChange} className="space-y-4 max-w-xl text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Current Password (Provided by Super Admin)</label>
+            <div className="relative">
+              <input
+                type={showCurrentPass ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter existing password"
+                className="w-full p-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#FA5A36] focus:outline-none"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPass(!showCurrentPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">New Password (Min 8 chars)</label>
+              <div className="relative">
+                <input
+                  type={showNewPass ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  className="w-full p-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#FA5A36] focus:outline-none"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPass(!showNewPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#FA5A36] focus:outline-none"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={isChangingPassword}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Lock className="w-4 h-4" />
+              <span>{isChangingPassword ? 'Updating Password...' : 'Update Password'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Permissions Matrix Inspection */}

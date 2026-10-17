@@ -205,16 +205,17 @@ export const InstructorOnboardingPage: React.FC = () => {
 
     try {
       setUploadingDoc(docType);
-      const res = await instructorApi.uploadDocument(file, docType, title);
+      const res = await instructorApi.uploadDocument(file, docType, title, docType === 'GOVERNMENT_ID' ? governmentIdType : undefined);
       if (res?.success) {
         toast.success('Document Uploaded ✓', `${title} has been stored securely for verification.`);
         if (docType === 'GOVERNMENT_ID') {
-          setGovernmentIdDoc(res.data?.governmentId || { fileName: file.name, idType: governmentIdType });
+          const doc = res.data?.governmentId || res.data?.document || { fileName: file.name, idType: governmentIdType, documentUrl: res.data?.document?.fileUrl };
+          setGovernmentIdDoc(doc);
         } else if (docType === 'RESUME_CV') {
-          const doc = res.data?.verificationDocuments?.find((d: any) => d.documentType === 'RESUME_CV') || { fileName: file.name };
+          const doc = res.data?.verificationDocuments?.find((d: any) => d.documentType === 'RESUME_CV') || res.data?.document || { fileName: file.name, documentType: 'RESUME_CV' };
           setResumeDoc(doc);
         } else if (docType === 'EMPLOYMENT_PROOF') {
-          const doc = res.data?.verificationDocuments?.find((d: any) => d.documentType === 'EMPLOYMENT_PROOF') || { fileName: file.name };
+          const doc = res.data?.verificationDocuments?.find((d: any) => d.documentType === 'EMPLOYMENT_PROOF') || res.data?.document || { fileName: file.name, documentType: 'EMPLOYMENT_PROOF' };
           setEmploymentDoc(doc);
         }
       } else {
@@ -243,8 +244,8 @@ export const InstructorOnboardingPage: React.FC = () => {
       setErrorMsg('Please select or add at least one area of expertise / programming language.');
       return;
     }
-    if (!workExperience.trim()) {
-      setErrorMsg('Work experience / background summary is required (e.g., Senior Software Engineer).');
+    if (isEmployed && !workExperience.trim()) {
+      setErrorMsg('Industry Experience Summary is required for employed professionals.');
       return;
     }
     if (isEmployed && !currentOrganization.trim()) {
@@ -255,6 +256,22 @@ export const InstructorOnboardingPage: React.FC = () => {
       setErrorMsg('Please enter a valid number of years of experience.');
       return;
     }
+    if (!linkedinUrl.trim()) {
+      setErrorMsg('LinkedIn Profile URL is mandatory.');
+      return;
+    }
+    if (!githubUrl.trim()) {
+      setErrorMsg('GitHub Profile is mandatory.');
+      return;
+    }
+    if (!governmentIdDoc) {
+      setErrorMsg('Government-Issued ID Proof document is mandatory. Please upload your ID proof.');
+      return;
+    }
+    if (!resumeDoc) {
+      setErrorMsg('Curriculum Vitae / Resume (PDF) is mandatory. Please upload your CV/resume.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -262,15 +279,15 @@ export const InstructorOnboardingPage: React.FC = () => {
         fullName: fullName.trim(),
         bio: bio.trim(),
         expertise,
-        currentOrganization: isEmployed ? currentOrganization.trim() : 'Independent Practitioner / Freelancer',
+        currentOrganization: isEmployed ? currentOrganization.trim() : (currentOrganization.trim() || 'Independent Practitioner / Freelancer'),
         currentJobTitle: currentJobTitle.trim() || undefined,
         isEmployed,
         qualification: qualification.trim() || undefined,
-        workExperience: workExperience.trim(),
+        workExperience: isEmployed ? workExperience.trim() : (workExperience.trim() || 'Independent Practitioner / Consultant'),
         yearsOfExperience: Number(yearsOfExperience),
         profilePhoto: profilePhoto.trim() || undefined,
-        linkedinUrl: linkedinUrl.trim() || undefined,
-        githubUrl: githubUrl.trim() || undefined,
+        linkedinUrl: linkedinUrl.trim(),
+        githubUrl: githubUrl.trim(),
         portfolioUrl: portfolioUrl.trim() || undefined,
         teachingSubjects: teachingSubjects.length > 0 ? teachingSubjects : undefined,
         governmentId: governmentIdDoc
@@ -282,6 +299,10 @@ export const InstructorOnboardingPage: React.FC = () => {
               fileSize: governmentIdDoc.fileSize,
             }
           : undefined,
+        verificationDocuments: [
+          ...(resumeDoc ? [resumeDoc] : []),
+          ...(employmentDoc ? [employmentDoc] : []),
+        ],
       });
 
       if (res.success) {
@@ -550,7 +571,7 @@ export const InstructorOnboardingPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-5">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Industry Experience Summary <span className="text-red-500">*</span>
+                    Industry Experience Summary {isEmployed ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -558,10 +579,10 @@ export const InstructorOnboardingPage: React.FC = () => {
                     </div>
                     <input
                       type="text"
-                      required
+                      required={isEmployed}
                       value={workExperience}
                       onChange={(e) => setWorkExperience(e.target.value)}
-                      placeholder="e.g. Senior Full-Stack Engineer with 8+ years building enterprise SaaS"
+                      placeholder={isEmployed ? "e.g. Senior Full-Stack Engineer with 8+ years building enterprise SaaS" : "e.g. Independent tech consultant, educator, or mentor (optional)"}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 text-sm text-slate-900 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:bg-white focus:ring-2 focus:ring-[#FA5A36]/10 transition-all font-medium"
                     />
                   </div>
@@ -773,7 +794,7 @@ export const InstructorOnboardingPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    LinkedIn URL <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                    LinkedIn Profile URL <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -781,6 +802,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                     </div>
                     <input
                       type="url"
+                      required
                       value={linkedinUrl}
                       onChange={(e) => setLinkedinUrl(e.target.value)}
                       placeholder="https://linkedin.com/in/username"
@@ -791,7 +813,7 @@ export const InstructorOnboardingPage: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    GitHub Profile <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                    GitHub Profile <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -799,6 +821,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                     </div>
                     <input
                       type="url"
+                      required
                       value={githubUrl}
                       onChange={(e) => setGithubUrl(e.target.value)}
                       placeholder="https://github.com/username"
@@ -848,7 +871,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                       <Shield className="w-3.5 h-3.5 text-[#FA5A36]" />
-                      <span>Government-Issued ID Proof</span>
+                      <span>Government-Issued ID Proof <span className="text-red-500">*</span></span>
                     </span>
                     {governmentIdDoc ? (
                       <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -856,14 +879,14 @@ export const InstructorOnboardingPage: React.FC = () => {
                         Uploaded
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                        Recommended (+20 pts)
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                        Mandatory *
                       </span>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select ID Document Type</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select ID Document Type <span className="text-red-500">*</span></label>
                     <select
                       value={governmentIdType}
                       onChange={(e) => setGovernmentIdType(e.target.value)}
@@ -902,7 +925,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                       ) : (
                         <>
                           <UploadCloud className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{governmentIdDoc ? 'Replace Document' : 'Upload ID Proof (PDF/Image)'}</span>
+                          <span>{governmentIdDoc ? 'Replace Document' : 'Upload ID Proof (PDF/Image) *'}</span>
                         </>
                       )}
                     </div>
@@ -914,7 +937,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Curriculum Vitae / Resume</span>
+                      <span>Curriculum Vitae / Resume <span className="text-red-500">*</span></span>
                     </span>
                     {resumeDoc ? (
                       <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -922,8 +945,8 @@ export const InstructorOnboardingPage: React.FC = () => {
                         Uploaded
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md">
-                        Recommended (+10 pts)
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                        Mandatory *
                       </span>
                     )}
                   </div>

@@ -64,10 +64,11 @@ import {
   Calendar,
   GraduationCap,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { EduLogo } from '../../components/ui/EduLogo';
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
+import { setInstructorOverride } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
 import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner';
@@ -78,6 +79,10 @@ import { InstructorConsultationsManager } from '../../components/consultations/I
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { instructorId: routeInstructorId } = useParams<{ instructorId?: string }>();
+  const isSuperAdminOversight = Boolean(
+    (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && routeInstructorId
+  );
   const { success, error: toastError, info } = useToast();
 
   // Navigation Sub-tab state
@@ -453,7 +458,7 @@ export const InstructorDashboard: React.FC = () => {
   const fetchDashboard = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setRefreshing(true);
-      const res = await instructorApi.getDashboard(timeframe);
+      const res = await instructorApi.getDashboard(timeframe, routeInstructorId);
       if (res.success && res.data) {
         setDashboardData(res.data);
         if (res.data.activeCourse) {
@@ -474,7 +479,7 @@ export const InstructorDashboard: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [timeframe]);
+  }, [timeframe, routeInstructorId]);
 
   // Load Sub-views Data
   const loadSubViewData = useCallback(async () => {
@@ -547,6 +552,17 @@ export const InstructorDashboard: React.FC = () => {
     reviewSearch,
     analyticsTimeframe,
   ]);
+
+  useEffect(() => {
+    if (isSuperAdminOversight && routeInstructorId) {
+      setInstructorOverride(routeInstructorId);
+    }
+    return () => {
+      if (isSuperAdminOversight) {
+        setInstructorOverride(null);
+      }
+    };
+  }, [isSuperAdminOversight, routeInstructorId]);
 
   useEffect(() => {
     fetchDashboard();
@@ -929,6 +945,11 @@ export const InstructorDashboard: React.FC = () => {
       setNewWebinar({ title: '', category: 'DevOps / Cloud', startTime: '', endTime: '', capacity: 100, price: 0, meetingType: 'IN_PLATFORM', meetingUrl: '' });
       success('Webinar Scheduled', 'Your live webinar was successfully created with an automated in-platform room!');
       window.dispatchEvent(new Event('webinarsChanged'));
+      try {
+        localStorage.setItem('webinars_last_updated', Date.now().toString());
+      } catch (storageErr) {
+        // ignore storage errors
+      }
       await loadSubViewData();
       fetchDashboard(true);
     } catch (err: any) {
@@ -1420,14 +1441,53 @@ export const InstructorDashboard: React.FC = () => {
     }
   };
 
-  const instructorName = `${user?.firstName || 'Instructor'} ${user?.lastName || ''}`.trim();
+  const instructorName = isSuperAdminOversight
+    ? (dashboardData?.activeCourse?.instructorName || profileData?.headline || routeInstructorId || 'Instructor')
+    : `${user?.firstName || 'Instructor'} ${user?.lastName || ''}`.trim();
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex w-full font-sans text-slate-800 antialiased">
+    <div className="h-screen bg-[#f8fafc] flex flex-col w-full font-sans text-slate-800 antialiased overflow-hidden">
+      {/* Super Admin Oversight Top Bar */}
+      {isSuperAdminOversight && (
+        <div className="bg-slate-900 text-white px-4 py-2 flex items-center justify-between text-xs border-b border-slate-800 z-50 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="bg-[#FA5A36] text-white px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[10px] flex items-center gap-1 shadow-xs">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Super Admin Oversight
+            </span>
+            <span className="text-slate-300">
+              Accessing live interactive workspace for Instructor: <strong className="text-white">{instructorName}</strong>{' '}
+              <span className="text-slate-400 font-mono text-[11px]">({routeInstructorId})</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchDashboard(false)}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition cursor-pointer flex items-center gap-1 text-xs"
+              title="Refresh Telemetry"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
+            <button
+              onClick={() => {
+                setInstructorOverride(null);
+                navigate('/super-admin');
+              }}
+              className="px-3 py-1 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Exit to Super Admin</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 flex w-full overflow-hidden">
       {/* =========================================================================
-          LEFT SIDEBAR NAVIGATION (Docked Edge-to-Edge Full Height)
+          LEFT SIDEBAR NAVIGATION (Docked Edge-to-Edge Full Height & Fixed Position)
          ========================================================================= */}
-      <aside className="hidden min-[501px]:flex w-64 shrink-0 bg-white border-r border-slate-200 min-h-screen p-5 flex-col justify-between sticky top-0 h-screen z-30 shadow-xs">
+      <aside className="hidden min-[501px]:flex w-64 shrink-0 bg-white border-r border-slate-200 h-screen p-5 flex-col justify-between overflow-y-auto z-30 shadow-xs">
         <div>
           {/* Logo Badge in Sidebar */}
           <div className="px-2 py-2 mb-6 border-b border-slate-100 flex flex-col gap-1.5">
@@ -1469,28 +1529,38 @@ export const InstructorDashboard: React.FC = () => {
                 </button>
               );
             })}
+
+            {/* Sign Out Button next to Profile & Verification */}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 transition-all cursor-pointer mt-1"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Sign Out</span>
+            </button>
           </nav>
         </div>
 
-        {/* Quick Profile Capsule & Sign Out at bottom of Sidebar */}
-        <div className="pt-4 border-t border-slate-100 space-y-2">
-          <div className="flex items-center gap-3 px-2 py-2 bg-slate-50 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center">
-              {instructorName[0] || 'I'}
+        {/* Quick Profile Capsule with Sign Out Action */}
+        <div className="pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between px-2.5 py-2 bg-slate-50 rounded-xl border border-slate-100">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                {instructorName[0] || 'I'}
+              </div>
+              <div className="overflow-hidden min-w-0">
+                <p className="text-xs font-bold text-slate-900 truncate">{instructorName}</p>
+                <p className="text-[10px] text-slate-500 font-medium truncate">Instructor</p>
+              </div>
             </div>
-            <div className="overflow-hidden flex-1">
-              <p className="text-xs font-bold text-slate-900 truncate">{instructorName}</p>
-              <p className="text-[10px] text-slate-500 font-medium truncate">Instructor</p>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
         </div>
       </aside>
 
@@ -1545,15 +1615,30 @@ export const InstructorDashboard: React.FC = () => {
                     </button>
                   );
                 })}
+
+                {/* Sign Out Button in Mobile Drawer next to Profile & Verification */}
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-xs text-red-600 hover:bg-red-50 transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span>Sign Out</span>
+                </button>
               </nav>
             </div>
-            <div className="pt-3 border-t border-slate-100">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between px-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#FA5A36] to-[#FF8A65] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  {instructorName[0] || 'I'}
+                </div>
+                <span className="text-xs font-bold text-slate-800 truncate">{instructorName}</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Sign Out</span>
               </button>
             </div>
           </div>
@@ -1561,9 +1646,9 @@ export const InstructorDashboard: React.FC = () => {
       )}
 
       {/* =========================================================================
-          MAIN CONTENT AREA (Edge-to-Edge Responsive, No Side Margins)
+          MAIN CONTENT AREA (Edge-to-Edge Responsive, Fixed Sidebar, Independent Scroll)
          ========================================================================= */}
-      <main className="flex-1 p-3.5 sm:p-6 lg:p-8 pb-24 min-[501px]:pb-8 space-y-4 sm:space-y-6 min-w-0 overflow-y-auto w-full">
+      <main className="flex-1 h-screen p-3.5 sm:p-6 lg:p-8 pb-24 min-[501px]:pb-8 space-y-4 sm:space-y-6 min-w-0 overflow-y-auto w-full">
         {/* Mobile Top Header Bar (<= 500px) */}
         <div className="flex min-[501px]:hidden items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
           <div className="flex items-center gap-2.5">
@@ -6380,6 +6465,7 @@ export const InstructorDashboard: React.FC = () => {
           </button>
         </div>
       </main>
+      </div>
     </div>
   );
 };

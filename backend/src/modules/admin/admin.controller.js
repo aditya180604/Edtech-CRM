@@ -105,4 +105,9 @@ export class AdminController {
     const result = await AdminService.updateAdminProfile(req.user.userId, req.body);
     return ApiResponse.success(res, result, result.message);
   });
+
+  static changePassword = asyncHandler(async (req, res) => {
+    const result = await AdminService.changeAdminPassword(req.user.userId, req.body);
+    return ApiResponse.success(res, result, result.message);
+  });
 }

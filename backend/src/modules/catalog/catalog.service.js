@@ -9,6 +9,7 @@ import {
   User,
   InstructorProfile,
   Entitlement,
+  Review,
 } from '../../models/index.js';
 import { LearningPathService } from '../learningPaths/learningPath.service.js';
 

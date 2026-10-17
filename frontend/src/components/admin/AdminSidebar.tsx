@@ -32,6 +32,28 @@ export const ADMIN_TABS = [
 
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
+export const TAB_PERMISSIONS: Record<AdminTab, string[]> = {
+  overview: [],
+  students: ['VIEW_STUDENTS', 'MANAGE_STUDENTS'],
+  instructors: ['VIEW_INSTRUCTORS', 'MANAGE_INSTRUCTORS'],
+  courses: ['VIEW_COURSES', 'MANAGE_COURSES'],
+  payments: ['VIEW_PAYMENTS', 'MANAGE_PAYMENTS'],
+  consultations: ['VIEW_CONSULTATIONS', 'MANAGE_CONSULTATIONS'],
+  support: ['VIEW_SUPPORT', 'MANAGE_SUPPORT'],
+  reports: ['VIEW_REPORTS'],
+  notifications: ['VIEW_NOTIFICATIONS'],
+  settings: [],
+};
+
+export const hasAdminTabPermission = (tab: AdminTab, user: any): boolean => {
+  if (!user) return false;
+  if (user.role === 'SUPER_ADMIN') return true;
+  const required = TAB_PERMISSIONS[tab] || [];
+  if (required.length === 0) return true;
+  const userPerms: string[] = Array.isArray(user.adminPermissions) ? user.adminPermissions : [];
+  return required.some((perm) => userPerms.includes(perm));
+};
+
 interface AdminSidebarProps {
   currentTab: AdminTab;
   onSelectTab: (tab: AdminTab) => void;
@@ -85,6 +107,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'settings', label: 'Admin Settings', icon: Settings },
   ];
 
+  const visibleNavItems = navItems.filter((item) => hasAdminTabPermission(item.id, user));
+
   const handleNavClick = (tabId: AdminTab) => {
     onSelectTab(tabId);
     if (isOpenMobile) {
@@ -125,11 +149,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-[#FA5A36] ring-4 ring-[#FA5A36]/20 animate-pulse"></span>
             <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
-              Operations Panel
+              {user?.department ? `${user.department} Panel` : 'Operations Panel'}
             </span>
           </div>
           <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-200/70 text-slate-600 font-mono font-medium">
-            v2.4
+            {user?.role || 'ADMIN'}
           </span>
         </div>
 
@@ -138,7 +162,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
             Main Management
           </div>
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (

@@ -276,13 +276,13 @@ export class SuperAdminController {
 
   static getInstructorDocument = asyncHandler(async (req, res) => {
     const { id, docId } = req.params;
-    const { stream, mimeType, fileName } = await SuperAdminService.getInstructorDocumentStream(id, docId);
+    const { filePath, fileName, fileType } = await SuperAdminService.getInstructorDocumentStream(id, docId);
 
-    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${fileName || 'document'}"`);
+    res.setHeader('Content-Type', fileType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName || 'document')}"`);
     res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
-    stream.pipe(res);
+    return res.sendFile(filePath);
   });
 
   // 12. Instructor Registration Fee Management & Audit Ledger

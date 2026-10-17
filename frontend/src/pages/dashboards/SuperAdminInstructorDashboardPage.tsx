@@ -140,7 +140,8 @@ export const SuperAdminInstructorDashboardPage: React.FC = () => {
     );
   }
 
-  const { instructor, dashboardData } = data;
+  const instructor = data.instructor;
+  const dashboardData = data.dashboardData || (data as any).dashboard || {};
   const metrics = dashboardData?.metrics || {};
   const courses: any[] = dashboardData?.courses || [];
   const webinars: any[] = dashboardData?.webinars || [];
@@ -210,6 +211,15 @@ export const SuperAdminInstructorDashboardPage: React.FC = () => {
               <Lock className="w-3.5 h-3.5 text-[#FFCCC2]" />
               <span>Read-Only Oversight</span>
             </span>
+
+            <button
+              onClick={() => navigate(`/dashboard/instructor/${instructor.instructorId || instructor.id || instructor._id}`)}
+              className="px-3 py-1 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Open Full Interactive Instructor Workspace"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open Live Workspace</span>
+            </button>
 
             <button
               onClick={fetchInstructorData}

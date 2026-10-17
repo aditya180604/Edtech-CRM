@@ -43,8 +43,9 @@ router.get('/reports', requirePermission(ADMIN_PERMISSIONS.VIEW_REPORTS), AdminC
 // Page 9: Notifications Monitoring
 router.get('/notifications', requirePermission(ADMIN_PERMISSIONS.VIEW_NOTIFICATIONS), AdminController.getNotifications);
 
-// Page 10: Admin Settings (Own Account Profile)
+// Page 10: Admin Settings (Own Account Profile & Security)
 router.get('/me', AdminController.getProfile);
 router.patch('/me', AdminController.updateProfile);
+router.patch('/change-password', AdminController.changePassword);
 
 export const adminRoutes = router;

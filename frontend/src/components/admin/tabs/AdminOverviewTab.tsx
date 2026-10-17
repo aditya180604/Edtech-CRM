@@ -17,17 +17,20 @@ import {
 } from 'lucide-react';
 import type { AdminDashboardData } from '../../../api/admin';
 import type { AdminTab } from '../AdminSidebar';
+import { hasAdminTabPermission } from '../AdminSidebar';
 
 interface AdminOverviewTabProps {
   data: AdminDashboardData | null;
   isLoading: boolean;
   onNavigateTab: (tab: AdminTab) => void;
+  user?: any;
 }
 
 export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   data,
   isLoading,
   onNavigateTab,
+  user,
 }) => {
   if (isLoading && !data) {
     return (
@@ -70,149 +73,168 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   const maxRevenue = Math.max(...growthTimeline.map((p) => p.revenue), 1000);
   const maxStudents = Math.max(...growthTimeline.map((p) => p.students), 10);
 
+  const canViewStudents = hasAdminTabPermission('students', user);
+  const canViewInstructors = hasAdminTabPermission('instructors', user);
+  const canViewCourses = hasAdminTabPermission('courses', user);
+  const canViewPayments = hasAdminTabPermission('payments', user);
+  const canViewConsultations = hasAdminTabPermission('consultations', user);
+  const canViewSupport = hasAdminTabPermission('support', user);
+
   return (
     <div className="space-y-6">
-      {/* 6 Key Performance Metric Cards */}
+      {/* Key Performance Metric Cards (Filtered by Admin Privileges) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Metric 1: Students */}
-        <div
-          onClick={() => onNavigateTab('students')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Users className="w-5 h-5" />
+        {canViewStudents && (
+          <div
+            onClick={() => onNavigateTab('students')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                +{metrics.newStudentsThisMonth} new
+              </span>
             </div>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-              +{metrics.newStudentsThisMonth} new
-            </span>
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              {metrics.totalStudents.toLocaleString()}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Total Students</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {metrics.totalStudents.toLocaleString()}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Total Students</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
 
         {/* Metric 2: Instructors */}
-        <div
-          onClick={() => onNavigateTab('instructors')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <GraduationCap className="w-5 h-5" />
+        {canViewInstructors && (
+          <div
+            onClick={() => onNavigateTab('instructors')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              {metrics.pendingInstructors > 0 && (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  {metrics.pendingInstructors} pending
+                </span>
+              )}
             </div>
-            {metrics.pendingInstructors > 0 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                {metrics.pendingInstructors} pending
-              </span>
-            )}
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              {metrics.totalInstructors.toLocaleString()}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Instructors</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {metrics.totalInstructors.toLocaleString()}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Instructors</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
 
         {/* Metric 3: Courses */}
-        <div
-          onClick={() => onNavigateTab('courses')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <BookOpen className="w-5 h-5" />
+        {canViewCourses && (
+          <div
+            onClick={() => onNavigateTab('courses')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                {metrics.publishedCourses} live
+              </span>
             </div>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-              {metrics.publishedCourses} live
-            </span>
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              {metrics.totalCourses.toLocaleString()}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Catalog Courses</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {metrics.totalCourses.toLocaleString()}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Catalog Courses</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
 
         {/* Metric 4: Net Revenue */}
-        <div
-          onClick={() => onNavigateTab('payments')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#FA5A36] flex items-center justify-center group-hover:scale-105 transition-transform">
-              <IndianRupee className="w-5 h-5" />
+        {canViewPayments && (
+          <div
+            onClick={() => onNavigateTab('payments')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#FA5A36] flex items-center justify-center group-hover:scale-105 transition-transform">
+                <IndianRupee className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                {metrics.verifiedPurchasesCount} orders
+              </span>
             </div>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-              {metrics.verifiedPurchasesCount} orders
-            </span>
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              ₹{metrics.netRevenue.toLocaleString('en-IN')}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Net Revenue</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            ₹{metrics.netRevenue.toLocaleString('en-IN')}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Net Revenue</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
 
         {/* Metric 5: Consultations */}
-        <div
-          onClick={() => onNavigateTab('consultations')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <CalendarCheck className="w-5 h-5" />
+        {canViewConsultations && (
+          <div
+            onClick={() => onNavigateTab('consultations')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <CalendarCheck className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                Active
+              </span>
             </div>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
-              Active
-            </span>
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              {metrics.upcomingConsultationsCount.toLocaleString()}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Consultations</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {metrics.upcomingConsultationsCount.toLocaleString()}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Consultations</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
 
         {/* Metric 6: Support Tickets */}
-        <div
-          onClick={() => onNavigateTab('support')}
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <LifeBuoy className="w-5 h-5" />
+        {canViewSupport && (
+          <div
+            onClick={() => onNavigateTab('support')}
+            className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-[#FA5A36]/40 hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <LifeBuoy className="w-5 h-5" />
+              </div>
+              <span
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  metrics.openSupportTicketsCount > 0
+                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {metrics.openSupportTicketsCount} open
+              </span>
             </div>
-            <span
-              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                metrics.openSupportTicketsCount > 0
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                  : 'bg-emerald-50 text-emerald-700'
-              }`}
-            >
-              {metrics.openSupportTicketsCount} open
-            </span>
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              {metrics.openSupportTicketsCount}
+            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs font-medium text-slate-500">Support Tickets</p>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 tracking-tight">
-            {metrics.openSupportTicketsCount}
-          </p>
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs font-medium text-slate-500">Support Tickets</p>
-            <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Middle Row: Platform Growth Trend Chart & Quick Operations */}
@@ -230,14 +252,18 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
               </h2>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-md bg-[#FA5A36]"></span>
-                <span className="text-slate-600">Verified Revenue (₹)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-md bg-blue-500"></span>
-                <span className="text-slate-600">Students</span>
-              </div>
+              {canViewPayments && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-[#FA5A36]"></span>
+                  <span className="text-slate-600">Verified Revenue (₹)</span>
+                </div>
+              )}
+              {canViewStudents && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-blue-500"></span>
+                  <span className="text-slate-600">Students</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -266,20 +292,24 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
                     >
                       {/* Tooltip on hover */}
                       <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-10 bg-slate-900 text-white text-[10px] rounded-lg py-1 px-2 transition-opacity z-20 whitespace-nowrap shadow-lg">
-                        ₹{item.revenue.toLocaleString()} • {item.students} students
+                        {canViewPayments ? `₹${item.revenue.toLocaleString()} • ` : ''}{canViewStudents ? `${item.students} students` : ''}
                       </div>
 
                       <div className="w-full flex items-end justify-center gap-1">
                         {/* Revenue Bar */}
-                        <div
-                          style={{ height: `${revHeight}px` }}
-                          className="w-1/2 max-w-[20px] bg-gradient-to-t from-[#FA5A36] to-[#FF8A65] rounded-t-md transition-all group-hover:brightness-110"
-                        ></div>
+                        {canViewPayments && (
+                          <div
+                            style={{ height: `${revHeight}px` }}
+                            className="w-1/2 max-w-[20px] bg-gradient-to-t from-[#FA5A36] to-[#FF8A65] rounded-t-md transition-all group-hover:brightness-110"
+                          ></div>
+                        )}
                         {/* Students Bar */}
-                        <div
-                          style={{ height: `${studHeight}px` }}
-                          className="w-1/2 max-w-[20px] bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md transition-all group-hover:brightness-110"
-                        ></div>
+                        {canViewStudents && (
+                          <div
+                            style={{ height: `${studHeight}px` }}
+                            className="w-1/2 max-w-[20px] bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md transition-all group-hover:brightness-110"
+                          ></div>
+                        )}
                       </div>
 
                       <span className="text-[10px] font-medium text-slate-400 mt-2 truncate w-full text-center">
@@ -310,65 +340,93 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
             </p>
 
             <div className="space-y-2.5">
-              <button
-                onClick={() => onNavigateTab('students')}
-                className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                    <UserCheck className="w-4 h-4" />
+              {canViewStudents && (
+                <button
+                  onClick={() => onNavigateTab('students')}
+                  className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Manage Students
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        View enrollments & account standing
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">
-                      Manage Students
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      View enrollments & account standing
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-              </button>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+                </button>
+              )}
 
-              <button
-                onClick={() => onNavigateTab('instructors')}
-                className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                    <GraduationCap className="w-4 h-4" />
+              {canViewInstructors && (
+                <button
+                  onClick={() => onNavigateTab('instructors')}
+                  className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                      <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Instructor Moderation
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Inspect verified directory
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">
-                      Instructor Moderation
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      Inspect verified directory
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-              </button>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+                </button>
+              )}
 
-              <button
-                onClick={() => onNavigateTab('payments')}
-                className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#FA5A36] flex items-center justify-center font-bold">
-                    <IndianRupee className="w-4 h-4" />
+              {canViewCourses && (
+                <button
+                  onClick={() => onNavigateTab('courses')}
+                  className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Course Catalog Oversight
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Review published & draft courses
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">
-                      Cashfree Reconciliations
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      Inspect success vs refunds
-                    </p>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+                </button>
+              )}
+
+              {canViewPayments && (
+                <button
+                  onClick={() => onNavigateTab('payments')}
+                  className="w-full p-3 rounded-xl border border-slate-200 hover:border-[#FA5A36]/40 hover:bg-orange-50/20 text-left transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#FA5A36] flex items-center justify-center font-bold">
+                      <IndianRupee className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Cashfree Reconciliations
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Inspect success vs refunds
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
-              </button>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#FA5A36] transition-colors" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -380,9 +438,10 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
       </div>
 
       {/* Bottom Row: Upcoming Consultations & Live Audit Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 ${canViewConsultations ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
         {/* Upcoming Consultations */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        {canViewConsultations && (
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <CalendarCheck className="w-5 h-5 text-[#FA5A36]" />
@@ -461,6 +520,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Live Audit & System Activity Feed */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">

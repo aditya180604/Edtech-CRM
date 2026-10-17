@@ -16,7 +16,6 @@ import {
   Clock,
   ArrowLeft,
   CheckCircle2,
-  FileText,
   HelpCircle,
   Volume2,
   VolumeX,
@@ -29,7 +28,6 @@ import {
   AlertCircle,
   Edit3,
   Save,
-  Download,
   Play,
   Square,
   StopCircle,
@@ -164,7 +162,7 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
   };
 
   // Active Sidebar Tab
-  const [activeTab, setActiveTab] = useState<'chat' | 'qa' | 'attendees' | 'notes' | 'resources'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'qa' | 'attendees' | 'notes'>('chat');
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   // Real-Time Chat
@@ -2397,19 +2395,6 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
               <Edit3 className="w-3.5 h-3.5" />
               <span>Notes</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('resources')}
-              className={`flex-1 min-w-[70px] py-2 px-2.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === 'resources'
-                  ? 'bg-[#FA5A36] text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Files</span>
-            </button>
           </div>
 
           {/* TAB 1: LIVE CHAT */}
@@ -2713,51 +2698,6 @@ const LiveClassroomStudio: React.FC<LiveClassroomStudioProps> = ({
                   <Save className="w-3.5 h-3.5" />
                   <span>{isSavingNotes ? 'Saving...' : 'Save Notes'}</span>
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: DOWNLOADABLE RESOURCES */}
-          {activeTab === 'resources' && (
-            <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
-              <div>
-                <h4 className="font-bold text-white text-xs">Workshop Materials & Files</h4>
-                <p className="text-[11px] text-slate-400">
-                  Authorized downloadable resources provided by the instructor.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {roomState.resources.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="p-2 rounded-xl bg-[#FA5A36]/10 text-[#FA5A36] shrink-0">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-white truncate">{file.title}</p>
-                        <p className="text-[10px] text-slate-400">{file.size} • {file.type}</p>
-                      </div>
-                    </div>
-                    <a
-                      href={file.url}
-                      download
-                      onClick={(e) => {
-                        if (file.url === '#') {
-                          e.preventDefault();
-                          info('Resource Download', `Downloading ${file.title}`);
-                        }
-                      }}
-                      className="p-2 bg-slate-700 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-xl transition cursor-pointer shrink-0"
-                      title="Download Resource"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                ))}
               </div>
             </div>
           )}

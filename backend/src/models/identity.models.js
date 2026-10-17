@@ -158,6 +158,8 @@ const instructorProfileSchema = new mongoose.Schema(
     providerOnboardingState: { type: String, default: 'NOT_STARTED' },
     governmentId: {
       idType: { type: String, trim: true },
+      docId: { type: String },
+      diskPath: { type: String },
       documentUrl: { type: String },
       fileName: { type: String },
       fileType: { type: String },
@@ -171,6 +173,8 @@ const instructorProfileSchema = new mongoose.Schema(
     },
     verificationDocuments: [
       {
+        docId: { type: String },
+        diskPath: { type: String },
         documentType: {
           type: String,
           enum: ['RESUME_CV', 'EMPLOYMENT_PROOF', 'EXPERIENCE_LETTER', 'CERTIFICATION', 'OTHER'],
