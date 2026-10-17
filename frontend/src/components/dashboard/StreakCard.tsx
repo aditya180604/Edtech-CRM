@@ -5,7 +5,7 @@ import { Flame, CheckCircle2, Clock } from 'lucide-react';
 interface StreakCardProps {
   streak: StudentDashboardStreak;
 }
-
+ 
 export const StreakCard: React.FC<StreakCardProps> = ({ streak }) => {
   return (
     <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col justify-between gap-4">
