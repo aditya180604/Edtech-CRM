@@ -42,6 +42,7 @@ export const SuperAdminInstructorDashboardPage: React.FC = () => {
     instructor: {
       id: string;
       _id: string;
+      instructorId?: string;
       name: string;
       firstName: string;
       lastName: string;
