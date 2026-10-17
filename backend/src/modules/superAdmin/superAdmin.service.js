@@ -749,11 +749,20 @@ export class SuperAdminService {
       }
     });
 
-    // 2. Find any newly registered instructors who haven't completed a profile document yet
+    // 2. Filter out any applications where registration fee is not paid
+    // Only candidates whose registration fee has been paid (or who are already approved) appear in the Super Admin Verification Queue
+    const paidProfiles = allProfiles.filter((p) => {
+      const isFeePaid = Boolean(p.registrationFeePaid || p.userId?.registrationFeePaid);
+      const isAlreadyApproved = ['VERIFIED', 'APPROVED'].includes((p.verificationStatus || '').toUpperCase());
+      return isFeePaid || isAlreadyApproved;
+    });
+
+    // Orphan instructors who have paid registration fee
     const orphanInstructors = await User.find({
       role: ROLES.INSTRUCTOR,
       _id: { $nin: Array.from(existingUserMap.keys()) },
       status: { $ne: 'TERMINATED' },
+      registrationFeePaid: true,
     }).lean();
 
     const orphanProfiles = orphanInstructors.map((u) => ({
@@ -769,6 +778,7 @@ export class SuperAdminService {
       yearsOfExperience: '',
       currentOrganization: '',
       profilePhoto: u.profilePhoto || '',
+      registrationFeePaid: true,
       verificationStatus: 'PENDING',
       isCompleted: !!u.isProfileCompleted,
       createdAt: u.createdAt,
@@ -777,9 +787,9 @@ export class SuperAdminService {
     }));
 
     // 3. Combine into unified application list
-    const combined = [...allProfiles, ...orphanProfiles];
+    const combined = [...paidProfiles, ...orphanProfiles];
 
-    // Compute accurate counts across all applications
+    // Compute accurate counts across all verified/paid applications
     const pendingCount = combined.filter(
       (p) => !p.verificationStatus || ['PENDING', 'UNDER_REVIEW'].includes(p.verificationStatus)
     ).length;

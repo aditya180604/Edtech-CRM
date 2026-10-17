@@ -126,14 +126,18 @@ export const InstructorOnboardingPage: React.FC = () => {
           if (prof.linkedinUrl) setLinkedinUrl(prof.linkedinUrl);
           if (prof.githubUrl) setGithubUrl(prof.githubUrl);
           if (prof.portfolioUrl) setPortfolioUrl(prof.portfolioUrl);
-          if (prof.governmentId) {
+          if (prof.governmentId && (prof.governmentId.fileName || prof.governmentId.documentUrl || prof.governmentId.diskPath)) {
             setGovernmentIdDoc(prof.governmentId);
             if (prof.governmentId.idType) setGovernmentIdType(prof.governmentId.idType);
           }
           if (Array.isArray(prof.verificationDocuments)) {
-            const resume = prof.verificationDocuments.find((d: any) => d.documentType === 'RESUME_CV');
+            const resume = prof.verificationDocuments.find(
+              (d: any) => d.documentType === 'RESUME_CV' && (d.fileName || d.fileUrl || d.diskPath)
+            );
             if (resume) setResumeDoc(resume);
-            const emp = prof.verificationDocuments.find((d: any) => d.documentType === 'EMPLOYMENT_PROOF');
+            const emp = prof.verificationDocuments.find(
+              (d: any) => d.documentType === 'EMPLOYMENT_PROOF' && (d.fileName || d.fileUrl || d.diskPath)
+            );
             if (emp) setEmploymentDoc(emp);
           }
           if (prof.verificationStatus) setReviewStatus(prof.verificationStatus);
@@ -902,7 +906,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                     <div className="p-2.5 bg-white rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 truncate">
                         <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span className="truncate font-medium text-slate-800">{governmentIdDoc.fileName || 'Gov_ID_Proof.pdf'}</span>
+                        <span className="truncate font-medium text-slate-800">{governmentIdDoc.fileName || `${governmentIdType}_Document`}</span>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-600 uppercase shrink-0">Ready</span>
                     </div>
@@ -959,7 +963,7 @@ export const InstructorOnboardingPage: React.FC = () => {
                     <div className="p-2.5 bg-white rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 truncate">
                         <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span className="truncate font-medium text-slate-800">{resumeDoc.fileName || 'Curriculum_Vitae.pdf'}</span>
+                        <span className="truncate font-medium text-slate-800">{resumeDoc.fileName || 'Resume_Document'}</span>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-600 uppercase shrink-0">Ready</span>
                     </div>

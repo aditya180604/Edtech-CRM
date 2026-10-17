@@ -673,23 +673,29 @@ export const InstructorLobbyPage: React.FC = () => {
               </div>
 
               {/* Step 2 */}
-              <div className={`p-4 rounded-2xl border ${isPaid ? 'bg-emerald-50/70 border-emerald-100' : 'bg-amber-50 border-amber-200'}`}>
+              <div className={`p-4 rounded-2xl border ${isPaid ? 'bg-emerald-50/70 border-emerald-100' : 'bg-amber-50/90 border-2 border-amber-300 shadow-xs'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isPaid ? 'text-emerald-700' : 'text-amber-800'}`}>Step 2</span>
-                  {isPaid ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Clock className="w-4 h-4 text-amber-600 animate-spin" />}
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isPaid ? 'text-emerald-700' : 'text-amber-800'}`}>
+                    Step 2 {isPaid ? '✓ Completed' : '• Action Required'}
+                  </span>
+                  {isPaid ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <CreditCard className="w-4 h-4 text-amber-600" />}
                 </div>
                 <p className="font-bold text-xs text-slate-900">Registration Fee</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{isPaid ? 'Cashfree Verified' : 'One-time onboarding fee'}</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">{isPaid ? 'Cashfree Verified' : 'Mandatory to enter admin queue'}</p>
               </div>
 
               {/* Step 3 */}
-              <div className="p-4 rounded-2xl bg-amber-50/80 border-2 border-amber-300 shadow-xs">
+              <div className={`p-4 rounded-2xl border ${isPaid ? 'bg-amber-50/80 border-2 border-amber-300 shadow-xs' : 'bg-slate-50 border border-slate-200 opacity-60'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Step 3 • Active</span>
-                  <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isPaid ? 'text-amber-800' : 'text-slate-400'}`}>
+                    Step 3 {isPaid ? '• Active Review' : '• Locked'}
+                  </span>
+                  {isPaid ? <Clock className="w-4 h-4 text-amber-600 animate-spin" /> : <Lock className="w-4 h-4 text-slate-400" />}
                 </div>
-                <p className="font-bold text-xs text-amber-950">Super Admin Review</p>
-                <p className="text-[11px] text-amber-800 font-medium mt-0.5">Manual verification queue</p>
+                <p className="font-bold text-xs text-slate-900">Super Admin Review</p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  {isPaid ? 'In verification review queue' : 'Activates after fee confirmation'}
+                </p>
               </div>
 
               {/* Step 4 */}
