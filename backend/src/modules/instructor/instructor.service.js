@@ -25,6 +25,7 @@ import {
 import { ROLES, TRANSACTION_TYPES } from '../../config/constants.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { getAppOrigin } from '../../config/env.js';
 import { CashfreeService } from '../../services/cashfree.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
@@ -33,10 +34,29 @@ import { LearningPathService } from '../learningPaths/learningPath.service.js';
 import { sendInstructorFeeReceiptEmail } from '../../services/email.service.js';
 import { courseSelect, isOwnCourseMediaUrl } from '../../utils/courseMedia.js';
 
+const instructorModuleDir = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(instructorModuleDir, '../../..');
+const verificationDocsDir = path.join(backendRoot, 'uploads', 'verification_docs');
+
+// Instructors never publish directly: a course they create or change is either an explicit
+// draft or waits for Super Admin approval (SuperAdminService.approveCourse publishes it).
+const reviewStateFor = ({ status, approvalStatus } = {}) =>
+  status === 'DRAFT' || approvalStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL';
+
 export class InstructorService {
   /**
    * Helper to resolve either a MongoDB ObjectId or unique slug/instructorId (e.g. INS-1001) to a valid ObjectId
    */
+  /**
+   * Resolves the acting instructor (own _id, or an `ins-…` id when a Super Admin works inside an
+   * instructor's dashboard) to an ObjectId, or fails with a clear error.
+   */
+  static async requireInstructorObjectId(userIdOrSlug) {
+    const id = await this.resolveInstructorObjectId(userIdOrSlug);
+    if (!id) throw new Error('Instructor not found');
+    return id;
+  }
+
   static async resolveInstructorObjectId(userIdOrSlug) {
     if (!userIdOrSlug) return null;
     const str = String(userIdOrSlug).trim();
@@ -310,20 +330,19 @@ export class InstructorService {
         .replace(/(^-|-$)+/g, '') + `-${Date.now().toString().slice(-4)}`;
 
     const price = Number(courseData.coursePrice) || 0;
-    const platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
-    const instructorEarnings = Number((price - platformFee).toFixed(2));
+    // Every new course goes to Super Admin review; only an explicit draft skips it.
+    const reviewState = reviewStateFor(courseData);
 
     const course = new Course({
       ...courseData,
       slug,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
       coursePrice: price,
-      platformFee,
-      publishingFeeAmount: platformFee,
-      instructorEarnings,
-      publishingFeePaid: price === 0 ? true : !!courseData.publishingFeePaid,
-      status: courseData.status || 'PUBLISHED',
-      publishedAt: courseData.status === 'PUBLISHED' ? new Date() : undefined,
+      status: reviewState,
+      approvalStatus: reviewState,
+      approvedAt: undefined,
+      approvedBy: undefined,
+      publishedAt: undefined,
       syllabusUrl: courseData.syllabusUrl,
       syllabusFileName: courseData.syllabusFileName,
       maxEnrollmentLimit:
@@ -418,7 +437,7 @@ export class InstructorService {
   static async getCourseById(userId, courseId) {
     const course = await Course.findOne({
       _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
     }).lean();
 
     if (!course) throw new Error('Course not found or unauthorized');
@@ -459,7 +478,7 @@ export class InstructorService {
   static async updateCourse(userId, courseId, updateData) {
     const course = await Course.findOne({
       _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
     });
 
     if (!course) throw new Error('Course not found or unauthorized');
@@ -485,15 +504,13 @@ export class InstructorService {
     if (updateData.coursePrice !== undefined) {
       const price = Number(updateData.coursePrice) || 0;
       course.coursePrice = price;
-      course.platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
-      course.publishingFeeAmount = course.platformFee;
-      course.instructorEarnings = Number((price - course.platformFee).toFixed(2));
-      if (price === 0) {
-        course.publishingFeePaid = true;
-      }
     }
     if (updateData.currency) course.currency = updateData.currency;
-    if (updateData.status) course.status = updateData.status;
+    // Every edit sends the course back to Super Admin review; only an explicit draft skips it.
+    const reviewState = reviewStateFor(updateData);
+    course.status = reviewState;
+    course.approvalStatus = reviewState;
+    course.rejectionReason = undefined;
     if (updateData.visibility) course.visibility = updateData.visibility;
     if (updateData.syllabusUrl !== undefined) course.syllabusUrl = updateData.syllabusUrl;
     if (updateData.syllabusFileName !== undefined) course.syllabusFileName = updateData.syllabusFileName;
@@ -604,7 +621,7 @@ export class InstructorService {
   static async deleteCourse(userId, courseId) {
     const course = await Course.findOne({
       _id: courseId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
     });
 
     if (!course) throw new Error('Course not found or unauthorized');
@@ -628,18 +645,15 @@ export class InstructorService {
    */
   static async updateCoursePrice(userId, courseId, { coursePrice, currency = 'INR' }) {
     const price = Number(coursePrice) || 0;
-    const platformFee = price > 0 ? Number((price * 0.10).toFixed(2)) : 0;
-    const instructorEarnings = Number((price - platformFee).toFixed(2));
 
+    // A price change is a course update, so it goes back to Super Admin review.
     const course = await Course.findOneAndUpdate(
-      { _id: courseId, instructorId: userId },
+      { _id: courseId, instructorId: await this.requireInstructorObjectId(userId) },
       {
         coursePrice: price,
         currency,
-        platformFee,
-        publishingFeeAmount: platformFee,
-        instructorEarnings,
-        ...(price === 0 ? { publishingFeePaid: true } : {}),
+        status: 'PENDING_APPROVAL',
+        approvalStatus: 'PENDING_APPROVAL',
       },
       { new: true }
     );
@@ -652,13 +666,15 @@ export class InstructorService {
   static async updateCourseVisibility(userId, courseId, { visibility, status }) {
     const update = {};
     if (visibility) update.visibility = visibility;
+    // Instructors cannot publish directly; publishing happens only through Super Admin approval.
     if (status) {
-      update.status = status;
-      if (status === 'PUBLISHED') update.publishedAt = new Date();
+      const reviewState = reviewStateFor({ status });
+      update.status = reviewState;
+      update.approvalStatus = reviewState;
     }
 
     const course = await Course.findOneAndUpdate(
-      { _id: courseId, instructorId: userId },
+      { _id: courseId, instructorId: await this.requireInstructorObjectId(userId) },
       update,
       { new: true }
     );
@@ -673,10 +689,23 @@ export class InstructorService {
   }
 
   /**
+   * Curriculum changes go back to Super Admin review (drafts stay drafts).
+   */
+  static async requireReReview(course) {
+    // Use status only: legacy live courses have no stored approvalStatus, and the schema default
+    // ('DRAFT') would otherwise make them look like drafts.
+    const reviewState = reviewStateFor({ status: course.status });
+    if (course.status === reviewState && course.approvalStatus === reviewState) return;
+    course.status = reviewState;
+    course.approvalStatus = reviewState;
+    await course.save();
+  }
+
+  /**
    * 6. Add Module to Course
    */
   static async addModule(userId, courseId, { title, description, order }) {
-    const course = await Course.findOne({ _id: courseId, instructorId: userId });
+    const course = await Course.findOne({ _id: courseId, instructorId: await this.requireInstructorObjectId(userId) });
     if (!course) throw new Error('Course not found or unauthorized');
 
     const modCount = await Module.countDocuments({ courseId });
@@ -687,6 +716,7 @@ export class InstructorService {
       order: order || modCount + 1,
       status: 'PUBLISHED',
     });
+    await this.requireReReview(course);
     return module;
   }
 
@@ -697,7 +727,7 @@ export class InstructorService {
     const mod = await Module.findById(moduleId);
     if (!mod) throw new Error('Module not found');
 
-    const course = await Course.findOne({ _id: mod.courseId, instructorId: userId });
+    const course = await Course.findOne({ _id: mod.courseId, instructorId: await this.requireInstructorObjectId(userId) });
     if (!course) throw new Error('Unauthorized');
 
     const topicCount = await Topic.countDocuments({ moduleId });
@@ -708,6 +738,7 @@ export class InstructorService {
       order: topicData.order || topicCount + 1,
       status: 'PUBLISHED',
     });
+    await this.requireReReview(course);
     return topic;
   }
 
@@ -718,7 +749,7 @@ export class InstructorService {
     const topic = await Topic.findById(topicId);
     if (!topic) throw new Error('Topic not found');
 
-    const course = await Course.findOne({ _id: topic.courseId, instructorId: userId });
+    const course = await Course.findOne({ _id: topic.courseId, instructorId: await this.requireInstructorObjectId(userId) });
     if (!course) throw new Error('Unauthorized');
 
     const lessonCount = await Lesson.countDocuments({ topicId });
@@ -728,6 +759,7 @@ export class InstructorService {
       order: lessonData.order || lessonCount + 1,
       status: 'PUBLISHED',
     });
+    await this.requireReReview(course);
     return lesson;
   }
 
@@ -854,7 +886,7 @@ export class InstructorService {
     // Duplicate check: prevent duplicate webinars with identical title and start time
     const cleanTitle = (webinarData.title || '').trim();
     const duplicate = await Webinar.findOne({
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
       title: { $regex: new RegExp(`^${cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       startTime: {
         $gte: new Date(startTime.getTime() - 15 * 60 * 1000),
@@ -894,7 +926,7 @@ export class InstructorService {
       meetingProvider,
       meetingUrl,
       webinarId: webinarData.webinarId || `webinar_${Date.now()}`,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
       startTime,
       endTime,
       capacity: Number(webinarData.capacity) || 100,
@@ -913,7 +945,7 @@ export class InstructorService {
   static async updateWebinar(userId, webinarId, updateData) {
     const webinar = await Webinar.findOne({
       _id: webinarId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
     });
     if (!webinar) throw new Error('Webinar not found or unauthorized');
 
@@ -973,7 +1005,7 @@ export class InstructorService {
   static async deleteWebinar(userId, webinarId) {
     const webinar = await Webinar.findOneAndDelete({
       _id: webinarId,
-      instructorId: new mongoose.Types.ObjectId(userId),
+      instructorId: await this.requireInstructorObjectId(userId),
     });
     if (!webinar) throw new Error('Webinar not found or unauthorized');
     return { message: 'Webinar deleted successfully' };
@@ -984,7 +1016,7 @@ export class InstructorService {
    */
   static async updateWebinarStatus(userId, webinarId, { status }) {
     const webinar = await Webinar.findOneAndUpdate(
-      { _id: webinarId, instructorId: new mongoose.Types.ObjectId(userId) },
+      { _id: webinarId, instructorId: await this.requireInstructorObjectId(userId) },
       { status: status.toUpperCase() },
       { new: true }
     );
@@ -1707,17 +1739,8 @@ export class InstructorService {
       throw new Error('File size exceeds the 5MB maximum limit.');
     }
 
-    const candidateDirs = [
-      path.resolve('backend/uploads/verification_docs'),
-      path.resolve('uploads/verification_docs'),
-      path.resolve(process.cwd(), 'backend/uploads/verification_docs'),
-      path.resolve(process.cwd(), 'uploads/verification_docs'),
-    ];
-    let uploadsDir = candidateDirs.find((d) => fs.existsSync(d));
-    if (!uploadsDir) {
-      uploadsDir = path.resolve('uploads/verification_docs');
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    const uploadsDir = verificationDocsDir;
+    fs.mkdirSync(uploadsDir, { recursive: true });
 
     const cleanName = (fileName || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
     const docUniqueId = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -1758,6 +1781,7 @@ export class InstructorService {
     if (documentType === 'GOVERNMENT_ID') {
       profile.governmentId = {
         idType: idType || 'PASSPORT',
+        docId: docUniqueId,
         documentUrl: relativeUrl,
         diskPath: diskFileName,
         fileName: cleanName,
@@ -1817,6 +1841,7 @@ export class InstructorService {
 
     const isGovRequest =
       ['GOVERNMENT_ID', 'GOVT_ID', 'ID_PROOF', 'PASSPORT', 'AADHAAR', 'DRIVING_LICENSE', 'VOTER_ID'].includes(target.toUpperCase()) ||
+      Boolean(profile.governmentId?.docId && profile.governmentId.docId === target) ||
       Boolean(profile.governmentId?.documentUrl?.includes(target)) ||
       Boolean(profile.governmentId?.diskPath?.includes(target)) ||
       Boolean(profile.governmentId?.fileName && profile.governmentId.fileName === target);
@@ -1838,26 +1863,25 @@ export class InstructorService {
       });
     }
 
-    // Fallback: If still not matched, check if governmentId is available
-    if (!doc && profile.governmentId && (profile.governmentId.fileName || profile.governmentId.documentUrl)) {
-      doc = profile.governmentId;
-    }
-
     if (!doc) throw new Error('Verification document record not found.');
 
     const candidateDirs = [
+      verificationDocsDir,
       path.resolve('uploads/verification_docs'),
       path.resolve('backend/uploads/verification_docs'),
       path.resolve(process.cwd(), 'uploads/verification_docs'),
       path.resolve(process.cwd(), 'backend/uploads/verification_docs'),
+      path.join(backendRoot, 'src', 'uploads', 'verification_docs'),
+      path.join(backendRoot, 'src', 'backend', 'uploads', 'verification_docs'),
     ].filter((dir, idx, arr) => arr.indexOf(dir) === idx && fs.existsSync(dir));
 
     let fullPath = null;
 
     // 1. Try diskPath directly across all candidate directories
     if (doc.diskPath) {
+      const diskFileName = path.basename(doc.diskPath);
       for (const dir of candidateDirs) {
-        const candidate = path.join(dir, doc.diskPath);
+        const candidate = path.join(dir, diskFileName);
         if (fs.existsSync(candidate)) {
           fullPath = candidate;
           break;

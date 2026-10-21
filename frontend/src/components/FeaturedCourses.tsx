@@ -28,7 +28,8 @@ export const FeaturedCourses: React.FC = () => {
     const loadFeatured = async () => {
       try {
         setLoading(true);
-        const res = await coursesApi.getFeatured(8);
+        // Only the 4 newest (or most recently updated) approved courses; "View all" links to the full catalog.
+        const res = await coursesApi.getFeatured(4);
         if (isMounted && res.success && res.data && res.data.length > 0) {
           setCourses(res.data);
         }

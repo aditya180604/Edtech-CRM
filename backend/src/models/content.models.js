@@ -78,6 +78,7 @@ const courseSchema = new mongoose.Schema(
 
 courseSchema.index({ category: 1, status: 1 });
 courseSchema.index({ instructorId: 1, status: 1 });
+courseSchema.index({ status: 1, publishedAt: -1 });
 
 courseSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 

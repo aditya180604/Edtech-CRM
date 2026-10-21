@@ -110,7 +110,8 @@ export class CoursesService {
     const courses = await Course.find({ status: 'PUBLISHED' })
       .select(courseSelect(COURSE_CARD_FIELDS))
       .populate('instructorId', userSelect('firstName lastName profilePhoto updatedAt'))
-      .sort({ createdAt: -1 })
+      // Newest first: approval (of a new course or of an edit) stamps publishedAt.
+      .sort({ publishedAt: -1, createdAt: -1 })
       .limit(limit)
       .lean();
 

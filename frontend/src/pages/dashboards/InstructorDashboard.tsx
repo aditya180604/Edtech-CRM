@@ -31,7 +31,6 @@ import {
   Trash2,
   Lock,
   Edit3,
-  CreditCard,
   AlertTriangle,
   X,
   Clock,
@@ -68,7 +67,6 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EduLogo } from '../../components/ui/EduLogo';
-import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
 import { webinarsApi } from '../../api/webinars';
 import { setInstructorOverride } from '../../api/client';
@@ -141,23 +139,9 @@ export const InstructorDashboard: React.FC = () => {
   const [courseCategory, setCourseCategory] = useState('ALL');
   const [coursesList, setCoursesList] = useState<any[]>([]);
 
-  // Cashfree Publishing Fee & Rejection Feedback States (Workflow 2 & 3)
-  const [feeModalCourse, setFeeModalCourse] = useState<any | null>(null);
-  const [feeOrderData, setFeeOrderData] = useState<any | null>(null);
-  const [showFeeModal, setShowFeeModal] = useState(false);
-  const [processingFee, setProcessingFee] = useState(false);
-  const [cashfreePaymentState, setCashfreePaymentState] = useState<
-    'IDLE' | 'PROCESSING' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'USER_DROPPED' | 'EXPIRED'
-  >('IDLE');
-  const [checkoutButtonStep, setCheckoutButtonStep] = useState<'IDLE' | 'CREATING' | 'OPENING'>('IDLE');
-  const [verifiedPaymentData, setVerifiedPaymentData] = useState<{
-    orderId?: string;
-    paymentId?: string;
-    amount?: number;
-  } | null>(null);
+  // Rejection Feedback States
   const [rejectionModalCourse, setRejectionModalCourse] = useState<any | null>(null);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
-  const [wizardPublishingFeePaid, setWizardPublishingFeePaid] = useState<boolean>(false);
   const [isSubmittingCourse, setIsSubmittingCourse] = useState<boolean>(false);
 
   // Webinars Tab State
@@ -914,7 +898,6 @@ export const InstructorDashboard: React.FC = () => {
             })),
           })),
         });
-        setWizardPublishingFeePaid(Boolean(course.publishingFeePaid));
         setActiveNav('create-course');
         setCreateStep(1);
       }
@@ -1074,199 +1057,10 @@ export const InstructorDashboard: React.FC = () => {
     }
   };
 
-  // Genuine Cashfree Payment Verification with Backend
-  // Genuine Cashfree Payment Verification with Backend
-  const verifyBackendPaymentStatus = async (courseId: string, orderId?: string) => {
-    try {
-      setProcessingFee(true);
-      const res = await instructorApi.getPublishingFeeStatus(courseId, orderId);
-      const data = res?.data;
-      const status = data?.paymentStatus || data?.payment_status;
-
-      if (status === 'SUCCESS') {
-        setCashfreePaymentState('SUCCESS');
-        setWizardPublishingFeePaid(true);
-        setVerifiedPaymentData({
-          orderId: data.orderId || data.order_id || orderId,
-          paymentId: data.paymentId || data.cashfreePaymentId || '—',
-          amount: data.amount,
-        });
-        success(
-          'Payment Verified Successfully! ✓',
-          `Order ID: ${data.orderId || orderId}. Platform fee (₹${Number(data.amount || 0).toLocaleString('en-IN')}) registered. Platform fee revenue added to Super Admin Ledger.`
-        );
-        fetchDashboard(true);
-      } else if (status === 'USER_DROPPED') {
-        setCashfreePaymentState('USER_DROPPED');
-      } else if (status === 'FAILED') {
-        setCashfreePaymentState('FAILED');
-      } else if (status === 'EXPIRED') {
-        setCashfreePaymentState('EXPIRED');
-      } else {
-        setCashfreePaymentState('PENDING');
-      }
-    } catch (err: any) {
-      console.error('Error verifying payment status with server:', err);
-      setCashfreePaymentState('PENDING');
-    } finally {
-      setProcessingFee(false);
-      setCheckoutButtonStep('IDLE');
-    }
-  };
-
-  const handleWizardPayFee = async () => {
-    if (!courseFormData.title.trim()) {
-      toastError('Course Title Required', 'Please enter a course title in Step 1 before proceeding to payment.');
-      setCreateStep(1);
-      return;
-    }
-    try {
-      setProcessingFee(true);
-      setCheckoutButtonStep('CREATING');
-      setCashfreePaymentState('PROCESSING');
-
-      let targetCourseId = editingCourseId;
-      if (!targetCourseId) {
-        // Create initial draft course first to obtain courseId
-        const res = await instructorApi.createCourse({
-          ...courseFormData,
-          status: 'DRAFT',
-          approvalStatus: 'DRAFT',
-        });
-        targetCourseId = res.data?._id || res.data?.id;
-        setEditingCourseId(targetCourseId);
-      } else {
-        // Update existing course draft
-        await instructorApi.updateCourse(targetCourseId, {
-          ...courseFormData,
-          status: 'DRAFT',
-          approvalStatus: 'DRAFT',
-        });
-      }
-
-      if (!targetCourseId) {
-        toastError('Error', 'Unable to initiate course for payment. Please try again.');
-        setCashfreePaymentState('IDLE');
-        setCheckoutButtonStep('IDLE');
-        return;
-      }
-
-      // Initialize genuine Cashfree PG order on backend
-      const feeRes = await instructorApi.createPublishingFeeOrder(targetCourseId);
-      if (!feeRes.success || !feeRes.data) {
-        throw new Error(feeRes.message || 'Failed to initialize payment order with Cashfree.');
-      }
-
-      const orderData = feeRes.data;
-      setFeeOrderData(orderData);
-
-      // Handle ₹0 free course waiver
-      if (orderData.alreadyPaid && orderData.amount === 0) {
-        setCashfreePaymentState('SUCCESS');
-        setWizardPublishingFeePaid(true);
-        setVerifiedPaymentData({
-          orderId: orderData.orderId || 'FREE_WAIVER',
-          paymentId: 'WAIVED',
-          amount: 0,
-        });
-        success('Platform Fee Waived', 'Publishing fee is waived for free courses (₹0).');
-        setCheckoutButtonStep('IDLE');
-        return;
-      }
-
-      // Handle previously verified course
-      if (orderData.alreadyPaid && orderData.paymentStatus === 'SUCCESS') {
-        setCashfreePaymentState('SUCCESS');
-        setWizardPublishingFeePaid(true);
-        setVerifiedPaymentData({
-          orderId: orderData.orderId,
-          paymentId: orderData.paymentId,
-          amount: orderData.amount,
-        });
-        success('Payment Verified', 'Platform fee has already been verified.');
-        setCheckoutButtonStep('IDLE');
-        return;
-      }
-
-      if (!orderData.paymentSessionId) {
-        throw new Error('Cashfree payment session ID was not received from gateway.');
-      }
-
-      setCheckoutButtonStep('OPENING');
-
-      // Initialize Cashfree official SDK
-      const cfMode = orderData.environment === 'production' ? 'production' : 'sandbox';
-      let cashfree: any = null;
-      try {
-        cashfree = await loadCashfree({ mode: cfMode });
-      } catch (sdkErr) {
-        console.warn('Cashfree SDK load notice:', sdkErr);
-      }
-
-      if (!cashfree) {
-        throw new Error('Could not load Cashfree SDK modal. Please check your network connection.');
-      }
-
-      let userDropped = false;
-      try {
-        const checkoutResult: any = await cashfree.checkout({
-          paymentSessionId: orderData.paymentSessionId,
-          redirectTarget: '_modal',
-        });
-
-        if (checkoutResult?.error) {
-          console.warn('[Cashfree Checkout Event]:', checkoutResult.error);
-          if (
-            checkoutResult.error.code === 'USER_DROPPED' ||
-            checkoutResult.error.message?.toLowerCase().includes('user dropped') ||
-            checkoutResult.error.message?.toLowerCase().includes('closed') ||
-            checkoutResult.error.message?.toLowerCase().includes('dismiss')
-          ) {
-            userDropped = true;
-          }
-        }
-      } catch (checkoutErr: any) {
-        console.warn('[Cashfree Checkout Warning]:', checkoutErr);
-        if (
-          checkoutErr?.message?.toLowerCase().includes('user dropped') ||
-          checkoutErr?.message?.toLowerCase().includes('closed')
-        ) {
-          userDropped = true;
-        }
-      }
-
-      if (userDropped) {
-        setCashfreePaymentState('USER_DROPPED');
-        setProcessingFee(false);
-        setCheckoutButtonStep('IDLE');
-        return;
-      }
-
-      // Verify payment with server (rely strictly on Cashfree server verification)
-      await verifyBackendPaymentStatus(targetCourseId, orderData.orderId);
-    } catch (err: any) {
-      console.error('Error in handleWizardPayFee:', err);
-      if (err.response?.status === 401) {
-        toastError('Session Expired', 'Your session has expired. Please refresh the page or log in again.');
-        setCashfreePaymentState('IDLE');
-      } else {
-        toastError('Payment Initialization Failed', err.response?.data?.message || err.message || 'Could not initiate payment.');
-        setCashfreePaymentState('FAILED');
-      }
-    } finally {
-      setProcessingFee(false);
-      setCheckoutButtonStep('IDLE');
-    }
-  };
-
   const handleSubmitCourseForReview = async (saveAsDraftOnly = false) => {
     if (!courseFormData.title.trim()) {
       toastError('Title Required', 'Please provide a course title in Step 1 before submitting.');
       setCreateStep(1);
-      return;
-    }
-    if (!saveAsDraftOnly && !wizardPublishingFeePaid) {
-      toastError('Publishing Fee Required', 'Please pay the 10% platform publishing fee via Cashfree before submitting for Super Admin review.');
       return;
     }
     if (isSubmittingCourse) return;
@@ -1294,23 +1088,16 @@ export const InstructorDashboard: React.FC = () => {
 
       if (!saveAsDraftOnly && savedCourseId) {
         await instructorApi.submitForReview(savedCourseId);
-        const orderIdDisp = verifiedPaymentData?.orderId || feeOrderData?.orderId || 'VERIFIED';
         success(
           'Course Submitted for Super Admin Review! 🎉',
-          `Order ID: ${orderIdDisp}. Platform fee verified and course submitted for review. You can track approval progress in My Courses.`
+          'Your course has been submitted for review. You can track approval progress in My Courses.'
         );
         setEditingCourseId(null);
-        setWizardPublishingFeePaid(false);
-        setCashfreePaymentState('IDLE');
-        setVerifiedPaymentData(null);
         setActiveNav('courses');
         setCreateStep(1);
       } else {
         success('Course Draft Saved', 'Your course structure and curriculum have been saved as draft.');
         setEditingCourseId(null);
-        setWizardPublishingFeePaid(false);
-        setCashfreePaymentState('IDLE');
-        setVerifiedPaymentData(null);
         setActiveNav('courses');
         setCreateStep(1);
       }
@@ -1373,97 +1160,6 @@ export const InstructorDashboard: React.FC = () => {
       toastError('Submission Error', err.response?.data?.message || err.message || 'Could not submit course.');
     } finally {
       setIsSubmittingCourse(false);
-    }
-  };
-
-  const handleOpenFeeModal = async (course: any) => {
-    const targetCourseId = course._id || course.id;
-    if (!targetCourseId) return;
-
-    try {
-      setProcessingFee(true);
-      const feeRes = await instructorApi.createPublishingFeeOrder(targetCourseId);
-      if (!feeRes.success || !feeRes.data) {
-        throw new Error(feeRes.message || 'Failed to initialize payment with Cashfree.');
-      }
-
-      const orderData = feeRes.data;
-      if (orderData.alreadyPaid && orderData.amount === 0) {
-        success('Platform Fee Waived', 'Publishing fee is waived for free courses.');
-        await loadSubViewData();
-        return;
-      }
-
-      if (orderData.alreadyPaid && orderData.paymentStatus === 'SUCCESS') {
-        success('Platform Fee Verified', 'Platform fee has already been verified.');
-        await loadSubViewData();
-        return;
-      }
-
-      if (!orderData.paymentSessionId) {
-        throw new Error('Cashfree payment session ID was not received from gateway.');
-      }
-
-      const cfMode = orderData.environment === 'production' ? 'production' : 'sandbox';
-      let cashfree: any = null;
-      try {
-        cashfree = await loadCashfree({ mode: cfMode });
-      } catch (sdkErr) {
-        console.warn('Cashfree SDK load notice:', sdkErr);
-      }
-
-      if (!cashfree) {
-        throw new Error('Cashfree Payment Gateway SDK failed to initialize.');
-      }
-
-      let userDropped = false;
-      try {
-        const checkoutResult: any = await cashfree.checkout({
-          paymentSessionId: orderData.paymentSessionId,
-          redirectTarget: '_modal',
-        });
-
-        if (checkoutResult?.error) {
-          console.warn('[Cashfree Checkout Event]:', checkoutResult.error);
-          if (
-            checkoutResult.error.code === 'USER_DROPPED' ||
-            checkoutResult.error.message?.toLowerCase().includes('user dropped') ||
-            checkoutResult.error.message?.toLowerCase().includes('closed') ||
-            checkoutResult.error.message?.toLowerCase().includes('dismiss')
-          ) {
-            userDropped = true;
-          }
-        }
-      } catch (checkoutErr: any) {
-        console.warn('[Cashfree Checkout Warning]:', checkoutErr);
-        if (
-          checkoutErr?.message?.toLowerCase().includes('user dropped') ||
-          checkoutErr?.message?.toLowerCase().includes('closed')
-        ) {
-          userDropped = true;
-        }
-      }
-
-      if (userDropped) {
-        toastError('Payment Incomplete', 'Payment modal was closed without completing payment.');
-        setProcessingFee(false);
-        return;
-      }
-
-      // Verify payment with server (no simulation)
-      const statusRes = await instructorApi.getPublishingFeeStatus(targetCourseId, orderData.orderId);
-      if (statusRes.data?.paymentStatus === 'SUCCESS') {
-        success('Payment Verified Successfully! ✓', `Order ID: ${orderData.orderId}. Platform fee registered and credited to Super Admin.`);
-      } else {
-        info('Payment Update', statusRes.data?.message || 'Payment status updated.');
-      }
-      await loadSubViewData();
-      fetchDashboard(true);
-    } catch (err: any) {
-      console.error('Error initiating Cashfree payment:', err);
-      toastError('Payment Failed', err.response?.data?.message || err.message || 'Payment initiation failed.');
-    } finally {
-      setProcessingFee(false);
     }
   };
 
@@ -2406,7 +2102,6 @@ export const InstructorDashboard: React.FC = () => {
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Price</th>
                     <th className="py-3 px-4">Approval Status</th>
-                    <th className="py-3 px-4">Publishing Fee</th>
                     <th className="py-3 px-4 text-right">Workflow & Actions</th>
                   </tr>
                 </thead>
@@ -2459,45 +2154,19 @@ export const InstructorDashboard: React.FC = () => {
                         )}
                       </td>
 
-                      {/* Publishing Fee Status */}
-                      <td className="py-3.5 px-4">
-                        {c.publishingFeePaid ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF5F2] text-[#E04322] border border-[#FFCCC2]">
-                            ₹499 Paid
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                            Unpaid
-                          </span>
-                        )}
-                      </td>
-
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
-                          {/* Workflow Step 1: For Draft Courses - Require Cashfree Fee before Review Submission */}
-                          {(!c.approvalStatus || c.approvalStatus === 'DRAFT') && (
-                            <>
-                              {!c.publishingFeePaid ? (
-                                <button
-                                  onClick={() => handleOpenFeeModal(c)}
-                                  className="px-2.5 py-1 bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
-                                  title="Pay Cashfree Publishing Fee (₹499) to Unlock Review Submission"
-                                >
-                                  <CreditCard className="w-3 h-3" />
-                                  <span>Pay Fee (₹499)</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleSubmitExistingForReview(c._id)}
-                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
-                                  title="Submit to Super Admin for Approval"
-                                >
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Submit Review</span>
-                                </button>
-                              )}
-                            </>
+                          {/* Draft or rejected courses can be (re)submitted for Super Admin review */}
+                          {(!c.approvalStatus || c.approvalStatus === 'DRAFT' || c.approvalStatus === 'REJECTED') && (
+                            <button
+                              onClick={() => handleSubmitExistingForReview(c._id)}
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] cursor-pointer transition-colors shadow-2xs inline-flex items-center gap-1"
+                              title="Submit to Super Admin for Approval"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Submit Review</span>
+                            </button>
                           )}
 
                           {/* Workflow Step 2: For Approved Courses - Publish Live */}
@@ -2588,16 +2257,6 @@ export const InstructorDashboard: React.FC = () => {
                   >
                     <span>Next Step</span>
                     <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                ) : !wizardPublishingFeePaid ? (
-                  <button
-                    type="button"
-                    onClick={handleWizardPayFee}
-                    disabled={processingFee}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04824] active:bg-[#C93C1B] text-white font-bold text-xs rounded-xl shadow-md shadow-[#FA5A36]/25 transition-all cursor-pointer disabled:opacity-60"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Pay Fee (₹{(courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.10).toFixed(2)) : 0).toLocaleString('en-IN')}) to Unlock</span>
                   </button>
                 ) : (
                   <button
@@ -4093,8 +3752,8 @@ export const InstructorDashboard: React.FC = () => {
                       <DollarSign className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-extrabold text-slate-900">Media, Pricing & Platform Share</h3>
-                      <p className="text-slate-500 font-medium text-xs">Set promotional preview video, course pricing, and review the automatic 10% platform share.</p>
+                      <h3 className="text-base font-extrabold text-slate-900">Media & Pricing</h3>
+                      <p className="text-slate-500 font-medium text-xs">Set promotional preview video, and course pricing.</p>
                     </div>
                   </div>
 
@@ -4160,24 +3819,6 @@ export const InstructorDashboard: React.FC = () => {
                           }}
                           className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-900 text-xl focus:border-blue-500 focus:outline-none shadow-2xs"
                         />
-
-                        {/* Commission Breakdown Card */}
-                        {(() => {
-                          const fee = courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.10).toFixed(2)) : 0;
-                          const net = courseFormData.coursePrice > 0 ? Number((courseFormData.coursePrice * 0.90).toFixed(2)) : 0;
-                          return (
-                            <div className="pt-2 border-t border-slate-200 space-y-1.5 text-[11px]">
-                              <div className="flex justify-between font-semibold text-slate-600">
-                                <span>Platform Fee (10% Share):</span>
-                                <span className="font-bold text-blue-600">₹{fee.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="flex justify-between font-semibold text-slate-600">
-                                <span>Your Net Payout (90% Share):</span>
-                                <span className="font-bold text-emerald-600">₹{net.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
-                              </div>
-                            </div>
-                          );
-                        })()}
                       </div>
 
                       {/* Maximum Enrollment Limit (Optional Seat Cap) */}
@@ -4220,14 +3861,14 @@ export const InstructorDashboard: React.FC = () => {
               )}
 
               {/* =========================================================================
-                  STEP 9: REVIEW & SUBMIT (Complete Course Review, Student Preview, Fee & Submit)
+                  STEP 9: REVIEW & SUBMIT (Complete Course Review, Student Preview & Submit)
                  ========================================================================= */}
               {createStep === 9 && (
                 <div className="space-y-6 text-xs pt-1">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
                       <h3 className="text-base sm:text-lg font-black text-slate-900">Step 9: Complete Course Review & Super Admin Submission</h3>
-                      <p className="text-slate-500 font-medium">Verify all course parameters, inspect student view preview, settle 10% platform fee, and submit for review.</p>
+                      <p className="text-slate-500 font-medium">Verify all course parameters, inspect student view preview, and submit for Super Admin review.</p>
                     </div>
                     <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black">
                       Step 9 of 9
@@ -4471,270 +4112,6 @@ export const InstructorDashboard: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Platform Publishing Fee Gatekeeper Card (10% Platform Fee - Genuine Cashfree Integration) */}
-                    {(() => {
-                      const dynamicFee = courseFormData.coursePrice > 0
-                        ? Number((courseFormData.coursePrice * 0.10).toFixed(2))
-                        : 0;
-                      const instructorNet = courseFormData.coursePrice > 0
-                        ? Number((courseFormData.coursePrice * 0.90).toFixed(2))
-                        : 0;
-
-                      return (
-                        <div className="space-y-4">
-                          {/* 1. STATE: SUCCESS / PAID */}
-                          {(cashfreePaymentState === 'SUCCESS' || wizardPublishingFeePaid) && (
-                            <div className="p-6 rounded-2xl border bg-emerald-50/90 border-emerald-300 text-emerald-950 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
-                                    <CheckCircle2 className="w-6 h-6" />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <h4 className="font-black text-base text-emerald-950">
-                                        ✓ Payment Successful
-                                      </h4>
-                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900 border border-emerald-400">
-                                        Cashfree Verified • PAID
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-emerald-800 font-medium leading-relaxed">
-                                      Course is verified and ready for submission. Your 10% platform publishing fee has been confirmed by Cashfree PG.
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="p-4 rounded-xl bg-white/90 border border-emerald-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                                <div>
-                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Platform Fee Paid</span>
-                                  <p className="font-black text-emerald-700 text-base">
-                                    ₹{(verifiedPaymentData?.amount ?? dynamicFee).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Order ID</span>
-                                  <p className="font-mono font-bold text-slate-800 text-xs truncate">
-                                    {verifiedPaymentData?.orderId || feeOrderData?.orderId || 'PUBFEE_VERIFIED'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider block">Payment ID</span>
-                                  <p className="font-mono font-bold text-slate-800 text-xs truncate">
-                                    {verifiedPaymentData?.paymentId || 'CF_PAID_CONFIRMED'}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 2. STATE: PROCESSING PAYMENT */}
-                          {cashfreePaymentState === 'PROCESSING' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-blue-50 border-blue-300 text-blue-950 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 animate-pulse shadow-md shadow-blue-600/20">
-                                  <RefreshCw className="w-6 h-6 animate-spin" />
-                                </div>
-                                <div>
-                                  <h4 className="font-black text-base text-blue-950">Processing Payment</h4>
-                                  <p className="text-xs text-blue-700 font-medium">
-                                    Waiting for payment confirmation from Cashfree Payment Gateway... Do not close this window.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 3. STATE: PENDING VERIFICATION */}
-                          {cashfreePaymentState === 'PENDING' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-amber-50 border-amber-300 text-amber-950 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
-                                    <Clock className="w-6 h-6" />
-                                  </div>
-                                  <div>
-                                    <h4 className="font-black text-base text-amber-950">Payment Verification Pending</h4>
-                                    <p className="text-xs text-amber-800 font-medium">
-                                      Cashfree is still processing the payment. Please wait or check status.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => verifyBackendPaymentStatus(editingCourseId || '', feeOrderData?.orderId)}
-                                  disabled={processingFee}
-                                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
-                                >
-                                  <RefreshCw className={`w-3.5 h-3.5 ${processingFee ? 'animate-spin' : ''}`} />
-                                  <span>Check Payment Status</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 4. STATE: FAILED */}
-                          {cashfreePaymentState === 'FAILED' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-rose-50 border-rose-300 text-rose-950 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-600/20">
-                                    <X className="w-6 h-6" />
-                                  </div>
-                                  <div>
-                                    <h4 className="font-black text-base text-rose-950">✕ Payment Failed</h4>
-                                    <p className="text-xs text-rose-700 font-medium">
-                                      Payment failed. No platform fee was charged successfully. Please try again.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={handleWizardPayFee}
-                                  disabled={processingFee}
-                                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
-                                >
-                                  <RefreshCw className="w-3.5 h-3.5" />
-                                  <span>Try Again</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 5. STATE: USER DROPPED */}
-                          {cashfreePaymentState === 'USER_DROPPED' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-slate-100 border-slate-300 text-slate-900 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-md">
-                                    <AlertTriangle className="w-6 h-6" />
-                                  </div>
-                                  <div>
-                                    <h4 className="font-black text-base text-slate-900">Payment Not Completed</h4>
-                                    <p className="text-xs text-slate-600 font-medium">
-                                      You exited the payment process. No successful payment was recorded.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={handleWizardPayFee}
-                                  disabled={processingFee}
-                                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
-                                >
-                                  <CreditCard className="w-3.5 h-3.5" />
-                                  <span>Try Again</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 6. STATE: EXPIRED */}
-                          {cashfreePaymentState === 'EXPIRED' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-amber-50 border-amber-300 text-amber-950 space-y-4 shadow-sm animate-in fade-in">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0">
-                                    <Clock className="w-6 h-6" />
-                                  </div>
-                                  <div>
-                                    <h4 className="font-black text-base text-amber-950">Payment Session Expired</h4>
-                                    <p className="text-xs text-amber-700 font-medium">
-                                      The Cashfree checkout session expired. A fresh payment session will be created.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={handleWizardPayFee}
-                                  disabled={processingFee}
-                                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer shrink-0"
-                                >
-                                  <RefreshCw className="w-3.5 h-3.5" />
-                                  <span>Try Again</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 7. STATE: IDLE (BEFORE PAYMENT) */}
-                          {cashfreePaymentState === 'IDLE' && !wizardPublishingFeePaid && (
-                            <div className="p-6 rounded-2xl border bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border-blue-200 text-slate-800 space-y-4">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                <div className="flex items-start gap-3.5">
-                                  <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
-                                    <CreditCard className="w-6 h-6" />
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <h4 className="font-black text-base text-slate-900">
-                                        Platform Publishing Fee
-                                      </h4>
-                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">
-                                        10% Share • Cashfree PG
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-slate-600 mt-1 font-medium leading-relaxed">
-                                      {courseFormData.coursePrice === 0
-                                        ? 'This is a free course (₹0), so the platform fee is waived (₹0).'
-                                        : `Instructors pay a 10% platform fee of ₹${dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })} via Cashfree gateway before submitting the course for Super Admin review.`}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={handleWizardPayFee}
-                                  disabled={processingFee}
-                                  className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60"
-                                >
-                                  {processingFee ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <CreditCard className="w-4 h-4" />
-                                  )}
-                                  <span>
-                                    {checkoutButtonStep === 'CREATING'
-                                      ? 'Creating Payment...'
-                                      : checkoutButtonStep === 'OPENING'
-                                      ? 'Opening Secure Checkout...'
-                                      : `Pay Platform Fee ₹${dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                                  </span>
-                                </button>
-                              </div>
-
-                              {/* Fee Calculation Breakdown Card */}
-                              <div className="p-4 bg-white/90 rounded-xl border border-blue-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                                <div className="space-y-0.5">
-                                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Course Price</span>
-                                  <p className="font-black text-slate-900 text-sm">
-                                    {courseFormData.coursePrice > 0 ? `₹${courseFormData.coursePrice.toLocaleString('en-IN')}` : 'FREE (₹0)'}
-                                  </p>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <span className="text-blue-600 text-[10px] font-bold uppercase tracking-wider">Platform Fee (10%)</span>
-                                  <p className="font-black text-blue-700 text-sm">
-                                    ₹{dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </p>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider">Total Payable</span>
-                                  <p className="font-black text-emerald-700 text-base">
-                                    ₹{dynamicFee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
                     {/* Final Actions in Step 9 */}
                     <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
                       <button
@@ -4752,37 +4129,24 @@ export const InstructorDashboard: React.FC = () => {
                         Save as Draft
                       </button>
 
-                      {!wizardPublishingFeePaid ? (
-                        <button
-                          type="button"
-                          onClick={handleWizardPayFee}
-                          disabled={processingFee}
-                          className="w-full sm:w-auto px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 border border-slate-300"
-                          title="Pay 10% platform fee via Cashfree above to unlock submission"
-                        >
-                          <Lock className="w-4 h-4 text-slate-500" />
-                          <span>Submit for Review (Pay Fee to Unlock)</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isSubmittingCourse}
-                          onClick={() => handleSubmitCourseForReview(false)}
-                          className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-70"
-                        >
-                          {isSubmittingCourse ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>Submitting Course to Super Admin...</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Submit for Super Admin Review</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        disabled={isSubmittingCourse}
+                        onClick={() => handleSubmitCourseForReview(false)}
+                        className="w-full sm:w-auto px-8 py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-70"
+                      >
+                        {isSubmittingCourse ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Submitting Course to Super Admin...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Submit for Super Admin Review</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

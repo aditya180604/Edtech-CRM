@@ -72,8 +72,8 @@ export const MobileHomeView: React.FC = () => {
       if (data && data.length > 0) setStats(data);
     }).catch(console.warn);
 
-    // 2. Featured Courses
-    coursesApi.getFeatured(6).then((res) => {
+    // 2. Featured Courses (4 newest approved, matching the desktop section)
+    coursesApi.getFeatured(4).then((res) => {
       if (res.success && res.data && res.data.length > 0) {
         setCourses(res.data);
       }

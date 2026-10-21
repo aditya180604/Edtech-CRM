@@ -31,7 +31,7 @@ export class InstructorController {
   static createCourse = asyncHandler(async (req, res) => {
     const userId = getEffectiveUserId(req);
     const course = await InstructorService.createCourse(userId, req.body);
-    return ApiResponse.created(res, course, 'Course created and published successfully.');
+    return ApiResponse.created(res, course, 'Course created successfully.');
   });
 
   static getCourseById = asyncHandler(async (req, res) => {
