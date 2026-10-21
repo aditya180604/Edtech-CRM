@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import app from './app.js';
-import { connectDB } from './config/db.js';
+import { connectDB, disconnectDB } from './config/db.js';
 import { config } from './config/env.js';
 import { initializeRealtime } from './services/realtime.service.js';
 
@@ -24,6 +24,10 @@ async function startServer() {
 
     // 4. Start Express Listener
     const server = createServer(app);
+    // Keep idle keep-alive sockets open longer than the upstream proxy's idle timeout,
+    // so the proxy never reuses a socket Node has just closed (sporadic 502s).
+    server.keepAliveTimeout = 65 * 1000;
+    server.headersTimeout = 66 * 1000;
     const io = initializeRealtime(server);
     server.listen(config.port, () => {
       console.log(`[Server] VStudyOnline LMS backend running on port ${config.port} [${config.env}]`);
@@ -33,8 +37,11 @@ async function startServer() {
     const shutdown = async (signal) => {
       console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
       stopWebinarExpiryCron();
-      io.close(() => {
+      // Force exit if open connections don't drain in time.
+      setTimeout(() => process.exit(1), 10 * 1000).unref();
+      io.close(async () => {
         console.log('[Server] HTTP server closed.');
+        await disconnectDB().catch(() => {});
         process.exit(0);
       });
     };

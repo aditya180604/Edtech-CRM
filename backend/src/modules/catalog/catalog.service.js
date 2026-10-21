@@ -12,6 +12,24 @@ import {
   Review,
 } from '../../models/index.js';
 import { LearningPathService } from '../learningPaths/learningPath.service.js';
+import { cached, keyFrom, CACHE_NS } from '../../utils/cache.js';
+import { courseSelect, userSelect, COURSE_ALL_FIELDS } from '../../utils/courseMedia.js';
+import { clampLimit, parsePagination, exactRegex, searchRegex } from '../../utils/query.js';
+
+const PUBLIC_DETAIL_FIELDS = COURSE_ALL_FIELDS.filter(
+  (f) => !['cashfreeOrderId', 'cashfreePaymentSessionId', 'cashfreePaymentId', 'instructorEarnings', 'platformFee', 'rejectionReason'].includes(f)
+);
+
+/** Group docs by a string key for O(1) lookups instead of repeated Array.filter. */
+function groupBy(items, keyFn) {
+  const map = new Map();
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+  }
+  return map;
+}
 
 function normalizeCourseCategory(c) {
   if (c.category && typeof c.category === 'string' && c.category.trim()) {
@@ -70,12 +88,15 @@ export class CatalogService {
    * Pure database-driven: 0 hardcoded ratings, review counts, student counts, badges
    */
   static async getCourses({ category, level, search, limit = 50, page = 1, sort = 'newest' } = {}) {
+    const pagination = parsePagination({ page, limit }, { defaultLimit: 50, maxLimit: 100 });
+    page = pagination.page;
+    limit = pagination.limit;
     const filter = {
       status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
     };
 
     if (category && category !== 'All') {
-      const catRegex = new RegExp(`^${category}$`, 'i');
+      const catRegex = exactRegex(category);
       const legacyAliases = [];
       if (/web/i.test(category)) legacyAliases.push('web', 'Web');
       if (/ai|machine/i.test(category)) legacyAliases.push('ai', 'AI');
@@ -91,18 +112,18 @@ export class CatalogService {
     }
 
     if (level && level !== 'All') {
-      filter.level = new RegExp(`^${level}$`, 'i');
+      filter.level = exactRegex(level);
     }
 
-    if (search && search.trim()) {
-      const searchRegex = new RegExp(search.trim(), 'i');
+    const searchRe = searchRegex(search);
+    if (searchRe) {
       const orClauses = [
-        { title: searchRegex },
-        { name: searchRegex },
-        { description: searchRegex },
-        { category: searchRegex },
-        { cat: searchRegex },
-        { skills: searchRegex },
+        { title: searchRe },
+        { name: searchRe },
+        { description: searchRe },
+        { category: searchRe },
+        { cat: searchRe },
+        { skills: searchRe },
       ];
       if (filter.$or) {
         filter.$and = [{ $or: filter.$or }, { $or: orClauses }];
@@ -122,7 +143,12 @@ export class CatalogService {
 
     const [courses, total] = await Promise.all([
       Course.find(filter)
-        .populate('instructorId', 'firstName lastName profilePhoto')
+        .select(courseSelect(
+          'courseId title name courseTitle course_name slug description shortDescription instructorId instructor instructorName ' +
+          'instructorTitle coursePrice rawFee fee_inr price fee originalPrice currency thumbnail banner image category cat ' +
+          'subcategory level language skills badge createdAt updatedAt'
+        ))
+        .populate('instructorId', userSelect('firstName lastName profilePhoto updatedAt'))
         .sort(sortOptions)
         .skip(skip)
         .limit(Number(limit))
@@ -132,8 +158,8 @@ export class CatalogService {
 
     const courseIds = courses.map((c) => c._id);
     const [topics, modules, reviewsAgg, enrollmentsAgg] = await Promise.all([
-      Topic.find({ courseId: { $in: courseIds } }).select('courseId').lean(),
-      Module.find({ courseId: { $in: courseIds } }).select('courseId').lean(),
+      Topic.aggregate([{ $match: { courseId: { $in: courseIds } } }, { $group: { _id: '$courseId', n: { $sum: 1 } } }]),
+      Module.aggregate([{ $match: { courseId: { $in: courseIds } } }, { $group: { _id: '$courseId', n: { $sum: 1 } } }]),
       Review.aggregate([
         { $match: { courseId: { $in: courseIds }, status: 'PUBLISHED' } },
         { $group: { _id: '$courseId', avgRating: { $avg: '$rating' }, count: { $sum: 1 } } },
@@ -144,10 +170,13 @@ export class CatalogService {
       ]),
     ]);
 
+    const topicCounts = new Map(topics.map((t) => [t._id?.toString(), t.n]));
+    const moduleCounts = new Map(modules.map((m) => [m._id?.toString(), m.n]));
+    const reviewById = new Map(reviewsAgg.map((r) => [r._id?.toString(), r]));
+    const enrollmentById = new Map(enrollmentsAgg.map((e) => [e._id?.toString(), e]));
+
     const formatted = courses.map((c) => {
       const cId = c._id.toString();
-      const courseTopics = topics.filter((t) => t.courseId?.toString() === cId);
-      const courseModules = modules.filter((m) => m.courseId?.toString() === cId);
       const instructor = c.instructorId;
 
       const title = normalizeCourseTitle(c);
@@ -156,8 +185,8 @@ export class CatalogService {
       const instructorName = normalizeCourseInstructor(c, instructor);
       const slug = normalizeCourseSlug(c);
 
-      const reviewData = reviewsAgg.find((r) => r._id.toString() === cId);
-      const enrollmentData = enrollmentsAgg.find((e) => e._id.toString() === cId);
+      const reviewData = reviewById.get(cId);
+      const enrollmentData = enrollmentById.get(cId);
 
       const avgRating = reviewData ? Number(reviewData.avgRating.toFixed(1)) : 0;
       const reviewCount = reviewData ? reviewData.count : 0;
@@ -182,8 +211,8 @@ export class CatalogService {
         level: c.level || null,
         language: c.language || null,
         skills: Array.isArray(c.skills) ? c.skills : [],
-        totalTopics: courseTopics.length,
-        totalModules: courseModules.length,
+        totalTopics: topicCounts.get(cId) || 0,
+        totalModules: moduleCounts.get(cId) || 0,
         rating: avgRating,
         reviewCount: reviewCount,
         studentCount: studentCount,
@@ -208,8 +237,8 @@ export class CatalogService {
     const lookupClean = slugOrId.replace(/-/g, ' ');
     const orClauses = [
       { slug: slugOrId },
-      { title: new RegExp(`^${lookupClean}$`, 'i') },
-      { name: new RegExp(`^${lookupClean}$`, 'i') },
+      { title: exactRegex(lookupClean) },
+      { name: exactRegex(lookupClean) },
     ];
     if (mongoose.Types.ObjectId.isValid(slugOrId)) {
       orClauses.push({ _id: new mongoose.Types.ObjectId(slugOrId) });
@@ -221,7 +250,8 @@ export class CatalogService {
         { status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] } },
       ],
     })
-      .populate('instructorId', 'firstName lastName email profilePhoto')
+      .select(courseSelect(PUBLIC_DETAIL_FIELDS))
+      .populate('instructorId', userSelect('firstName lastName email profilePhoto updatedAt'))
       .lean();
 
     if (!course) {
@@ -233,7 +263,7 @@ export class CatalogService {
       Topic.find({ courseId: course._id }).sort({ order: 1 }).lean(),
       Lesson.find({ courseId: course._id }).sort({ order: 1 }).lean(),
       course.instructorId?._id
-        ? InstructorProfile.findOne({ userId: course.instructorId._id }).lean()
+        ? InstructorProfile.findOne({ userId: course.instructorId._id }).select('currentOrganization headline bio').lean()
         : null,
       Review.aggregate([
         { $match: { courseId: course._id, status: 'PUBLISHED' } },
@@ -341,24 +371,31 @@ export class CatalogService {
    * Strict: DRAFT topics are excluded from public catalog
    */
   static async getTopics({ category, search, limit = 50 } = {}) {
+    const safeLimit = clampLimit(limit, { defaultLimit: 50, maxLimit: 200 });
+    const re = searchRegex(search);
+    return cached(`${CACHE_NS.CATALOG}:topics:${keyFrom({ search: re?.source, limit: safeLimit })}`, () =>
+      this.buildTopics(re, safeLimit)
+    );
+  }
+
+  static async buildTopics(re, limit) {
     const filter = {
       status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
     };
 
-    if (search && search.trim()) {
-      filter.$or = [
-        { title: new RegExp(search.trim(), 'i') },
-        { description: new RegExp(search.trim(), 'i') },
-      ];
+    if (re) {
+      filter.$or = [{ title: re }, { description: re }];
     }
 
+    // thumbnail was populated here but never returned; it is the multi-MB field.
     const topics = await Topic.find(filter)
-      .populate('courseId', 'title name slug thumbnail category cat status')
-      .limit(Number(limit))
+      .populate('courseId', 'title name slug category cat status')
+      .limit(limit)
       .lean();
 
     const topicIds = topics.map((t) => t._id);
     const lessons = await Lesson.find({ topicId: { $in: topicIds } }).select('topicId duration').lean();
+    const lessonsByTopic = groupBy(lessons, (l) => l.topicId?.toString());
 
     return topics.map((t) => {
       const parentCourse = t.courseId;
@@ -366,7 +403,7 @@ export class CatalogService {
       const courseSlug = parentCourse ? normalizeCourseSlug(parentCourse) : '';
       const cat = parentCourse ? normalizeCourseCategory(parentCourse) : null;
 
-      const topicLessons = lessons.filter((l) => l.topicId?.toString() === t._id.toString());
+      const topicLessons = lessonsByTopic.get(t._id.toString()) || [];
       const totalDurationSec = topicLessons.reduce((acc, l) => acc + (l.duration || 0), 0);
       const durationDisplay = totalDurationSec > 0
         ? `${Math.round(totalDurationSec / 60)} mins`
@@ -399,9 +436,9 @@ export class CatalogService {
     const webinars = await Webinar.find({
       status: { $in: ['SCHEDULED', 'LIVE', 'ACTIVE', 'Active'] },
     })
-      .populate('instructorId', 'firstName lastName profilePhoto')
+      .populate('instructorId', userSelect('firstName lastName profilePhoto updatedAt'))
       .sort({ startTime: 1 })
-      .limit(Number(limit))
+      .limit(clampLimit(limit, { defaultLimit: 20, maxLimit: 100 }))
       .lean();
 
     return webinars.map((w) => {
@@ -506,6 +543,15 @@ export class CatalogService {
    * Strict: Only Super-Admin approved and verified instructors are shown
    */
   static async getInstructors({ search, limit = 50 } = {}) {
+    const re = searchRegex(search);
+    const all = await cached(`${CACHE_NS.CATALOG}:instructors:${keyFrom({ search: re?.source })}`, () =>
+      this.buildInstructors(re)
+    );
+    const parsedLimit = Number(limit);
+    return parsedLimit > 0 ? all.slice(0, Math.min(parsedLimit, 200)) : all;
+  }
+
+  static async buildInstructors(re) {
     // 1. Only instructors with VERIFIED or APPROVED status in InstructorProfile are eligible for public catalog
     const verifiedProfiles = await InstructorProfile.find({
       verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
@@ -527,13 +573,12 @@ export class CatalogService {
       status: { $in: ['ACTIVE', 'Active', 'active', 'VERIFIED'] },
     };
 
-    if (search && search.trim()) {
-      const re = new RegExp(search.trim(), 'i');
+    if (re) {
       filter.$or = [{ firstName: re }, { lastName: re }, { email: re }];
     }
 
     const instructors = await User.find(filter)
-      .select('firstName lastName email profilePhoto timezone country')
+      .select(userSelect('firstName lastName email profilePhoto timezone country updatedAt'))
       .lean();
 
     if (instructors.length === 0) {
@@ -545,7 +590,7 @@ export class CatalogService {
       instructorId: { $in: activeUserIds },
       status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
     })
-      .select('_id title slug thumbnail category coursePrice instructorId')
+      .select(courseSelect('_id title slug thumbnail category coursePrice instructorId updatedAt'))
       .lean();
 
     const courseIds = courses.map((c) => c._id);
@@ -560,17 +605,20 @@ export class CatalogService {
       ]),
     ]);
 
+    const profileByUser = new Map(verifiedProfiles.map((p) => [p.userId?.toString(), p]));
+    const coursesByInstructor = groupBy(courses, (c) => c.instructorId?.toString());
+    const enrollmentByCourse = new Map(enrollmentsAgg.map((e) => [e._id.toString(), e.count]));
+    const reviewByCourse = new Map(reviewsAgg.map((r) => [r._id.toString(), r]));
+
     const mappedInstructors = instructors.map((inst) => {
       const uId = inst._id.toString();
-      const profile = verifiedProfiles.find((p) => p.userId?.toString() === uId);
-      const instructorCourses = courses.filter((c) => c.instructorId?.toString() === uId);
+      const profile = profileByUser.get(uId);
+      const instructorCourses = coursesByInstructor.get(uId) || [];
       const instCourseIds = instructorCourses.map((c) => c._id.toString());
 
-      const totalStudents = enrollmentsAgg
-        .filter((e) => instCourseIds.includes(e._id.toString()))
-        .reduce((sum, e) => sum + e.count, 0);
+      const totalStudents = instCourseIds.reduce((sum, id) => sum + (enrollmentByCourse.get(id) || 0), 0);
 
-      const instReviews = reviewsAgg.filter((r) => instCourseIds.includes(r._id.toString()));
+      const instReviews = instCourseIds.map((id) => reviewByCourse.get(id)).filter(Boolean);
       const avgRating = instReviews.length > 0
         ? Number((instReviews.reduce((sum, r) => sum + r.avgRating, 0) / instReviews.length).toFixed(1))
         : 0;
@@ -624,8 +672,7 @@ export class CatalogService {
       return a.name.localeCompare(b.name);
     });
 
-    const parsedLimit = Number(limit);
-    return parsedLimit > 0 ? mappedInstructors.slice(0, parsedLimit) : mappedInstructors;
+    return mappedInstructors;
   }
 
   /**
@@ -633,8 +680,9 @@ export class CatalogService {
    * Strict: DRAFT paths are excluded from public catalog
    */
   static async getLearningPaths({ limit = 10 } = {}) {
+    limit = clampLimit(limit, { defaultLimit: 10, maxLimit: 100 });
     let paths = await LearningPath.find({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } })
-      .populate('courses', 'title name slug thumbnail')
+      .populate('courses', 'title name slug')
       .sort({ updatedAt: -1 })
       .limit(Number(limit))
       .lean();
@@ -643,7 +691,7 @@ export class CatalogService {
     if (!paths || paths.length === 0) {
       await LearningPathService.syncAllCoursesWithLearningPaths();
       paths = await LearningPath.find({ status: { $in: ['PUBLISHED', 'ACTIVE', 'Active'] } })
-        .populate('courses', 'title name slug thumbnail')
+        .populate('courses', 'title name slug')
         .sort({ updatedAt: -1 })
         .limit(Number(limit))
         .lean();
@@ -667,6 +715,10 @@ export class CatalogService {
    * Get active categories with aggregated course counts directly from MongoDB
    */
   static async getCategories() {
+    return cached(`${CACHE_NS.CATALOG}:categories`, () => this.buildCategories());
+  }
+
+  static async buildCategories() {
     const courses = await Course.find({ status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] } })
       .select('category cat')
       .lean();
@@ -694,6 +746,10 @@ export class CatalogService {
    * Strict: 0 hardcoded numbers or fake +1 additions
    */
   static async getPublicStats() {
+    return cached(`${CACHE_NS.STATS}:public`, () => this.buildPublicStats());
+  }
+
+  static async buildPublicStats() {
     const verifiedInstructorUserIds = await InstructorProfile.distinct('userId', {
       verificationStatus: { $in: ['VERIFIED', 'APPROVED'] },
     });

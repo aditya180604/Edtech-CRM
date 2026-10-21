@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Course, Topic, TopicContentOffering, LearningPath, Entitlement, Coupon, TopicCredit, User } from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class PricingService {
   /**
@@ -35,7 +36,7 @@ export class PricingService {
       }
 
       if (productType === PRODUCT_TYPES.COURSE) {
-        const course = await Course.findById(productId)
+        const course = await Course.findById(productId).select(courseSelect())
           .populate('instructorId', 'firstName lastName email')
           .lean();
 
@@ -134,7 +135,7 @@ export class PricingService {
         if (!offering) {
           topicDoc = await Topic.findById(productId).lean();
           if (topicDoc && topicDoc.courseId) {
-            parentCourse = await Course.findById(topicDoc.courseId)
+            parentCourse = await Course.findById(topicDoc.courseId).select(courseSelect())
               .populate('instructorId', 'firstName lastName email')
               .lean();
           }

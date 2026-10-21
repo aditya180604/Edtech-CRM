@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { cacheInvalidationPlugin } from './plugins/cacheInvalidation.plugin.js';
+import { CACHE_NS } from '../utils/cache.js';
 
 // ==========================================
 // 32. Webinar Model (Collection: webinars)
@@ -118,6 +120,8 @@ const webinarSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+webinarSchema.plugin(cacheInvalidationPlugin([CACHE_NS.WEBINARS, CACHE_NS.STATS]));
 
 export const Webinar = mongoose.models.Webinar || mongoose.model('Webinar', webinarSchema);
 

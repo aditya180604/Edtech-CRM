@@ -25,6 +25,17 @@ export const config = {
   mongodb: {
     uri: process.env.MONGODB_URI,
     dbName: process.env.DATABASE_NAME || 'edutech_db',
+    maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE || '20', 10),
+    minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || '2', 10),
+    socketTimeoutMS: parseInt(process.env.MONGODB_SOCKET_TIMEOUT_MS || '30000', 10),
+  },
+  // Absolute base URL of this API, used to build links (media URLs, webhooks) returned to browsers.
+  get publicApiUrl() {
+    return (
+      process.env.BACKEND_PUBLIC_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      `http://localhost:${process.env.PORT || '5000'}`
+    ).replace(/\/+$/, '');
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'edutech_jwt_secure_access_secret_2026',

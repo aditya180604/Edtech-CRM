@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Cart, Course, Topic, TopicContentOffering, LearningPath, Entitlement } from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
 import { PricingService } from '../checkout/pricing.service.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class CartService {
   /**
@@ -62,7 +63,7 @@ export class CartService {
 
     // 2. Validate product in database
     if (productType === PRODUCT_TYPES.COURSE) {
-      const course = await Course.findById(productId);
+      const course = await Course.findById(productId).select(courseSelect());
       if (!course) {
         throw new Error('Course not found.');
       }

@@ -18,6 +18,7 @@ import { AppError } from '../../utils/apiResponse.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
 import { ROLES, USER_STATUS, PAYMENT_STATUS, ORDER_STATUS } from '../../config/constants.js';
 import { LearningPathService } from '../learningPaths/learningPath.service.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class AdminService {
   /**
@@ -450,7 +451,7 @@ export class AdminService {
 
     const [profile, courses, consultations] = await Promise.all([
       InstructorProfile.findOne({ userId: id }).lean(),
-      Course.find({ instructorId: id }).lean(),
+      Course.find({ instructorId: id }).select(courseSelect()).lean(),
       Booking.find({ instructorId: id }).sort({ startTime: -1 }).limit(20).lean(),
     ]);
 
@@ -510,7 +511,7 @@ export class AdminService {
 
     const skip = (Number(page) - 1) * Number(limit);
     const [courses, total] = await Promise.all([
-      Course.find(filter)
+      Course.find(filter).select(courseSelect())
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))

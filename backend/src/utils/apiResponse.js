@@ -14,6 +14,10 @@ export class ApiResponse {
     return res.status(201).json(new ApiResponse(201, data, message));
   }
 
+  static notFound(res, message = 'Resource not found') {
+    return ApiResponse.error(res, message, 404);
+  }
+
   static error(res, message = 'Internal Server Error', statusCode = 500, errors = []) {
     return res.status(statusCode).json({
       statusCode,

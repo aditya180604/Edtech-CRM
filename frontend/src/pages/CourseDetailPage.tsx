@@ -200,9 +200,12 @@ export const CourseDetailPage: React.FC = () => {
   const { user } = useAuth();
   const { success, error: toastError } = useToast();
   const isMobile = useIsMobile(500);
-  const userProgressKey = `edtech_course_progress_${user?._id || user?.id || 'guest'}_${slug}`;
-  const globalProgressKey = `edtech_course_progress_global_${slug}`;
-  const watchedStorageKey = `edtech_watched_lessons_${slug}`;
+  // All locally cached progress is scoped to the signed-in user so a shared browser never
+  // shows one student's completed/watched lessons to the next.
+  const progressOwner = user?._id || user?.id || 'guest';
+  const userProgressKey = `edtech_course_progress_${progressOwner}_${slug}`;
+  const globalProgressKey = `edtech_course_progress_global_${progressOwner}_${slug}`;
+  const watchedStorageKey = `edtech_watched_lessons_${progressOwner}_${slug}`;
 
   const loadSavedCompletedIds = useCallback((): string[] => {
     try {
@@ -401,8 +404,11 @@ export const CourseDetailPage: React.FC = () => {
   const parsedCourseGoals = normalizeList(course.courseGoals);
   const parsedMethodology = normalizeList(course.teachingMethodology);
 
-  // Check session storage cached enrollments for quick local verification
+  // Check session storage cached enrollments for quick local verification.
+  // Only trusted for the logged-in user who wrote them (sessionStorage outlives logout).
+  const currentUserId = (user as any)?._id || (user as any)?.id || null;
   const isLocallyEnrolled = useMemo(() => {
+    if (!currentUserId) return false;
     try {
       const stored = sessionStorage.getItem('edtech_student_enrolled_courses');
       if (stored) {
@@ -410,8 +416,9 @@ export const CourseDetailPage: React.FC = () => {
         if (Array.isArray(list)) {
           return list.some(
             (item: any) =>
-              (item.slug && item.slug === slug) ||
-              (item.id && (item.id === course._id || item.id === course.id))
+              item.userId === currentUserId &&
+              ((item.slug && item.slug === slug) ||
+                (item.id && (item.id === course._id || item.id === course.id)))
           );
         }
       }
@@ -419,7 +426,7 @@ export const CourseDetailPage: React.FC = () => {
       // ignore
     }
     return false;
-  }, [slug, course._id, course.id]);
+  }, [slug, course._id, course.id, currentUserId]);
 
   // Access Permission Verification (Enrolled Student, Admin, Instructor, or Free Course)
   const isEnrolled = Boolean(

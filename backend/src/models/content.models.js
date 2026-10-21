@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { cacheInvalidationPlugin } from './plugins/cacheInvalidation.plugin.js';
+import { CACHE_NS } from '../utils/cache.js';
 import { VIDEO_PROCESSING_STATUS } from '../config/constants.js';
 
 // ==========================================
@@ -77,6 +79,8 @@ const courseSchema = new mongoose.Schema(
 courseSchema.index({ category: 1, status: 1 });
 courseSchema.index({ instructorId: 1, status: 1 });
 
+courseSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
+
 export const Course = mongoose.models.Course || mongoose.model('Course', courseSchema);
 
 // ==========================================
@@ -98,6 +102,8 @@ const moduleSchema = new mongoose.Schema(
 );
 
 moduleSchema.index({ courseId: 1, order: 1 });
+
+moduleSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 
 export const Module = mongoose.models.Module || mongoose.model('Module', moduleSchema);
 
@@ -132,6 +138,8 @@ const topicSchema = new mongoose.Schema(
 topicSchema.index({ moduleId: 1, order: 1 });
 topicSchema.index({ courseId: 1, isFree: 1 });
 
+topicSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
+
 export const Topic = mongoose.models.Topic || mongoose.model('Topic', topicSchema);
 
 // ==========================================
@@ -161,6 +169,8 @@ const lessonSchema = new mongoose.Schema(
 
 lessonSchema.index({ topicId: 1, order: 1 });
 lessonSchema.index({ contentOfferingId: 1, order: 1 });
+
+lessonSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 
 export const Lesson = mongoose.models.Lesson || mongoose.model('Lesson', lessonSchema);
 
@@ -246,6 +256,8 @@ const learningPathSchema = new mongoose.Schema(
   }
 );
 
+learningPathSchema.plugin(cacheInvalidationPlugin([CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
+
 export const LearningPath =
   mongoose.models.LearningPath || mongoose.model('LearningPath', learningPathSchema);
 
@@ -273,6 +285,8 @@ const learningPathDomainSchema = new mongoose.Schema(
 learningPathDomainSchema.index({ learningPathId: 1, order: 1 });
 learningPathDomainSchema.index({ learningPathId: 1, status: 1 });
 
+learningPathDomainSchema.plugin(cacheInvalidationPlugin([CACHE_NS.LEARNING_PATHS]));
+
 export const LearningPathDomain =
   mongoose.models.LearningPathDomain || mongoose.model('LearningPathDomain', learningPathDomainSchema);
 
@@ -297,6 +311,8 @@ const learningPathDomainTopicSchema = new mongoose.Schema(
 
 learningPathDomainTopicSchema.index({ domainId: 1, order: 1 });
 learningPathDomainTopicSchema.index({ learningPathId: 1, domainId: 1, topicId: 1 }, { unique: true });
+
+learningPathDomainTopicSchema.plugin(cacheInvalidationPlugin([CACHE_NS.LEARNING_PATHS]));
 
 export const LearningPathDomainTopic =
   mongoose.models.LearningPathDomainTopic ||
@@ -345,6 +361,8 @@ const topicContentOfferingSchema = new mongoose.Schema(
 topicContentOfferingSchema.index({ topicId: 1, status: 1 });
 topicContentOfferingSchema.index({ instructorId: 1, status: 1 });
 topicContentOfferingSchema.index({ courseId: 1, topicId: 1, instructorId: 1 });
+
+topicContentOfferingSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 
 export const TopicContentOffering =
   mongoose.models.TopicContentOffering ||

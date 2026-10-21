@@ -22,6 +22,12 @@ import {
   Review,
 } from '../../models/index.js';
 import { PRODUCT_TYPES, ENTITLEMENT_STATUS, ORDER_STATUS, PAYMENT_STATUS, TRANSACTION_TYPES } from '../../config/constants.js';
+import { cached, keyFrom, CACHE_NS } from '../../utils/cache.js';
+import { courseSelect } from '../../utils/courseMedia.js';
+import { parsePagination, searchRegex } from '../../utils/query.js';
+
+// Course fields the learning-path sync reads (title is required: without it the sync reloads by id).
+const SYNC_COURSE_FIELDS = 'title name status category cat subcategory level skills duration updatedAt';
 
 export class LearningPathService {
   /**
@@ -29,28 +35,56 @@ export class LearningPathService {
    * List all published learning paths with dynamic domain and topic counts from MongoDB
    */
   static async getLearningPaths({ search, level, limit = 20, page = 1, userId = null } = {}) {
+    const { page: safePage, limit: safeLimit, skip } = parsePagination({ page, limit }, { defaultLimit: 20, maxLimit: 100 });
+    const re = searchRegex(search);
+    const safeLevel = typeof level === 'string' ? level : undefined;
+
+    const base = await cached(
+      `${CACHE_NS.LEARNING_PATHS}:list:${keyFrom({ search: re?.source, level: safeLevel, page: safePage, limit: safeLimit })}`,
+      () => this.buildLearningPathsPage({ re, level: safeLevel, page: safePage, limit: safeLimit, skip })
+    );
+
+    if (!userId || !mongoose.isValidObjectId(userId) || base.learningPaths.length === 0) return base;
+
+    const pathIds = base.learningPaths.map((p) => new mongoose.Types.ObjectId(p.id));
+    const userPathEntitlements = await Entitlement.find({
+      userId,
+      productType: PRODUCT_TYPES.LEARNING_PATH,
+      productId: { $in: pathIds },
+      status: ENTITLEMENT_STATUS.ACTIVE,
+    })
+      .select('productId learningPathId')
+      .lean();
+    if (userPathEntitlements.length === 0) return base;
+
+    const enrolledPathIds = new Set(
+      userPathEntitlements.map((e) => e.productId?.toString() || e.learningPathId?.toString())
+    );
+    return {
+      ...base,
+      learningPaths: base.learningPaths.map((p) => (enrolledPathIds.has(p.id) ? { ...p, isEnrolled: true } : p)),
+    };
+  }
+
+  static async buildLearningPathsPage({ re, level, page, limit, skip }) {
+    const userId = null; // user-specific flags are applied by getLearningPaths
     const filter = {
       status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
     };
 
-    if (search && search.trim()) {
-      filter.$or = [
-        { title: new RegExp(search.trim(), 'i') },
-        { description: new RegExp(search.trim(), 'i') },
-        { career: new RegExp(search.trim(), 'i') },
-      ];
+    if (re) {
+      filter.$or = [{ title: re }, { description: re }, { career: re }];
     }
 
     if (level && level !== 'ALL_LEVELS') {
       filter.level = level;
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
     const [paths, total] = await Promise.all([
       LearningPath.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit))
+        .limit(limit)
         .lean(),
       LearningPath.countDocuments(filter),
     ]);
@@ -201,7 +235,7 @@ export class LearningPathService {
 
     // Fetch canonical topics
     const topics = await Topic.find({ _id: { $in: topicIds } })
-      .populate('courseId', 'title slug thumbnail category')
+      .populate('courseId', courseSelect('title slug thumbnail category updatedAt'))
       .populate('moduleId', 'title order')
       .lean();
 
@@ -363,7 +397,7 @@ export class LearningPathService {
       _id: { $in: path.courses || [] },
       status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
     })
-      .select('title name slug thumbnail description coursePrice rawFee level duration category skills')
+      .select(courseSelect('title name slug thumbnail description coursePrice rawFee level duration category skills updatedAt'))
       .lean();
 
     return {
@@ -461,13 +495,13 @@ export class LearningPathService {
     let topic = null;
     if (mongoose.isValidObjectId(topicIdOrSlug)) {
       topic = await Topic.findById(topicIdOrSlug)
-        .populate('courseId', 'title slug description thumbnail category instructorId')
+        .populate('courseId', courseSelect('title slug description thumbnail category instructorId updatedAt'))
         .populate('moduleId', 'title order')
         .lean();
     }
     if (!topic) {
       topic = await Topic.findOne({ slug: topicIdOrSlug })
-        .populate('courseId', 'title slug description thumbnail category instructorId')
+        .populate('courseId', courseSelect('title slug description thumbnail category instructorId updatedAt'))
         .populate('moduleId', 'title order')
         .lean();
     }
@@ -596,14 +630,14 @@ export class LearningPathService {
     if (mongoose.isValidObjectId(offeringIdOrSlug)) {
       offering = await TopicContentOffering.findById(offeringIdOrSlug)
         .populate('topicId', 'title slug description difficulty skills')
-        .populate('courseId', 'title slug thumbnail category')
+        .populate('courseId', courseSelect('title slug thumbnail category updatedAt'))
         .populate('instructorId', 'firstName lastName profilePhoto email')
         .lean();
     }
     if (!offering) {
       offering = await TopicContentOffering.findOne({ slug: offeringIdOrSlug })
         .populate('topicId', 'title slug description difficulty skills')
-        .populate('courseId', 'title slug thumbnail category')
+        .populate('courseId', courseSelect('title slug thumbnail category updatedAt'))
         .populate('instructorId', 'firstName lastName profilePhoto email')
         .lean();
     }
@@ -983,7 +1017,7 @@ export class LearningPathService {
     try {
       let course = courseDocOrId;
       if (typeof courseDocOrId === 'string' || (courseDocOrId && !courseDocOrId.title && mongoose.isValidObjectId(courseDocOrId))) {
-        course = await Course.findById(courseDocOrId).lean();
+        course = await Course.findById(courseDocOrId).select(SYNC_COURSE_FIELDS).lean();
       }
       if (!course || !course._id) return null;
 
@@ -1184,7 +1218,9 @@ export class LearningPathService {
     try {
       const courses = await Course.find({
         status: { $in: ['PUBLISHED', 'ACTIVE', 'Active', 'published'] },
-      }).lean();
+      })
+        .select(SYNC_COURSE_FIELDS)
+        .lean();
 
       for (const course of courses) {
         await this.syncCourseWithLearningPath(course);

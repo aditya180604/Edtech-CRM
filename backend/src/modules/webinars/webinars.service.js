@@ -1,7 +1,10 @@
 import mongoose from 'mongoose';
 import { AccessToken } from 'livekit-server-sdk';
 import { Webinar, User, Booking, Notification } from '../../models/index.js';
-import { runWebinarExpiryCheck } from './webinarExpiry.cron.js';
+import { runWebinarExpiryCheckThrottled } from './webinarExpiry.cron.js';
+import { cached, keyFrom, CACHE_NS } from '../../utils/cache.js';
+import { clampLimit, exactRegex, searchRegex } from '../../utils/query.js';
+import { userSelect } from '../../utils/courseMedia.js';
 import { publishWebinarAdmission, publishWebinarLobbyUpdate } from '../../services/realtime.service.js';
 
 // In-memory heartbeat presence map for rooms: roomCode -> Map(userIdString, lastSeenTimestamp)
@@ -58,34 +61,44 @@ export class WebinarsService {
    * Strictly expires and closes any webinar 2 hours after creation/start time.
    */
   static async getUpcomingWebinars({ category, search, limit = 20, userId = null } = {}) {
-    // 1. Run live on-demand expiry cleanup
-    await runWebinarExpiryCheck();
+    // 1. Expiry cleanup: the 30s cron owns this; the read path only nudges it when stale
+    // (throttled, single-flight) instead of issuing an updateMany on every request.
+    runWebinarExpiryCheckThrottled().catch(() => {});
+
+    const safeLimit = clampLimit(limit, { defaultLimit: 20, maxLimit: 100 });
+    const re = searchRegex(search);
+    const safeCategory = typeof category === 'string' && category && category !== 'ALL' ? category : undefined;
+
+    // Raw documents are shared for a few seconds; status and per-user flags are computed per request.
+    const webinars = await cached(
+      `${CACHE_NS.WEBINARS}:upcoming:${keyFrom({ category: safeCategory, search: re?.source, limit: safeLimit })}`,
+      () => {
+        const at = new Date();
+        const query = {
+          status: { $in: ['SCHEDULED', 'LIVE'] },
+          endTime: { $gt: at },
+          // Same rule the expiry job applies, so results don't depend on when it last ran.
+          startTime: { $gt: new Date(at.getTime() - 6 * 60 * 60 * 1000) },
+        };
+
+        if (safeCategory) {
+          query.category = { $regex: exactRegex(safeCategory) };
+        }
+
+        if (re) {
+          query.$or = [{ title: re }, { description: re }, { category: re }];
+        }
+
+        return Webinar.find(query)
+          .populate('instructorId', userSelect('firstName lastName profilePhoto headline bio updatedAt'))
+          .sort({ startTime: 1 })
+          .limit(safeLimit)
+          .lean();
+      },
+      { ttlMs: 15 * 1000 }
+    );
 
     const now = new Date();
-    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-
-    const query = {
-      status: { $in: ['SCHEDULED', 'LIVE'] },
-      endTime: { $gt: now },
-    };
-
-    if (category && category !== 'ALL') {
-      query.category = { $regex: new RegExp(`^${category}$`, 'i') };
-    }
-
-    if (search && search.trim()) {
-      query.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } },
-        { description: { $regex: search.trim(), $options: 'i' } },
-        { category: { $regex: search.trim(), $options: 'i' } },
-      ];
-    }
-
-    const webinars = await Webinar.find(query)
-      .populate('instructorId', 'firstName lastName email profilePhoto headline bio')
-      .sort({ startTime: 1 })
-      .limit(parseInt(limit, 10))
-      .lean();
 
     const formatted = webinars
       .map((w) => {
@@ -94,6 +107,7 @@ export class WebinarsService {
         const startTime = new Date(w.startTime);
         const endTime = new Date(w.endTime);
 
+        if (!(endTime > now)) return null; // may have ended since the shared list was loaded
         const isLive = w.status === 'LIVE' || (startTime <= now && endTime > now && w.status !== 'COMPLETED');
 
         let computedStatus = w.status;
@@ -142,7 +156,7 @@ export class WebinarsService {
           time: startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
         };
       })
-      .filter((w) => w.status === 'LIVE' || w.status === 'SCHEDULED');
+      .filter((w) => w && (w.status === 'LIVE' || w.status === 'SCHEDULED'));
 
     return {
       webinars: formatted,

@@ -2,6 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import { SuperAdminService } from './superAdmin.service.js';
 import { ApiResponse, asyncHandler } from '../../utils/apiResponse.js';
+import { getRouteMetrics } from '../../middleware/requestMetrics.js';
+import { getCacheStats } from '../../utils/cache.js';
+import { getDbStats } from '../../config/db.js';
 
 export class SuperAdminController {
   // 1. Dashboard Overview
@@ -406,6 +409,22 @@ export class SuperAdminController {
   static getStatus = asyncHandler(async (req, res) => {
     const data = await SuperAdminService.getSystemStatus(req.user.userId);
     return ApiResponse.success(res, data, 'System status retrieved.');
+  });
+
+  // In-process performance snapshot (since last restart): route latency percentiles, cache, DB.
+  static getPerformance = asyncHandler(async (req, res) => {
+    const mem = process.memoryUsage();
+    return ApiResponse.success(
+      res,
+      {
+        uptimeSeconds: Math.round(process.uptime()),
+        memoryMb: { rss: Math.round(mem.rss / 1048576), heapUsed: Math.round(mem.heapUsed / 1048576) },
+        cache: getCacheStats(),
+        db: getDbStats(),
+        ...getRouteMetrics(),
+      },
+      'Performance metrics retrieved.'
+    );
   });
 
   static getAuditLogs = asyncHandler(async (req, res) => {

@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 import { cashfreeConfig, validateCashfreeConfig } from '../../../../config/cashfree.js';
+import { trackExternal } from '../../../../utils/requestContext.js';
+
+const CASHFREE_TIMEOUT_MS = parseInt(process.env.CASHFREE_TIMEOUT_MS || '15000', 10);
 
 export class CashfreeClient {
   static getHeaders() {
@@ -49,11 +52,12 @@ export class CashfreeClient {
       order_note: orderNote || `EdTech Course Checkout - ${orderId}`,
     };
 
-    const response = await fetch(url, {
+    const response = await trackExternal('cashfree', CASHFREE_TIMEOUT_MS, (signal) => fetch(url, {
+      signal,
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-    });
+    }));
 
     const data = await response.json();
 
@@ -80,10 +84,11 @@ export class CashfreeClient {
     const headers = this.getHeaders();
     const url = `${cashfreeConfig.baseUrl}/orders/${encodeURIComponent(orderId)}/payments`;
 
-    const response = await fetch(url, {
+    const response = await trackExternal('cashfree', CASHFREE_TIMEOUT_MS, (signal) => fetch(url, {
+      signal,
       method: 'GET',
       headers,
-    });
+    }));
 
     const data = await response.json();
 

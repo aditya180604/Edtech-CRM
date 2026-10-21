@@ -39,6 +39,7 @@ import {
 } from '../../services/email.service.js';
 import { AppError } from '../../utils/apiResponse.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
+import { courseSelect, COURSE_ALL_FIELDS } from '../../utils/courseMedia.js';
 
 export class SuperAdminService {
   /**
@@ -471,7 +472,7 @@ export class SuperAdminService {
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const [courses, total] = await Promise.all([
-      Course.find(query)
+      Course.find(query).select(courseSelect(COURSE_ALL_FIELDS, { keepRaw: ['syllabusUrl'] }))
         .populate('instructorId', 'firstName lastName email profilePhoto')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -525,7 +526,7 @@ export class SuperAdminService {
   static async getCourseApprovalsQueue() {
     const courses = await Course.find({
       $or: [{ approvalStatus: 'PENDING_APPROVAL' }, { status: 'PENDING_APPROVAL' }],
-    })
+    }).select(courseSelect(COURSE_ALL_FIELDS, { keepRaw: ['syllabusUrl'] }))
       .populate('instructorId', 'firstName lastName email profilePhoto')
       .sort({ updatedAt: -1 })
       .lean();
@@ -581,7 +582,7 @@ export class SuperAdminService {
   }
 
   static async getCourseReviewDetails(courseId) {
-    const course = await Course.findById(courseId)
+    const course = await Course.findById(courseId).select(courseSelect(COURSE_ALL_FIELDS, { keepRaw: ['syllabusUrl'] }))
       .populate('instructorId', 'firstName lastName email profilePhoto phone')
       .lean();
     if (!course) throw new Error('Course not found');

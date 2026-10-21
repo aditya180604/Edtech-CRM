@@ -1,4 +1,7 @@
 import { config } from '../../config/env.js';
+import { trackExternal } from '../../utils/requestContext.js';
+
+const GEMINI_TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '25000', 10);
 
 export class AiService {
   /**
@@ -86,7 +89,8 @@ ${promptInstruction}
     const model = 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const response = await trackExternal('gemini', GEMINI_TIMEOUT_MS, (signal) => fetch(url, {
+      signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -98,7 +102,7 @@ ${promptInstruction}
           maxOutputTokens: 1500,
         },
       }),
-    });
+    }));
 
     if (!response.ok) {
       const errBody = await response.text();

@@ -12,6 +12,18 @@ import { auth, googleProvider } from '../config/firebase';
 import { authApi } from '../api/auth';
 import type { User, UserRole, LoginPayload, RegisterPayload } from '../types';
 import { disconnectRealtimeSocket } from '../realtime/socket';
+import { setInstructorOverride } from '../api/client';
+
+// Per-login data kept in sessionStorage (survives logout until the window closes):
+// the student's cached enrollment list and the admin "act as instructor" override.
+const clearSessionScopedData = () => {
+  try {
+    sessionStorage.removeItem('edtech_student_enrolled_courses');
+  } catch {
+    // ignore
+  }
+  setInstructorOverride(null);
+};
 
 interface AuthContextType {
   user: User | null;
@@ -105,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('user');
+          clearSessionScopedData();
           setUser(null);
           setAccessToken(null);
         }
@@ -118,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      clearSessionScopedData();
     };
 
     window.addEventListener('auth:session_expired', handleSessionExpired);
@@ -410,6 +424,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      clearSessionScopedData();
       setUser(null);
       setAccessToken(null);
       // Explicit redirect to "/" (landing page) on logout

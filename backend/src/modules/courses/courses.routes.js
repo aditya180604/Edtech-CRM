@@ -1,14 +1,15 @@
 import { Router } from 'express';
 import { CoursesController } from './courses.controller.js';
 import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
+import { publicCache } from '../../middleware/httpCache.js';
 
 const router = Router();
 
 // Public / Semi-Authenticated Course Discovery Routes
-router.get('/featured', optionalAuthenticate, CoursesController.getFeatured);
-router.get('/topics', optionalAuthenticate, CoursesController.getTopics);
-router.get('/', optionalAuthenticate, CoursesController.getCatalog);
-router.get('/:slug', optionalAuthenticate, CoursesController.getDetails);
+router.get('/featured', publicCache(), optionalAuthenticate, CoursesController.getFeatured);
+router.get('/topics', publicCache(), optionalAuthenticate, CoursesController.getTopics);
+router.get('/', publicCache(), optionalAuthenticate, CoursesController.getCatalog);
+router.get('/:slug', publicCache(), optionalAuthenticate, CoursesController.getDetails);
 
 // Classroom Interactive Routes
 router.post('/:slug/progress', authenticate, CoursesController.updateProgress);

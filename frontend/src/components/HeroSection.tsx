@@ -265,12 +265,19 @@ export const HeroSection: React.FC = () => {
                 />
               </svg>
 
-              {/* Girl Transparent Cutout Image */}
-              <img
-                src="/Images/girl.png"
-                alt="Student learning with laptop"
-                className="relative z-10 w-[240px] sm:w-[320px] lg:w-[400px] xl:w-[440px] h-auto object-contain drop-shadow-2xl select-none mx-auto"
-              />
+              {/* Girl Transparent Cutout Image (LCP Prioritized) */}
+              <picture>
+                <source srcSet="/Images/girl.webp" type="image/webp" />
+                <img
+                  src="/Images/girl.png"
+                  alt="Student learning with laptop"
+                  width={440}
+                  height={480}
+                  fetchPriority="high"
+                  decoding="async"
+                  className="relative z-10 w-[240px] sm:w-[320px] lg:w-[400px] xl:w-[440px] h-auto object-contain drop-shadow-2xl select-none mx-auto"
+                />
+              </picture>
 
               {/* 3 Separate Floating Subcards on the Left: moved down to girl's leg side, hidden on smaller screens */}
               <div className="hidden lg:flex absolute top-[54%] -translate-y-1/2 -left-6 xl:-left-12 z-30 select-none flex-col gap-2 sm:gap-2.5 items-start">

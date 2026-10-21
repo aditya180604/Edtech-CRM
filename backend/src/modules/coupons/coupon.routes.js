@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit } from '../../middleware/rateLimit.js';
 import { CouponController } from './coupon.controller.js';
 import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
 import { authorizeSuperAdmin } from '../../middleware/rbac.js';
@@ -21,6 +22,6 @@ router.delete('/super-admin/coupons/:couponId', authenticate, authorizeSuperAdmi
 // 2. Public / Course Offers & Validation
 // ==========================================
 router.get('/courses/:courseId/available-offers', CouponController.getAvailableOffers);
-router.post('/coupons/validate', optionalAuthenticate, CouponController.validateCoupon);
+router.post('/coupons/validate', rateLimit({ name: 'coupon-validate', windowMs: 60 * 1000, max: 30 }), optionalAuthenticate, CouponController.validateCoupon);
 
 export const couponRoutes = router;

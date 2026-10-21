@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { cacheInvalidationPlugin } from './plugins/cacheInvalidation.plugin.js';
+import { CACHE_NS } from '../utils/cache.js';
 
 // ==========================================
 // 27. Review Model (Collection: reviews)
@@ -39,6 +41,8 @@ reviewSchema.index({ courseId: 1, rating: -1 });
 reviewSchema.index({ instructorId: 1, rating: -1 });
 reviewSchema.index({ userId: 1, courseId: 1 }, { unique: true, sparse: true });
 reviewSchema.index({ userId: 1, slotId: 1 }, { unique: true, sparse: true });
+
+reviewSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 
 export const Review = mongoose.models.Review || mongoose.model('Review', reviewSchema);
 

@@ -9,6 +9,7 @@ import {
   FinancialLedger,
 } from '../../models/index.js';
 import { ROLES, TRANSACTION_TYPES } from '../../config/constants.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class PaymentsService {
   /**
@@ -428,7 +429,7 @@ export class PaymentsService {
     const instructorIds = [...new Set(rawFees.map((f) => f.instructor_id).filter(Boolean))];
 
     const [courses, users] = await Promise.all([
-      Course.find({ _id: { $in: courseIds } }, 'title category coursePrice thumbnail status').lean(),
+      Course.find({ _id: { $in: courseIds } }).select(courseSelect('title category coursePrice thumbnail status updatedAt')).lean(),
       User.find({ _id: { $in: instructorIds } }, 'firstName lastName email profilePhoto avatar role').lean(),
     ]);
 

@@ -198,9 +198,7 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({ showIf
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
-            Live Webinars & Workshops
-          </h2>
+          
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Real-time interactive sessions with expert instructors. Chronologically ordered by start time.
           </p>

@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, cachedGet } from './client';
 
 export interface WebinarItem {
   _id: string;
@@ -167,10 +167,9 @@ export interface WebinarLobbyState {
 }
 
 export const webinarsApi = {
-  // Fetch active and upcoming webinars sorted chronologically by date/time
-  async getUpcomingWebinars(): Promise<{ success: boolean; data: { webinars: WebinarItem[]; count: number; hasUpcoming: boolean } }> {
-    const res = await apiClient.get('/webinars/upcoming');
-    return res.data;
+  // Fetch active and upcoming webinars sorted chronologically by date/time (cached 30s)
+  async getUpcomingWebinars(options?: { forceRefresh?: boolean }): Promise<{ success: boolean; data: { webinars: WebinarItem[]; count: number; hasUpcoming: boolean } }> {
+    return cachedGet<{ success: boolean; data: { webinars: WebinarItem[]; count: number; hasUpcoming: boolean } }>('/webinars/upcoming', undefined, { ttlMs: 30_000, forceRefresh: options?.forceRefresh });
   },
 
   // Fetch catalog / filtered webinars

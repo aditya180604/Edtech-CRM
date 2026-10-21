@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, cachedGet } from './client';
 import type { Course } from '../types';
 
 export interface CatalogFilterItem {
@@ -155,13 +155,12 @@ export interface TopicItem {
 }
 
 export const coursesApi = {
-  // 1. Featured Courses for Home Page (Image 4)
-  async getFeatured(limit = 8): Promise<{ success: boolean; data: Course[] }> {
-    const res = await apiClient.get('/courses/featured', { params: { limit } });
-    return res.data;
+  // 1. Featured Courses for Home Page (cached 60s with in-flight deduplication)
+  async getFeatured(limit = 8, options?: { forceRefresh?: boolean }): Promise<{ success: boolean; data: Course[] }> {
+    return cachedGet<{ success: boolean; data: Course[] }>('/courses/featured', { params: { limit } }, { ttlMs: 60_000, forceRefresh: options?.forceRefresh });
   },
 
-  // 2. Catalog & Dynamic Sidebar Filters (Image 5)
+  // 2. Catalog & Dynamic Sidebar Filters (cached 30s)
   async getCatalog(params?: {
     category?: string;
     level?: string;
@@ -169,15 +168,13 @@ export const coursesApi = {
     sort?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ success: boolean; data: CourseCatalogResponse }> {
-    const res = await apiClient.get('/courses', { params });
-    return res.data;
+  }, options?: { forceRefresh?: boolean }): Promise<{ success: boolean; data: CourseCatalogResponse }> {
+    return cachedGet<{ success: boolean; data: CourseCatalogResponse }>('/courses', { params }, { ttlMs: 30_000, forceRefresh: options?.forceRefresh });
   },
 
-  // 3. Course Details & Complete Syllabus Hierarchy (Requirement 4 / Image 5)
-  async getDetails(slug: string): Promise<{ success: boolean; data: CourseDetailsResponse }> {
-    const res = await apiClient.get(`/courses/${slug}`);
-    return res.data;
+  // 3. Course Details & Complete Syllabus Hierarchy (cached 60s)
+  async getDetails(slug: string, options?: { forceRefresh?: boolean }): Promise<{ success: boolean; data: CourseDetailsResponse }> {
+    return cachedGet<{ success: boolean; data: CourseDetailsResponse }>(`/courses/${slug}`, undefined, { ttlMs: 60_000, forceRefresh: options?.forceRefresh });
   },
 
   // 4. Dynamic Standalone Topics for Atomic Topic Purchase (Image 4)

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { TeachingSlot, Booking, LiveSession, Course, User, Notification } from '../../models/index.js';
 import { AppError } from '../../utils/apiResponse.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class SlotService {
   /**
@@ -115,7 +116,7 @@ export class SlotService {
     }
 
     const slots = await TeachingSlot.find(query)
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .sort({ startTime: 1 })
       .lean();
 
@@ -189,7 +190,7 @@ export class SlotService {
 
     const slots = await TeachingSlot.find(query)
       .populate('instructorId', 'firstName lastName profilePhoto email headline')
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .sort({ startTime: 1 })
       .lean();
 
@@ -406,7 +407,7 @@ export class SlotService {
         select: 'title description slotType startTime endTime durationMinutes meetingType roomCode meetingUrl status',
       })
       .populate('instructorId', 'firstName lastName profilePhoto email headline')
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .sort({ createdAt: -1 })
       .lean();
 

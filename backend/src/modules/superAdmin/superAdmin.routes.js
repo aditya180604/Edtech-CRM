@@ -88,6 +88,7 @@ router.get('/admins/:id/activity', SuperAdminController.getAdminActivity);
 // 12. System Status & Audit Logs
 router.get('/status', SuperAdminController.getStatus);
 router.get('/audit-logs', SuperAdminController.getAuditLogs);
+router.get('/performance', SuperAdminController.getPerformance);
 
 export const superAdminRoutes = router;
 

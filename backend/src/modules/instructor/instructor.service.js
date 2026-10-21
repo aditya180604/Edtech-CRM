@@ -31,6 +31,7 @@ import { PaymentsService } from '../payments/payments.service.js';
 import { ReadinessScoringService } from './readinessScoring.service.js';
 import { LearningPathService } from '../learningPaths/learningPath.service.js';
 import { sendInstructorFeeReceiptEmail } from '../../services/email.service.js';
+import { courseSelect, isOwnCourseMediaUrl } from '../../utils/courseMedia.js';
 
 export class InstructorService {
   /**
@@ -80,7 +81,7 @@ export class InstructorService {
         { instructorId: instructorObjectId },
         { instructorId: targetUserIdStr },
       ],
-    })
+    }).select(courseSelect())
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -270,7 +271,7 @@ export class InstructorService {
 
     const [courses, total, totalAll, totalPublished, totalDraft, totalUnderReview, totalArchived] =
       await Promise.all([
-        Course.find(query).sort({ updatedAt: -1 }).skip(skip).limit(parseInt(limit, 10)).lean(),
+        Course.find(query).select(courseSelect()).sort({ updatedAt: -1 }).skip(skip).limit(parseInt(limit, 10)).lean(),
         Course.countDocuments(query),
         Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }] }),
         Course.countDocuments({ $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }], status: 'PUBLISHED' }),
@@ -462,6 +463,12 @@ export class InstructorService {
     });
 
     if (!course) throw new Error('Course not found or unauthorized');
+
+    // Public/list responses carry media URLs in place of inline files. If a client echoes one
+    // back, keep the stored file instead of overwriting it with a link to itself.
+    for (const field of ['thumbnail', 'banner', 'syllabusUrl']) {
+      if (isOwnCourseMediaUrl(updateData[field])) delete updateData[field];
+    }
 
     // Update root course fields
     if (updateData.title) course.title = updateData.title;
@@ -1102,7 +1109,7 @@ export class InstructorService {
     const targetUserIdStr = instructorObjectId.toString();
     const courses = await Course.find({
       $or: [{ instructorId: instructorObjectId }, { instructorId: targetUserIdStr }],
-    }).select('_id title thumbnail').lean();
+    }).select(courseSelect('_id title thumbnail updatedAt')).lean();
     const courseIds = courses.map((c) => c._id);
 
     const filter = { courseId: { $in: courseIds } };
@@ -1128,7 +1135,7 @@ export class InstructorService {
 
     const reviews = await Review.find(filter)
       .populate('userId', 'firstName lastName email profilePhoto')
-      .populate('courseId', 'title thumbnail')
+      .populate('courseId', courseSelect('title thumbnail updatedAt'))
       .sort({ createdAt: -1 })
       .lean();
 
@@ -1180,7 +1187,7 @@ export class InstructorService {
         { instructorId: instructorObjectId },
         { instructorId: targetUserIdStr },
       ],
-    }).lean();
+    }).select(courseSelect()).lean();
     const courseIds = courses.map((c) => c._id);
     const courseTitles = courses.map((c) => c.title);
 

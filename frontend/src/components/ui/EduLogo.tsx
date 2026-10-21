@@ -35,11 +35,17 @@ export const EduLogo: React.FC<EduLogoProps> = ({
     <div className={`flex items-center gap-1.5 sm:gap-2.5 group shrink-0 ${className}`}>
       {/* VStudyOnline Official Brand Logo Emblem */}
       <div className={`${iconSizes[size]} flex items-center justify-center shrink-0`}>
-        <img
-          src="/Images/logo.png"
-          alt="VStudyOnline Logo"
-          className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
-        />
+        <picture>
+          <source srcSet="/Images/logo.webp" type="image/webp" />
+          <img
+            src="/Images/logo.png"
+            alt="VStudyOnline Logo"
+            width={36}
+            height={36}
+            decoding="async"
+            className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
+          />
+        </picture>
       </div>
       {showText && (
         <span
@@ -55,7 +61,7 @@ export const EduLogo: React.FC<EduLogoProps> = ({
 
   if (to) {
     return (
-      <Link to={to} className="inline-flex items-center no-underline">
+      <Link to={to} className="inline-flex items-center focus:outline-none">
         {content}
       </Link>
     );
@@ -64,5 +70,4 @@ export const EduLogo: React.FC<EduLogoProps> = ({
   return content;
 };
 
-export const BrandLogo = EduLogo;
 export default EduLogo;

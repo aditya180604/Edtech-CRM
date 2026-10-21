@@ -63,11 +63,14 @@ import {
   Bookmark,
   Calendar,
   GraduationCap,
+  Copy,
+  Save,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EduLogo } from '../../components/ui/EduLogo';
 import { load as loadCashfree } from '@cashfreepayments/cashfree-js';
 import { instructorApi, type InstructorDashboardData } from '../../api/instructor';
+import { webinarsApi } from '../../api/webinars';
 import { setInstructorOverride } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { NotificationBell } from '../../components/dashboard/NotificationBell';
@@ -183,6 +186,44 @@ export const InstructorDashboard: React.FC = () => {
     meetingType: 'IN_PLATFORM',
     meetingUrl: '',
   });
+
+  // Instructor Webinar Notes Modal State
+  const [selectedWebinarForNotes, setSelectedWebinarForNotes] = useState<any | null>(null);
+  const [webinarNotesText, setWebinarNotesText] = useState('');
+  const [isLoadingWebinarNotes, setIsLoadingWebinarNotes] = useState(false);
+  const [isSavingWebinarNotes, setIsSavingWebinarNotes] = useState(false);
+  const [copiedWebinarNotes, setCopiedWebinarNotes] = useState(false);
+
+  const handleOpenInstructorWebinarNotes = async (w: any) => {
+    setSelectedWebinarForNotes(w);
+    setWebinarNotesText('');
+    setIsLoadingWebinarNotes(true);
+    const roomCode = w.roomCode || w._id;
+    try {
+      const res = await webinarsApi.getWebinarById(roomCode);
+      if (res?.data) {
+        setWebinarNotesText((res.data as any).userNotes || (res.data as any).description || '');
+      }
+    } catch (e) {
+      console.warn('Could not load notes:', e);
+    } finally {
+      setIsLoadingWebinarNotes(false);
+    }
+  };
+
+  const handleSaveInstructorWebinarNotes = async () => {
+    if (!selectedWebinarForNotes) return;
+    setIsSavingWebinarNotes(true);
+    try {
+      const roomCode = selectedWebinarForNotes.roomCode || selectedWebinarForNotes._id;
+      await webinarsApi.saveNotes(roomCode, webinarNotesText);
+      success('Notes Saved', 'Webinar session notes updated successfully.');
+    } catch (err: any) {
+      toastError('Save Error', err.response?.data?.message || 'Could not save notes.');
+    } finally {
+      setIsSavingWebinarNotes(false);
+    }
+  };
 
   // Edit Webinar State with 2-Hour Lock
   const [editingWebinar, setEditingWebinar] = useState<any | null>(null);
@@ -6682,6 +6723,99 @@ export const InstructorDashboard: React.FC = () => {
         </div>
       </main>
       </div>
+      {/* Instructor Webinar Session Notes Modal */}
+      {selectedWebinarForNotes && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+                    <FileText className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900">
+                    {selectedWebinarForNotes.title}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Instructor Lesson Notes & Workshop Handouts (Private)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWebinarForNotes(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                Session Outline, Code Snippets & Teaching Notes
+              </label>
+              {isLoadingWebinarNotes ? (
+                <div className="h-44 flex items-center justify-center text-xs text-slate-400">
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2 text-[#FA5A36]" />
+                  Loading session notes...
+                </div>
+              ) : (
+                <textarea
+                  rows={8}
+                  value={webinarNotesText}
+                  onChange={(e) => setWebinarNotesText(e.target.value)}
+                  placeholder="Record key commands, code snippets, agenda points, and session links..."
+                  className="w-full p-3.5 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:border-[#FA5A36] focus:bg-white transition resize-none leading-relaxed"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(webinarNotesText || '');
+                  setCopiedWebinarNotes(true);
+                  setTimeout(() => setCopiedWebinarNotes(false), 2000);
+                }}
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition cursor-pointer"
+              >
+                {copiedWebinarNotes ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Copy Notes</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWebinarForNotes(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveInstructorWebinarNotes}
+                  disabled={isSavingWebinarNotes}
+                  className="px-4 py-2 bg-[#FA5A36] hover:bg-[#e04825] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingWebinarNotes ? 'Saving...' : 'Save Notes'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { cacheInvalidationPlugin } from './plugins/cacheInvalidation.plugin.js';
+import { CACHE_NS } from '../utils/cache.js';
 import {
   PRODUCT_TYPES,
   ENTITLEMENT_STATUS,
@@ -218,6 +220,8 @@ entitlementSchema.index({ userId: 1, productType: 1, productId: 1, status: 1 });
 entitlementSchema.index({ userId: 1, courseId: 1, status: 1 });
 entitlementSchema.index({ userId: 1, topicId: 1, status: 1 });
 entitlementSchema.index({ userId: 1, contentOfferingId: 1, status: 1 });
+
+entitlementSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.LEARNING_PATHS, CACHE_NS.STATS]));
 
 export const Entitlement = mongoose.models.Entitlement || mongoose.model('Entitlement', entitlementSchema);
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { apiCache } from '../utils/apiCache';
 
 // Automatically select localhost for dev and Render for production unless overridden
 const getApiBaseUrl = (): string => {
@@ -210,6 +211,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+        apiCache.clear();
 
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:session_expired'));
@@ -229,3 +231,24 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * Cached GET request helper with automatic in-flight deduplication
+ * and configurable TTL caching.
+ */
+export const cachedGet = async <T = any>(
+  url: string,
+  config?: any,
+  options?: { ttlMs?: number; forceRefresh?: boolean }
+): Promise<T> => {
+  const paramsKey = config?.params ? JSON.stringify(config.params) : '';
+  const cacheKey = `GET:${url}:${paramsKey}`;
+  return apiCache.fetch(
+    cacheKey,
+    async () => {
+      const response = await apiClient.get(url, config);
+      return response.data;
+    },
+    options
+  );
+};

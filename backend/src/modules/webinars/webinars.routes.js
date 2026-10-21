@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { WebinarsController } from './webinars.controller.js';
 import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
+import { publicCache } from '../../middleware/httpCache.js';
 
 const router = Router();
 
 // Public Webinar Discovery Routes (with optional user context for registration status)
-router.get('/upcoming', optionalAuthenticate, WebinarsController.getUpcoming);
+router.get('/upcoming', publicCache(15), optionalAuthenticate, WebinarsController.getUpcoming);
 router.get('/', optionalAuthenticate, WebinarsController.getCatalog);
 
 // Live Webinar Classroom & LiveKit Real-Time Routes

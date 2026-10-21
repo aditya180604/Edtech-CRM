@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 import { config, getAppOrigin } from '../config/env.js';
+import { trackExternal } from '../utils/requestContext.js';
+
+const CASHFREE_TIMEOUT_MS = parseInt(process.env.CASHFREE_TIMEOUT_MS || '15000', 10);
 
 export class CashfreeService {
   /**
@@ -16,10 +19,11 @@ export class CashfreeService {
     };
 
     try {
-      const response = await fetch(url, {
+      const response = await trackExternal('cashfree', CASHFREE_TIMEOUT_MS, (signal) => fetch(url, {
         ...options,
         headers,
-      });
+        signal,
+      }));
 
       const data = await response.json();
       if (!response.ok) {

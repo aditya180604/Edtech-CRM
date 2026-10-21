@@ -20,6 +20,7 @@ import { aiRoutes } from '../modules/ai/ai.routes.js';
 import { quizRoutes } from '../modules/quizzes/quiz.routes.js';
 import { slotRoutes } from '../modules/slots/slot.routes.js';
 import { consultationRoutes } from '../modules/consultations/consultation.routes.js';
+import { mediaRoutes } from '../modules/media/media.routes.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -39,6 +40,7 @@ router.get('/health', (req, res) => {
 });
 
 // Domain Routes
+router.use('/media', mediaRoutes);
 router.use('/auth', authRoutes);
 router.use('/users', usersRoutes);
 router.get('/passport/:identifier', UsersController.getPassport);

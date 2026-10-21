@@ -26,6 +26,7 @@ import {
   Answer,
 } from '../../models/index.js';
 import { PRODUCT_TYPES, ENTITLEMENT_STATUS } from '../../config/constants.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class StudentDashboardService {
   /**
@@ -286,7 +287,7 @@ export class StudentDashboardService {
     }
 
     // Fetch courses with instructor info
-    const courses = await Course.find({ _id: { $in: entitledCourseObjectIds } })
+    const courses = await Course.find({ _id: { $in: entitledCourseObjectIds } }).select(courseSelect())
       .populate('instructorId', 'firstName lastName profilePhoto')
       .lean();
 
@@ -493,7 +494,7 @@ export class StudentDashboardService {
       return [];
     }
 
-    const courses = await Course.find({ _id: { $in: courseIdsToUpgrade } }).lean();
+    const courses = await Course.find({ _id: { $in: courseIdsToUpgrade } }).select(courseSelect()).lean();
     const upgradeOpportunities = [];
 
     for (const course of courses) {
@@ -532,7 +533,7 @@ export class StudentDashboardService {
    */
   static async _fetchCertificates(userId) {
     const certs = await Certificate.find({ userId, status: 'ISSUED' })
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .sort({ issueDate: -1 })
       .lean();
 
@@ -555,7 +556,7 @@ export class StudentDashboardService {
 
     const productIds = items.map((i) => i.productId);
     const [courses, topics, webinars] = await Promise.all([
-      Course.find({ _id: { $in: productIds } }).lean(),
+      Course.find({ _id: { $in: productIds } }).select(courseSelect()).lean(),
       Topic.find({ _id: { $in: productIds } }).lean(),
       Webinar.find({ _id: { $in: productIds } }).lean(),
     ]);
@@ -963,7 +964,7 @@ export class StudentDashboardService {
       const courses = await Course.find({
         _id: { $in: recCourseIds, $nin: ownedObjectIds },
         status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
-      }).lean();
+      }).select(courseSelect()).lean();
 
       for (const c of courses) {
         const cId = c._id.toString();
@@ -1015,7 +1016,7 @@ export class StudentDashboardService {
         _id: { $nin: Array.from(addedCourseIds).map((id) => new mongoose.Types.ObjectId(id)) },
         status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
         $or: interestOrClauses,
-      })
+      }).select(courseSelect())
         .sort({ publishedAt: -1, createdAt: -1 })
         .limit(4 - resultRecommendations.length)
         .lean();
@@ -1078,7 +1079,7 @@ export class StudentDashboardService {
         _id: { $nin: Array.from(addedCourseIds).map((id) => new mongoose.Types.ObjectId(id)) },
         status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
         $or: skillOrClauses,
-      })
+      }).select(courseSelect())
         .sort({ publishedAt: -1, createdAt: -1 })
         .limit(4 - resultRecommendations.length)
         .lean();
@@ -1139,7 +1140,7 @@ export class StudentDashboardService {
             _id: { $nin: Array.from(addedCourseIds).map((id) => new mongoose.Types.ObjectId(id)) },
             status: { $in: ['PUBLISHED', 'Active', 'ACTIVE', 'published'] },
             $or: [{ category: { $in: affinityCategories } }, { cat: { $in: affinityCategories } }],
-          })
+          }).select(courseSelect())
             .sort({ publishedAt: -1, createdAt: -1 })
             .limit(4 - resultRecommendations.length)
             .lean();

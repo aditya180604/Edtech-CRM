@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { cacheInvalidationPlugin } from './plugins/cacheInvalidation.plugin.js';
+import { CACHE_NS } from '../utils/cache.js';
 import bcrypt from 'bcryptjs';
 import { ROLES, USER_STATUS } from '../config/constants.js';
 
@@ -100,6 +102,10 @@ userSchema.statics.hashPassword = async function (password) {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
 };
+
+userSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.STATS], {
+    relevantFields: ['firstName', 'lastName', 'profilePhoto', 'status', 'role', 'headline', 'bio', 'country'],
+  }));
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema);
 
@@ -255,6 +261,8 @@ const instructorProfileSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+instructorProfileSchema.plugin(cacheInvalidationPlugin([CACHE_NS.CATALOG, CACHE_NS.STATS]));
 
 export const InstructorProfile =
   mongoose.models.InstructorProfile || mongoose.model('InstructorProfile', instructorProfileSchema);

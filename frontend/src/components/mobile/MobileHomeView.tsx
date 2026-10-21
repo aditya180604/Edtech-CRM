@@ -369,12 +369,19 @@ export const MobileHomeView: React.FC = () => {
               />
             </svg>
 
-            {/* Girl Cutout Image */}
-            <img
-              src="/Images/girl.png"
-              alt="Student with laptop"
-              className="relative z-10 w-[240px] sm:w-[280px] h-auto object-contain drop-shadow-xl select-none mx-auto"
-            />
+            {/* Girl Cutout Image (LCP Prioritized) */}
+            <picture>
+              <source srcSet="/Images/girl.webp" type="image/webp" />
+              <img
+                src="/Images/girl.png"
+                alt="Student with laptop"
+                width={280}
+                height={320}
+                fetchPriority="high"
+                decoding="async"
+                className="relative z-10 w-[240px] sm:w-[280px] h-auto object-contain drop-shadow-xl select-none mx-auto"
+              />
+            </picture>
 
             {/* Note: Floating cards are removed completely on smaller screens as requested */}
 

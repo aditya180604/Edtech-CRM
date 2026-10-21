@@ -3,11 +3,16 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
+import { requestMetrics } from './middleware/requestMetrics.js';
 import { apiRouter } from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { config } from './config/env.js';
 
 const app = express();
+
+// Request ID, latency metrics and structured access logs (first, so it times everything).
+app.use(requestMetrics({ log: process.env.NODE_ENV === 'production' || process.env.STRUCTURED_LOGS === 'true' }));
 
 // Dynamic CORS Origin Validator
 const isAllowedOrigin = (origin) => {
@@ -68,6 +73,9 @@ app.use(
     ],
   })
 );
+// gzip/deflate JSON responses (catalog lists compress ~5-10x). Binary media is already compressed.
+app.use(compression({ threshold: 1024 }));
+
 app.use(
   express.json({
     limit: '10mb',
@@ -79,7 +87,8 @@ app.use(
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-if (process.env.NODE_ENV !== 'test') {
+// Human-readable logs for local development; production uses the structured logger above.
+if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'production' && process.env.STRUCTURED_LOGS !== 'true') {
   app.use(morgan('dev'));
 }
 

@@ -16,87 +16,114 @@ import {
   Notification,
 } from '../../models/index.js';
 import { ENTITLEMENT_STATUS, PRODUCT_TYPES } from '../../config/constants.js';
+import { cached, keyFrom, CACHE_NS } from '../../utils/cache.js';
+import { courseSelect, userSelect, COURSE_ALL_FIELDS } from '../../utils/courseMedia.js';
+import { clampLimit, parsePagination, exactRegex, escapeRegex } from '../../utils/query.js';
+
+// Fields read by the course card formatter (featured + catalog). Media fields become URLs.
+const COURSE_CARD_FIELDS =
+  'title slug instructorId rating reviewCount reviewsCount coursePrice thumbnail category level ' +
+  'shortDescription description maxEnrollmentLimit enrolledCount schedule mentorStatus professionalTags ' +
+  'experienceMetrics qualifications totalSessions courseIncludes createdAt updatedAt';
+
+// Internal payment/approval bookkeeping never needed by public course pages.
+const COURSE_INTERNAL_FIELDS = new Set([
+  'cashfreeOrderId', 'cashfreePaymentSessionId', 'cashfreePaymentId', 'instructorEarnings', 'platformFee',
+  'rejectionReason', 'publishingFeeAmount', 'publishingFeePaid', 'publishingFeePaidAt', 'approvedBy',
+]);
+const COURSE_PUBLIC_DETAIL_FIELDS = COURSE_ALL_FIELDS.filter((f) => !COURSE_INTERNAL_FIELDS.has(f));
+
+/** Active enrollment counts keyed by course id (matches either courseId or productId). */
+async function enrollmentCountsFor(courseIds) {
+  const agg = await Entitlement.aggregate([
+    {
+      $match: {
+        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: [{ productId: { $in: courseIds } }, { courseId: { $in: courseIds } }],
+      },
+    },
+    { $group: { _id: { $ifNull: ['$courseId', '$productId'] }, count: { $sum: 1 } } },
+  ]);
+  const map = {};
+  agg.forEach((item) => {
+    if (item._id) map[item._id.toString()] = item.count;
+  });
+  return map;
+}
+
+/** Approved review stats keyed by course id. */
+async function reviewStatsFor(courseIds) {
+  const agg = await Review.aggregate([
+    { $match: { courseId: { $in: courseIds }, status: 'APPROVED' } },
+    { $group: { _id: '$courseId', avgRating: { $avg: '$rating' }, totalReviews: { $sum: 1 } } },
+  ]);
+  const map = {};
+  agg.forEach((item) => {
+    if (item._id) {
+      map[item._id.toString()] = {
+        avgRating: Math.round(item.avgRating * 10) / 10,
+        totalReviews: item.totalReviews,
+      };
+    }
+  });
+  return map;
+}
+
+/** Set of course ids (strings) the user holds an active entitlement for, among `courseIds`. */
+async function enrolledCourseIdsFor(userId, courseIds) {
+  const set = new Set();
+  if (!userId || !mongoose.isValidObjectId(userId) || courseIds.length === 0) return set;
+  const entitlements = await Entitlement.find({
+    userId,
+    status: ENTITLEMENT_STATUS.ACTIVE,
+    $or: [{ productId: { $in: courseIds } }, { courseId: { $in: courseIds } }],
+  })
+    .select('productId courseId')
+    .lean();
+  entitlements.forEach((e) => {
+    if (e.productId) set.add(e.productId.toString());
+    if (e.courseId) set.add(e.courseId.toString());
+  });
+  return set;
+}
+
+/** Per-user overlay on cached (shared, immutable) course cards. */
+async function withEnrollmentFlags(cards, userId) {
+  if (!userId || cards.length === 0) return cards;
+  const enrolled = await enrolledCourseIdsFor(userId, cards.map((c) => new mongoose.Types.ObjectId(c.id)));
+  if (enrolled.size === 0) return cards;
+  return cards.map((c) => (enrolled.has(c.id) ? { ...c, isEnrolled: true, isOwned: true } : c));
+}
 
 export class CoursesService {
   /**
    * 1. Featured Courses for Home Page (Image 4)
+   * The user-agnostic list is cached; enrollment flags are applied per request.
    */
   static async getFeaturedCourses(limit = 8, userId = null) {
+    const safeLimit = clampLimit(limit, { defaultLimit: 8, maxLimit: 50 });
+    const cards = await cached(`${CACHE_NS.CATALOG}:featured:${safeLimit}`, () => this.buildFeaturedCards(safeLimit));
+    return withEnrollmentFlags(cards, userId);
+  }
+
+  static async buildFeaturedCards(limit) {
     const courses = await Course.find({ status: 'PUBLISHED' })
-      .populate('instructorId', 'firstName lastName profilePhoto')
+      .select(courseSelect(COURSE_CARD_FIELDS))
+      .populate('instructorId', userSelect('firstName lastName profilePhoto updatedAt'))
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit, 10) || 8)
+      .limit(limit)
       .lean();
 
     const courseIds = courses.map((c) => c._id);
-    const enrolledCourseIdSet = new Set();
-
-    if (userId && mongoose.isValidObjectId(userId)) {
-      const entitlements = await Entitlement.find({
-        userId,
-        status: ENTITLEMENT_STATUS.ACTIVE,
-        $or: [
-          { productId: { $in: courseIds } },
-          { courseId: { $in: courseIds } },
-        ],
-      }).lean();
-
-      entitlements.forEach((e) => {
-        if (e.productId) enrolledCourseIdSet.add(e.productId.toString());
-        if (e.courseId) enrolledCourseIdSet.add(e.courseId.toString());
-      });
-    }
-
-    // Dynamic Entitlements (Enrolled students count)
-    const entitlementAgg = await Entitlement.aggregate([
-      {
-        $match: {
-          status: ENTITLEMENT_STATUS.ACTIVE,
-          $or: [
-            { productId: { $in: courseIds } },
-            { courseId: { $in: courseIds } },
-          ],
-        },
-      },
-      {
-        $group: {
-          _id: { $ifNull: ['$courseId', '$productId'] },
-          count: { $sum: 1 },
-        },
-      },
+    const [enrollmentMap, reviewMap] = await Promise.all([
+      enrollmentCountsFor(courseIds),
+      reviewStatsFor(courseIds),
     ]);
-
-    const enrollmentMap = {};
-    entitlementAgg.forEach((item) => {
-      if (item._id) enrollmentMap[item._id.toString()] = item.count;
-    });
-
-    // Dynamic Reviews & Ratings
-    const reviewAgg = await Review.aggregate([
-      { $match: { courseId: { $in: courseIds }, status: 'APPROVED' } },
-      {
-        $group: {
-          _id: '$courseId',
-          avgRating: { $avg: '$rating' },
-          totalReviews: { $sum: 1 },
-        },
-      },
-    ]);
-
-    const reviewMap = {};
-    reviewAgg.forEach((item) => {
-      if (item._id) {
-        reviewMap[item._id.toString()] = {
-          avgRating: Math.round(item.avgRating * 10) / 10,
-          totalReviews: item.totalReviews,
-        };
-      }
-    });
 
     const badges = ['BEST SELLER', 'POPULAR', 'HOT & NEW', 'TOP RATED'];
 
     return courses.map((c, idx) => {
-      const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
+      const isEnrolled = false;
       const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
       const liveEntitlements = enrollmentMap[c._id.toString()] || 0;
       const enrolled = Math.max(c.enrolledCount || 0, liveEntitlements);
@@ -145,58 +172,30 @@ export class CoursesService {
    * 2. Catalog & Dynamic Filtering (Image 5)
    */
   static async getCatalog({ category, level, search, sort = 'newest', page = 1, limit = 20 } = {}, userId = null) {
-    const query = { status: 'PUBLISHED' };
+    const pagination = parsePagination({ page, limit }, { defaultLimit: 20, maxLimit: 100 });
+    const params = {
+      category: typeof category === 'string' ? category : undefined,
+      level: typeof level === 'string' ? level : undefined,
+      search: typeof search === 'string' ? search.trim().slice(0, 100) : undefined,
+      sort: typeof sort === 'string' ? sort : 'newest',
+    };
 
-    if (category && category !== 'All' && category !== 'ALL') {
-      query.category = { $regex: new RegExp(`^${category}$`, 'i') };
-    }
-
-    if (level && level !== 'All' && level !== 'ALL') {
-      query.level = { $regex: new RegExp(`^${level}$`, 'i') };
-    }
-
-    if (search && search.trim()) {
-      const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(sanitized, 'i');
-      query.$or = [{ title: re }, { shortDescription: re }, { category: re }];
-    }
-
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const sortObj = {};
-    if (sort === 'price-low') sortObj.coursePrice = 1;
-    else if (sort === 'price-high') sortObj.coursePrice = -1;
-    else if (sort === 'rating') sortObj.createdAt = -1;
-    else sortObj.createdAt = -1;
-
-    const [courses, total, allPublished] = await Promise.all([
-      Course.find(query)
-        .populate('instructorId', 'firstName lastName profilePhoto')
-        .sort(sortObj)
-        .skip(skip)
-        .limit(parseInt(limit, 10))
-        .lean(),
-      Course.countDocuments(query),
-      Course.find({ status: 'PUBLISHED' }).select('category level').lean(),
+    const [pageData, filters] = await Promise.all([
+      cached(`${CACHE_NS.CATALOG}:catalog:${keyFrom({ ...params, page: pagination.page, limit: pagination.limit })}`, () =>
+        this.buildCatalogPage(params, pagination)
+      ),
+      cached(`${CACHE_NS.CATALOG}:catalogFilters`, () => this.buildCatalogFilters()),
     ]);
 
-    const courseIds = courses.map((c) => c._id);
-    const enrolledCourseIdSet = new Set();
+    return {
+      courses: await withEnrollmentFlags(pageData.courses, userId),
+      pagination: pageData.pagination,
+      filters,
+    };
+  }
 
-    if (userId && mongoose.isValidObjectId(userId)) {
-      const entitlements = await Entitlement.find({
-        userId,
-        status: ENTITLEMENT_STATUS.ACTIVE,
-        $or: [
-          { productId: { $in: courseIds } },
-          { courseId: { $in: courseIds } },
-        ],
-      }).lean();
-
-      entitlements.forEach((e) => {
-        if (e.productId) enrolledCourseIdSet.add(e.productId.toString());
-        if (e.courseId) enrolledCourseIdSet.add(e.courseId.toString());
-      });
-    }
+  static async buildCatalogFilters() {
+    const allPublished = await Course.find({ status: 'PUBLISHED' }).select('category level').lean();
 
     // Dynamically calculate category & level counts for sidebar filter (Image 5)
     const categoryCountMap = {};
@@ -225,54 +224,50 @@ export class CoursesService {
       { name: 'Advanced', count: levelCountMap['Advanced'] || 0 },
     ];
 
-    // Dynamic Entitlements (Enrolled students count)
-    const entitlementAgg = await Entitlement.aggregate([
-      {
-        $match: {
-          status: ENTITLEMENT_STATUS.ACTIVE,
-          $or: [
-            { productId: { $in: courseIds } },
-            { courseId: { $in: courseIds } },
-          ],
-        },
-      },
-      {
-        $group: {
-          _id: { $ifNull: ['$courseId', '$productId'] },
-          count: { $sum: 1 },
-        },
-      },
+    return { categories: categoriesFilter, levels: levelsFilter };
+  }
+
+  static async buildCatalogPage({ category, level, search, sort }, { page, limit, skip }) {
+    const query = { status: 'PUBLISHED' };
+
+    if (category && category !== 'All' && category !== 'ALL') {
+      query.category = { $regex: exactRegex(category) };
+    }
+
+    if (level && level !== 'All' && level !== 'ALL') {
+      query.level = { $regex: exactRegex(level) };
+    }
+
+    if (search) {
+      const re = new RegExp(escapeRegex(search), 'i');
+      query.$or = [{ title: re }, { shortDescription: re }, { category: re }];
+    }
+
+    const sortObj = {};
+    if (sort === 'price-low') sortObj.coursePrice = 1;
+    else if (sort === 'price-high') sortObj.coursePrice = -1;
+    else if (sort === 'rating') sortObj.createdAt = -1;
+    else sortObj.createdAt = -1;
+
+    const [courses, total] = await Promise.all([
+      Course.find(query)
+        .select(courseSelect(COURSE_CARD_FIELDS))
+        .populate('instructorId', userSelect('firstName lastName profilePhoto updatedAt'))
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Course.countDocuments(query),
     ]);
 
-    const enrollmentMap = {};
-    entitlementAgg.forEach((item) => {
-      if (item._id) enrollmentMap[item._id.toString()] = item.count;
-    });
-
-    // Dynamic Reviews & Ratings
-    const reviewAgg = await Review.aggregate([
-      { $match: { courseId: { $in: courseIds }, status: 'APPROVED' } },
-      {
-        $group: {
-          _id: '$courseId',
-          avgRating: { $avg: '$rating' },
-          totalReviews: { $sum: 1 },
-        },
-      },
+    const courseIds = courses.map((c) => c._id);
+    const [enrollmentMap, reviewMap] = await Promise.all([
+      enrollmentCountsFor(courseIds),
+      reviewStatsFor(courseIds),
     ]);
-
-    const reviewMap = {};
-    reviewAgg.forEach((item) => {
-      if (item._id) {
-        reviewMap[item._id.toString()] = {
-          avgRating: Math.round(item.avgRating * 10) / 10,
-          totalReviews: item.totalReviews,
-        };
-      }
-    });
 
     const formatted = courses.map((c) => {
-      const isEnrolled = enrolledCourseIdSet.has(c._id.toString());
+      const isEnrolled = false;
       const maxLimit = typeof c.maxEnrollmentLimit === 'number' && c.maxEnrollmentLimit > 0 ? c.maxEnrollmentLimit : null;
       const liveEntitlements = enrollmentMap[c._id.toString()] || 0;
       const enrolled = Math.max(c.enrolledCount || 0, liveEntitlements);
@@ -319,13 +314,9 @@ export class CoursesService {
       courses: formatted,
       pagination: {
         total,
-        page: parseInt(page, 10),
-        limit: parseInt(limit, 10),
-        pages: Math.ceil(total / parseInt(limit, 10)),
-      },
-      filters: {
-        categories: categoriesFilter,
-        levels: levelsFilter,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
       },
     };
   }
@@ -333,32 +324,92 @@ export class CoursesService {
   /**
    * 3. Course Details & Complete Syllabus Hierarchy (Image 5 Syllabus Section)
    */
-  static async getCourseDetails(slugOrId, userId = null) {
+  /**
+   * Shared (user-agnostic) data for the course detail page. Cached; callers must not mutate it.
+   * 4 dependent DB stages: course -> modules (+ independent lookups) -> topics -> lessons.
+   */
+  static async loadCourseDetailBase(slugOrId) {
     let query = { slug: slugOrId.toLowerCase() };
     if (mongoose.Types.ObjectId.isValid(slugOrId)) {
       query = { $or: [{ slug: slugOrId.toLowerCase() }, { _id: slugOrId }] };
     }
 
     const course = await Course.findOne(query)
-      .populate('instructorId', 'firstName lastName email profilePhoto')
+      .select(courseSelect(COURSE_PUBLIC_DETAIL_FIELDS))
+      .populate('instructorId', userSelect('firstName lastName email profilePhoto updatedAt'))
       .lean();
 
     if (!course) return null;
 
-    // Fetch Syllabus and InstructorProfile concurrently
-    const [modules, instructorProfile] = await Promise.all([
+    const [modules, instProfile, activeEntitlementsCount, reviewStats] = await Promise.all([
       Module.find({ courseId: course._id }).sort({ order: 1 }).lean(),
       course.instructorId?._id
-        ? InstructorProfile.findOne({ userId: course.instructorId._id }).lean()
+        ? InstructorProfile.findOne({ userId: course.instructorId._id })
+            .select('headline title expertise bio experience profilePhoto')
+            .lean()
         : null,
+      Entitlement.countDocuments({
+        status: ENTITLEMENT_STATUS.ACTIVE,
+        $or: [{ productId: course._id }, { courseId: course._id }],
+      }),
+      Review.aggregate([
+        { $match: { courseId: course._id, status: 'APPROVED' } },
+        { $group: { _id: '$courseId', avgRating: { $avg: '$rating' }, totalReviews: { $sum: 1 } } },
+      ]),
     ]);
+
     const moduleIds = modules.map((m) => m._id);
     const topics = await Topic.find({ moduleId: { $in: moduleIds } }).sort({ order: 1 }).lean();
-    const topicIds = topics.map((t) => t._id);
     const lessons = await Lesson.find({
-      topicId: { $in: topicIds },
+      topicId: { $in: topics.map((t) => t._id) },
       contentOfferingId: { $in: [null, undefined] },
     }).sort({ order: 1 }).lean();
+
+    return { course, modules, topics, lessons, instProfile, activeEntitlementsCount, reviewStats };
+  }
+
+  static async getCourseDetails(slugOrId, userId = null) {
+    if (typeof slugOrId !== 'string' || !slugOrId.trim()) return null;
+
+    const base = await cached(`${CACHE_NS.CATALOG}:courseDetail:${slugOrId.toLowerCase()}`, () =>
+      this.loadCourseDetailBase(slugOrId)
+    );
+    if (!base) return null;
+
+    const { course, modules, topics, lessons, instProfile, activeEntitlementsCount, reviewStats } = base;
+    const topicIds = topics.map((t) => t._id);
+
+    // Per-user lookups (never cached), run concurrently.
+    const hasUser = Boolean(userId && (mongoose.isValidObjectId(userId) || typeof userId === 'string'));
+    const userObjId = hasUser && mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
+    const userQueries = [{ userId: String(userId) }];
+    if (userObjId) userQueries.push({ userId: userObjId });
+
+    const [activeEntitlements, progressDocs] = await Promise.all([
+      hasUser
+        ? Entitlement.find({
+            $and: [
+              { $or: userQueries },
+              {
+                $or: [
+                  { productId: course._id },
+                  { courseId: course._id },
+                  { productId: course._id.toString() },
+                  { courseId: course._id.toString() },
+                  { productId: { $in: topicIds } },
+                  { topicId: { $in: topicIds } },
+                ],
+              },
+            ],
+            status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
+          }).lean()
+        : [],
+      userId
+        ? LearningProgress.find({ $or: userQueries, courseId: course._id, completed: true })
+            .select('lessonId')
+            .lean()
+        : [],
+    ]);
 
     // Deduplicate modules by title
     const uniqueModules = [];
@@ -376,28 +427,7 @@ export class CoursesService {
     let enrolledTopicsCount = 0;
     const entitledTopicIdSet = new Set();
 
-    if (userId && (mongoose.isValidObjectId(userId) || typeof userId === 'string')) {
-      const userObjId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
-      const userQueries = [{ userId: String(userId) }];
-      if (userObjId) userQueries.push({ userId: userObjId });
-
-      const activeEntitlements = await Entitlement.find({
-        $and: [
-          { $or: userQueries },
-          {
-            $or: [
-              { productId: course._id },
-              { courseId: course._id },
-              { productId: course._id.toString() },
-              { courseId: course._id.toString() },
-              { productId: { $in: topicIds } },
-              { topicId: { $in: topicIds } },
-            ],
-          },
-        ],
-        status: { $in: [ENTITLEMENT_STATUS.ACTIVE, 'ACTIVE'] },
-      }).lean();
-
+    if (hasUser) {
       for (const ent of activeEntitlements) {
         const matchesCourse =
           ent.courseId?.toString() === course._id.toString() ||
@@ -504,57 +534,21 @@ export class CoursesService {
 
     const finalPrice = course.coursePrice ?? 0;
 
-    const instProfile = course.instructorId?._id
-      ? await InstructorProfile.findOne({ userId: course.instructorId._id }).lean()
-      : null;
-
     const instructorName = [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor';
     const instructorAvatar = course.instructorId?.profilePhoto || instProfile?.profilePhoto || null;
     const instructorHeadline = instProfile?.headline || instProfile?.title || (instProfile?.expertise?.length > 0 ? instProfile.expertise.join(' • ') : '') || course.instructorId?.headline || 'Senior Technology Lead & Certified Cloud Architect';
     const instructorBio = instProfile?.bio || instProfile?.experience || course.instructorId?.bio || 'Passionate engineering educator and technical architect with industry experience in cloud systems, production microservices, and modern development workflows.';
     const instructorExperience = instProfile?.experience || '8+ Years';
 
-    const activeEntitlementsCount = await Entitlement.countDocuments({
-      status: ENTITLEMENT_STATUS.ACTIVE,
-      $or: [
-        { productId: course._id },
-        { courseId: course._id },
-      ],
-    });
-
     const maxLimit = typeof course.maxEnrollmentLimit === 'number' && course.maxEnrollmentLimit > 0 ? course.maxEnrollmentLimit : null;
     const enrolled = Math.max(course.enrolledCount || 0, activeEntitlementsCount);
     const isSoldOut = Boolean(maxLimit !== null && enrolled >= maxLimit);
     const remainingSeats = maxLimit !== null ? Math.max(0, maxLimit - enrolled) : null;
 
-    const reviewStats = await Review.aggregate([
-      { $match: { courseId: course._id, status: 'APPROVED' } },
-      {
-        $group: {
-          _id: '$courseId',
-          avgRating: { $avg: '$rating' },
-          totalReviews: { $sum: 1 },
-        },
-      },
-    ]);
-
     const realRating = reviewStats[0]?.avgRating ? Math.round(reviewStats[0].avgRating * 10) / 10 : (course.rating || 0);
     const realReviewCount = reviewStats[0]?.totalReviews || course.reviewsCount || 0;
 
-    let completedLessonIds = [];
-    if (userId) {
-      const userObjId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null;
-      const uQueries = [{ userId: String(userId) }];
-      if (userObjId) uQueries.push({ userId: userObjId });
-
-      const progressDocs = await LearningProgress.find({
-        $or: uQueries,
-        courseId: course._id,
-        completed: true,
-      }).lean();
-
-      completedLessonIds = progressDocs.map((p) => p.lessonId?.toString()).filter(Boolean);
-    }
+    const completedLessonIds = progressDocs.map((p) => p.lessonId?.toString()).filter(Boolean);
 
     return {
       course: {
@@ -596,7 +590,20 @@ export class CoursesService {
   /**
    * 4. Dynamic Topics for Standalone Topic Purchases (Image 4)
    */
-  static async getAllTopics({ courseId, category, search }) {
+  static async getAllTopics({ courseId, category, search, limit } = {}) {
+    const params = {
+      courseId: typeof courseId === 'string' ? courseId : undefined,
+      category: typeof category === 'string' ? category : undefined,
+      search: typeof search === 'string' ? search.trim().slice(0, 100) : undefined,
+    };
+    const topics = await cached(`${CACHE_NS.CATALOG}:allTopics:${keyFrom(params)}`, () => this.buildAllTopics(params));
+    // Historically unbounded; an explicit limit is honoured and a hard cap protects the endpoint.
+    const safeLimit = clampLimit(limit, { defaultLimit: 500, maxLimit: 500 });
+    return topics.length > safeLimit ? topics.slice(0, safeLimit) : topics;
+  }
+
+  static async buildAllTopics({ courseId, category, search }) {
+    const TOPIC_COURSE_FIELDS = 'title category thumbnail coursePrice slug status instructorId';
     let moduleIds = [];
     if (courseId) {
       let query = { courseId };
@@ -611,9 +618,8 @@ export class CoursesService {
     if (moduleIds.length > 0) {
       topicQuery.moduleId = { $in: moduleIds };
     }
-    if (search && search.trim()) {
-      const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchRegex = new RegExp(sanitized, 'i');
+    if (search) {
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
       topicQuery.$or = [
         { title: searchRegex },
         { description: searchRegex },
@@ -626,10 +632,10 @@ export class CoursesService {
     const topics = await Topic.find(topicQuery)
       .populate({
         path: 'courseId',
-        select: 'title category thumbnail coursePrice slug status instructorId',
+        select: courseSelect(TOPIC_COURSE_FIELDS),
         populate: {
           path: 'instructorId',
-          select: 'firstName lastName email profilePhoto',
+          select: userSelect('firstName lastName email profilePhoto updatedAt'),
         },
       })
       .populate({
@@ -637,10 +643,10 @@ export class CoursesService {
         select: 'title order courseId',
         populate: {
           path: 'courseId',
-          select: 'title category thumbnail coursePrice slug status instructorId',
+          select: courseSelect(TOPIC_COURSE_FIELDS),
           populate: {
             path: 'instructorId',
-            select: 'firstName lastName email profilePhoto',
+            select: userSelect('firstName lastName email profilePhoto updatedAt'),
           },
         },
       })
@@ -649,9 +655,16 @@ export class CoursesService {
 
     const topicIds = topics.map((t) => t._id);
     const lessons = await Lesson.find({ topicId: { $in: topicIds } })
-      .select('title duration playbackReference videoUrl isFreePreview order topicId resources')
+      .select('title duration playbackReference videoUrl isFreePreview order topicId')
       .sort({ order: 1 })
       .lean();
+
+    const lessonsByTopic = new Map();
+    for (const l of lessons) {
+      const key = l.topicId?.toString();
+      if (!lessonsByTopic.has(key)) lessonsByTopic.set(key, []);
+      lessonsByTopic.get(key).push(l);
+    }
 
     let formatted = topics.map((t) => {
       const mod = t.moduleId;
@@ -661,7 +674,7 @@ export class CoursesService {
         ? `${inst.firstName || ''} ${inst.lastName || ''}`.trim() || inst.email || 'Course Instructor'
         : 'Course Instructor';
 
-      const topLessons = lessons.filter((l) => l.topicId.toString() === t._id.toString());
+      const topLessons = lessonsByTopic.get(t._id.toString()) || [];
       const hasVideo = !!(t.videoUrl || topLessons.some((l) => l.playbackReference || l.videoUrl || l.videoId));
 
       return {
@@ -715,7 +728,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query);
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount');
     if (!course) {
       throw new Error('Course not found');
     }
@@ -794,7 +807,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query).lean();
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount').lean();
     if (!course) return null;
 
     const userObjId = new mongoose.Types.ObjectId(userId);
@@ -828,7 +841,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query);
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount');
     if (!course) {
       throw new Error('Course not found');
     }
@@ -990,7 +1003,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query).lean();
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount').lean();
     if (!course) return [];
 
     const questions = await CommunityQuestion.find({ courseId: course._id })
@@ -1035,7 +1048,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query);
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount');
     if (!course) throw new Error('Course not found');
 
     const userObjId = new mongoose.Types.ObjectId(userId);
@@ -1074,7 +1087,7 @@ export class CoursesService {
     if (mongoose.isValidObjectId(slug)) {
       query = { $or: [{ slug }, { _id: new mongoose.Types.ObjectId(slug) }] };
     }
-    const course = await Course.findOne(query);
+    const course = await Course.findOne(query).select('_id title slug instructorId rating reviewCount');
     if (!course) throw new Error('Course not found');
 
     const question = await CommunityQuestion.findById(questionId);

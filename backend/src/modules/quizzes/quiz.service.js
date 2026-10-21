@@ -9,6 +9,7 @@ import {
   LearningProgress,
 } from '../../models/index.js';
 import { AppError } from '../../utils/apiResponse.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class QuizService {
   /**
@@ -50,7 +51,7 @@ export class QuizService {
       throw new AppError('courseId and title are required to create a quiz', 400);
     }
 
-    const course = await Course.findById(courseId).lean();
+    const course = await Course.findById(courseId).select(courseSelect()).lean();
     if (!course) {
       throw new AppError('Course not found', 404);
     }
@@ -210,7 +211,7 @@ export class QuizService {
     }
 
     const quizzes = await Quiz.find(query)
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .populate('topicId', 'title')
       .populate('questions')
       .sort({ createdAt: -1 })
@@ -258,7 +259,7 @@ export class QuizService {
    * Student: Get Quizzes for a Course (Purchase-Gated Access Control)
    */
   static async getQuizzesByCourse(courseId, user) {
-    const course = await Course.findById(courseId).lean();
+    const course = await Course.findById(courseId).select(courseSelect()).lean();
     if (!course) {
       throw new AppError('Course not found', 404);
     }
@@ -329,7 +330,7 @@ export class QuizService {
    */
   static async getQuizById(quizId, user) {
     const quiz = await Quiz.findById(quizId)
-      .populate('courseId', 'title slug thumbnail')
+      .populate('courseId', courseSelect('title slug thumbnail updatedAt'))
       .populate('topicId', 'title')
       .populate('questions')
       .lean();

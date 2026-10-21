@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { User, Course, Topic, Lesson, LearningProgress, Entitlement } from '../../models/index.js';
 import { AppError } from '../../utils/apiResponse.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
+import { courseSelect } from '../../utils/courseMedia.js';
 
 export class UsersService {
   /**
@@ -87,7 +88,7 @@ export class UsersService {
     // Fetch this student's purchased courses
     const courses = await Course.find({
       _id: { $in: courseObjectIds },
-    }).select('title slug thumbnail description skills category rating').lean();
+    }).select(courseSelect('title slug thumbnail description skills category rating updatedAt')).lean();
 
     // Fetch topics belonging to this student's courses or individual topic purchases
     const topics = await Topic.find({

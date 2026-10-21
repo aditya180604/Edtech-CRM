@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { LearningPathController } from './learningPath.controller.js';
 import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
+import { publicCache } from '../../middleware/httpCache.js';
 
 const router = Router();
 
@@ -8,7 +9,7 @@ const router = Router();
 // LEARNING PATH ROUTES
 // ============================================================
 // Public list of learning paths
-router.get('/learning-paths', optionalAuthenticate, LearningPathController.getLearningPaths);
+router.get('/learning-paths', publicCache(), optionalAuthenticate, LearningPathController.getLearningPaths);
 
 // Public/student dynamic roadmap (Path -> Domains -> Topics)
 router.get('/learning-paths/:slugOrId', optionalAuthenticate, LearningPathController.getLearningPathBySlug);
