@@ -70,8 +70,12 @@ export const AuthModal: React.FC = () => {
     setLoading(false);
     if (result.success && result.role) {
       closeAuth();
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
-      navigate(redirectPath);
+      if (authMode === 'signup' && result.role === 'STUDENT') {
+        navigate('/');
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+        navigate(redirectPath);
+      }
     } else if (!result.success) {
       setErrorMessage(result.message || 'Google sign in failed.');
     }
@@ -151,8 +155,12 @@ export const AuthModal: React.FC = () => {
 
     if (result.success && result.role) {
       closeAuth();
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
-      navigate(redirectPath);
+      if (result.role === 'STUDENT') {
+        navigate('/');
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+        navigate(redirectPath);
+      }
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');
     }

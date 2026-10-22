@@ -117,6 +117,34 @@ export const StudentDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearchSuggestionsOpen(false);
+    navigate('/courses?search=' + encodeURIComponent(searchQuery.trim()));
+  };
+
+  const matchingEnrolled = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !dashboardData?.activeCourses) return [];
+    return dashboardData.activeCourses.filter(
+      (c) =>
+        c.title?.toLowerCase().includes(q) ||
+        c.instructorName?.toLowerCase().includes(q)
+    ).slice(0, 4);
+  }, [searchQuery, dashboardData?.activeCourses]);
+
+  const matchingRecommendations = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !dashboardData?.recommendations) return [];
+    return dashboardData.recommendations.filter(
+      (c) =>
+        c.title?.toLowerCase().includes(q) ||
+        c.category?.toLowerCase().includes(q)
+    ).slice(0, 3);
+  }, [searchQuery, dashboardData?.recommendations]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<'month' | 'week' | 'all'>('month');
   const [myLearningTab, setMyLearningTab] = useState<'COURSES' | 'TOPICS' | 'COMPLETED'>('COURSES');
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null);
@@ -904,22 +932,132 @@ export const StudentDashboard: React.FC = () => {
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Global Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            {/* Global Search Input with Instant Suggestions */}
+            <form
+              onSubmit={handleSearchSubmit}
+              className="relative flex-1 max-w-xl"
+            >
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search courses..."
+                placeholder="Search courses, skills, or topics..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    navigate(`/courses?search=${encodeURIComponent(searchQuery.trim())}`);
-                  }
+                onFocus={() => setSearchSuggestionsOpen(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchSuggestionsOpen(true);
                 }}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36] focus:bg-white transition-all"
+                className="w-full pl-9 pr-24 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#FA5A36] focus:bg-white focus:ring-2 focus:ring-[#FA5A36]/10 transition-all"
               />
-            </div>
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchSuggestionsOpen(false);
+                    }}
+                    className="p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={!searchQuery.trim()}
+                  className="px-3 py-1 bg-[#FA5A36] hover:bg-[#E04322] active:bg-[#C23315] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Search</span>
+                </button>
+              </div>
+
+              {/* Live Search Suggestions Dropdown */}
+              {searchSuggestionsOpen && searchQuery.trim().length > 0 && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setSearchSuggestionsOpen(false)}
+                  />
+                  <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-slate-200 shadow-xl p-2 z-40 space-y-2 animate-in fade-in slide-in-from-top-1 max-h-96 overflow-y-auto">
+                    {matchingEnrolled.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1">
+                          My Enrolled Courses
+                        </p>
+                        {matchingEnrolled.map((course) => (
+                          <div
+                            key={course.courseId}
+                            onClick={() => {
+                              setSearchSuggestionsOpen(false);
+                              navigate(`/courses/${course.courseId}`);
+                            }}
+                            className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-orange-50/50 cursor-pointer transition text-left group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <BookOpen className="w-4 h-4 text-[#FA5A36] shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 group-hover:text-[#FA5A36] truncate">
+                                  {course.title}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate">
+                                  {course.instructorName || 'Instructor'} • Enrolled
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-semibold text-[#FA5A36] shrink-0">Open &rarr;</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {matchingRecommendations.length > 0 && (
+                      <div className={matchingEnrolled.length > 0 ? 'pt-1 border-t border-slate-100' : ''}>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1">
+                          Recommended For You
+                        </p>
+                        {matchingRecommendations.map((rec) => (
+                          <div
+                            key={rec.courseId}
+                            onClick={() => {
+                              setSearchSuggestionsOpen(false);
+                              navigate(`/courses/${rec.courseId}`);
+                            }}
+                            className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 cursor-pointer transition text-left group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 group-hover:text-[#FA5A36] truncate">
+                                  {rec.title}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate">
+                                  {rec.category} • {rec.level}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-700 shrink-0">Explore &rarr;</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={handleSearchSubmit}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-[#FA5A36] hover:bg-orange-50 transition cursor-pointer text-left"
+                      >
+                        <span className="truncate">
+                          Search all courses for "{searchQuery.trim()}"
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 shrink-0 ml-2" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </form>
 
             {/* Top Right Actions */}
             <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
@@ -930,95 +1068,6 @@ export const StudentDashboard: React.FC = () => {
               >
                 <span className="text-xs">🔥</span>
                 <span className="text-xs font-black text-amber-900">{currentStreak} days</span>
-              </div>
-
-              {/* Notifications Bell */}
-              <button
-                onClick={() => setActiveDrawer('notifications')}
-                className="relative p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                title="Notifications"
-              >
-                <Bell className="w-4 h-4" />
-                {((Array.isArray(dashboardData?.notifications)
-                  ? dashboardData.notifications.length
-                  : (dashboardData?.notifications as any)?.unreadCount || 0) > 0) && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
-                    {Array.isArray(dashboardData?.notifications)
-                      ? dashboardData.notifications.length
-                      : (dashboardData?.notifications as any)?.unreadCount || 0}
-                  </span>
-                )}
-              </button>
-
-              {/* Messages & Q&A Button */}
-              <button
-                onClick={() => setActiveTab('messages')}
-                className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                title="Course Q&A & Doubts"
-              >
-                <Mail className="w-4 h-4" />
-              </button>
-
-              <div className="h-6 w-px bg-slate-200 mx-0.5 hidden sm:block" />
-
-              {/* Profile Dropdown */}
-              <div className="relative">
-                <div
-                  onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200/70 cursor-pointer transition"
-                >
-                  {profilePhoto ? (
-                    <img
-                      src={normalizeImageUrl(profilePhoto) || ''}
-                      alt={studentName}
-                      className="w-7 h-7 rounded-lg object-cover border border-white shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-7 h-7 rounded-lg bg-[#FA5A36] text-white font-bold text-xs flex items-center justify-center shrink-0">
-                      {studentName[0]?.toUpperCase() || 'S'}
-                    </div>
-                  )}
-                  <div className="text-left leading-tight hidden lg:block">
-                    <p className="text-xs font-bold text-slate-900 truncate max-w-[110px]">{studentName}</p>
-                    <p className="text-[10px] font-semibold text-slate-400">Student</p>
-                  </div>
-                </div>
-
-                {profileDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setProfileDropdownOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-slate-100 shadow-xl p-2 z-50 space-y-1">
-                      <div className="px-3 py-2 border-b border-slate-100">
-                        <p className="text-xs font-black text-slate-900 truncate">{studentName}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{studentEmail}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setActiveTab('settings');
-                          setProfileSubTab('profile');
-                          setProfileDropdownOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 text-left transition cursor-pointer"
-                      >
-                        <UserIcon className="w-4 h-4 text-slate-400" />
-                        <span>Profile & Settings</span>
-                      </button>
-                      <button
-                        onClick={async () => {
-                          setProfileDropdownOpen(false);
-                          await logout('/');
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 text-left transition cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4 text-red-500" />
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           </div>

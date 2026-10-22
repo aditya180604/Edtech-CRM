@@ -227,7 +227,7 @@ export const Navbar: React.FC = () => {
                           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
                         >
                           <LayoutDashboard className="w-4 h-4 text-slate-400" />
-                          <span>Dashboard</span>
+                          <span>{user?.role === 'STUDENT' ? 'Student Dashboard' : 'Dashboard'}</span>
                         </Link>
 
                         <div className="pt-1 border-t border-slate-100">

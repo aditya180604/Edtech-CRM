@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import emailjs from '@emailjs/browser';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { 
@@ -15,6 +16,11 @@ import {
   LifeBuoy
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_134wh5r';
+const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_efh7c85';
+const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'AgLVpp87HBVoyuM3_';
+const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || 'connect@sririshikriyansolutions.com';
 
 const INQUIRY_TYPES = [
   'General Support',
@@ -39,7 +45,7 @@ const QUICK_FAQS = [
   },
   {
     q: 'Can I switch my course cohort or batch?',
-    a: 'Yes, reach out via this contact form or email support@vstudyonline.com within the first 14 days of cohort commencement to switch cohorts free of charge.'
+    a: 'Yes, reach out via this contact form or email connect@sririshikriyansolutions.com within the first 14 days of cohort commencement to switch cohorts free of charge.'
   }
 ];
 
@@ -48,6 +54,8 @@ export const ContactUsPage: React.FC = () => {
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -58,19 +66,56 @@ export const ContactUsPage: React.FC = () => {
   });
 
   const handleCopyEmail = () => {
-    navigator.clipboard.writeText('support@vstudyonline.com');
+    navigator.clipboard.writeText(CONTACT_EMAIL);
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitError(null);
     const generated = `EDU-${Math.floor(100000 + Math.random() * 900000)}`;
-    setTicketId(generated);
+
+    const templateParams = {
+      name: form.name,
+      from_name: form.name,
+      user_name: form.name,
+      email: form.email,
+      from_email: form.email,
+      user_email: form.email,
+      reply_to: form.email,
+      subject: form.subject,
+      urgency: form.urgency,
+      department: selectedType,
+      inquiry_department: selectedType,
+      message: form.message,
+      ticket_id: generated,
+      ticketId: generated,
+      to_email: CONTACT_EMAIL,
+    };
+
+    try {
+      await emailjs.send(
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
+        templateParams,
+        EMAILJS_PUBLIC_KEY
+      );
+      setTicketId(generated);
+    } catch (err: any) {
+      console.error('Failed to send email via EmailJS:', err);
+      setSubmitError(
+        err?.text || err?.message || 'Failed to dispatch email. Please try again or reach out to us directly.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
     setTicketId(null);
+    setSubmitError(null);
     setForm({
       name: '',
       email: '',
@@ -145,7 +190,7 @@ export const ContactUsPage: React.FC = () => {
                   </div>
 
                   <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">support@vstudyonline.com</span>
+                    <span className="text-xs font-semibold text-slate-700">{CONTACT_EMAIL}</span>
                     <button
                       type="button"
                       onClick={handleCopyEmail}
@@ -203,16 +248,16 @@ export const ContactUsPage: React.FC = () => {
                 <div className="p-6 sm:p-10 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
                   {ticketId ? (
                     <div className="py-8 text-center space-y-4">
-                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto">
+                      <div className="w-14 h-14 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] flex items-center justify-center mx-auto shadow-xs">
                         <CheckCircle2 className="w-8 h-8" />
                       </div>
-                      <div className="space-y-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                          Ticket Reference
+                      <div className="space-y-1.5">
+                        <span className="inline-block px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold tracking-wide font-mono">
+                          Reference: {ticketId}
                         </span>
-                        <h3 className="text-2xl font-black text-slate-900">{ticketId}</h3>
+                        <h3 className="text-2xl font-black text-slate-900">Your Message Was Submitted!</h3>
                         <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto pt-1 font-normal leading-relaxed">
-                          Your inquiry regarding <strong className="text-slate-800">{selectedType}</strong> has been assigned to a technical support specialist. A confirmation has been sent to <strong className="text-slate-800">{form.email}</strong>.
+                          Thank you for reaching out. We have received your inquiry regarding <strong className="text-slate-800">{selectedType}</strong>. Our team will review your message and get back to you shortly.
                         </p>
                       </div>
 
@@ -220,13 +265,13 @@ export const ContactUsPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleReset}
-                          className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors"
+                          className="px-5 py-2.5 rounded-xl bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
                         >
                           Submit Another Inquiry
                         </button>
                         <Link
                           to="/courses"
-                          className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
+                          className="px-5 py-2.5 rounded-xl bg-white hover:bg-orange-50/70 border border-slate-200 hover:border-[#FA5A36] text-slate-700 hover:text-[#FA5A36] text-xs font-bold transition-all cursor-pointer"
                         >
                           Back to Courses
                         </Link>
@@ -312,12 +357,28 @@ export const ContactUsPage: React.FC = () => {
                         />
                       </div>
 
+                      {submitError && (
+                        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
+                          {submitError}
+                        </div>
+                      )}
+
                       <button
                         type="submit"
-                        className="w-full py-3 rounded-xl bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        disabled={isSubmitting}
+                        className="w-full py-3 rounded-xl bg-[#FA5A36] hover:bg-[#E04322] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Submit Ticket to Support Team</span>
+                        {isSubmitting ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Sending Ticket...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Submit Ticket to Support Team</span>
+                          </>
+                        )}
                       </button>
                     </form>
                   )}

@@ -53,8 +53,12 @@ export const RegisterPage: React.FC = () => {
     const result = await loginWithGoogle();
     setLoading(false);
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
-      navigate(redirectPath);
+      if (result.role === 'STUDENT') {
+        navigate('/');
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted);
+        navigate(redirectPath);
+      }
     } else if (!result.success) {
       setErrorMessage(result.message || 'Google sign in failed.');
     }
@@ -99,8 +103,12 @@ export const RegisterPage: React.FC = () => {
     setLoading(false);
 
     if (result.success && result.role) {
-      const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted, result.instructorId);
-      navigate(redirectPath);
+      if (result.role === 'STUDENT') {
+        navigate('/');
+      } else {
+        const redirectPath = getRedirectPathForRole(result.role, result.isProfileCompleted, result.instructorId);
+        navigate(redirectPath);
+      }
     } else {
       setErrorMessage(result.message || 'Registration failed. Please try again.');
     }
