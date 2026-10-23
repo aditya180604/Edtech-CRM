@@ -22,7 +22,7 @@ import { clampLimit, parsePagination, exactRegex, escapeRegex } from '../../util
 
 // Fields read by the course card formatter (featured + catalog). Media fields become URLs.
 const COURSE_CARD_FIELDS =
-  'title slug instructorId rating reviewCount reviewsCount coursePrice thumbnail category level ' +
+  'title slug instructorId rating reviewCount reviewsCount coursePrice discountPrice discountPercent discountValidUntil discountAppliedByRole thumbnail category level ' +
   'shortDescription description maxEnrollmentLimit enrolledCount schedule mentorStatus professionalTags ' +
   'experienceMetrics qualifications totalSessions courseIncludes createdAt updatedAt';
 
@@ -134,6 +134,14 @@ export class CoursesService {
       const rating = revData ? revData.avgRating : (c.rating || 0);
       const reviewCount = revData ? `${revData.totalReviews}` : (c.reviewCount ? `${c.reviewCount}` : '');
 
+      const isDiscountActive = Boolean(
+        c.discountPercent > 0 &&
+        (!c.discountValidUntil || new Date(c.discountValidUntil) > new Date())
+      );
+      const effectivePrice = isDiscountActive
+        ? (c.discountPrice || Math.round((c.coursePrice || 0) * (1 - c.discountPercent / 100)))
+        : (c.coursePrice ?? 0);
+
       return {
         id: c._id.toString(),
         _id: c._id.toString(),
@@ -144,8 +152,12 @@ export class CoursesService {
         rating,
         reviewCount,
         reviewsCount: revData ? revData.totalReviews : (c.reviewsCount || 0),
-        price: c.coursePrice ?? 0,
-        originalPrice: Math.round((c.coursePrice || 1999) * 2.5),
+        price: effectivePrice,
+        coursePrice: c.coursePrice ?? 0,
+        originalPrice: isDiscountActive ? (c.coursePrice ?? 0) : null,
+        discountPercent: isDiscountActive ? c.discountPercent : 0,
+        discountValidUntil: isDiscountActive ? c.discountValidUntil : null,
+        hasDiscount: isDiscountActive,
         thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
         category: (c.category || 'DEVELOPMENT').toUpperCase(),
         level: c.level || 'Beginner',
@@ -278,6 +290,14 @@ export class CoursesService {
       const rating = revData ? revData.avgRating : (c.rating || 0);
       const reviewCount = revData ? `${revData.totalReviews}` : (c.reviewCount ? `${c.reviewCount}` : '');
 
+      const isDiscountActive = Boolean(
+        c.discountPercent > 0 &&
+        (!c.discountValidUntil || new Date(c.discountValidUntil) > new Date())
+      );
+      const effectivePrice = isDiscountActive
+        ? (c.discountPrice || Math.round((c.coursePrice || 0) * (1 - c.discountPercent / 100)))
+        : (c.coursePrice ?? 0);
+
       return {
         id: c._id.toString(),
         _id: c._id.toString(),
@@ -288,8 +308,12 @@ export class CoursesService {
         rating,
         reviewCount,
         reviewsCount: revData ? revData.totalReviews : (c.reviewsCount || 0),
-        price: c.coursePrice ?? 0,
-        originalPrice: Math.round((c.coursePrice || 1999) * 2.2),
+        price: effectivePrice,
+        coursePrice: c.coursePrice ?? 0,
+        originalPrice: isDiscountActive ? (c.coursePrice ?? 0) : null,
+        discountPercent: isDiscountActive ? c.discountPercent : 0,
+        discountValidUntil: isDiscountActive ? c.discountValidUntil : null,
+        hasDiscount: isDiscountActive,
         thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
         category: (c.category || 'Development').toUpperCase(),
         level: c.level || 'Beginner',
@@ -533,7 +557,14 @@ export class CoursesService {
       };
     });
 
-    const finalPrice = course.coursePrice ?? 0;
+    const isDiscountActive = Boolean(
+      course.discountPercent > 0 &&
+      (!course.discountValidUntil || new Date(course.discountValidUntil) > new Date())
+    );
+    const finalPrice = isDiscountActive
+      ? (course.discountPrice || Math.round((course.coursePrice || 0) * (1 - course.discountPercent / 100)))
+      : (course.coursePrice ?? 0);
+    const originalPrice = isDiscountActive ? (course.coursePrice ?? 0) : null;
 
     const instructorName = [course.instructorId?.firstName, course.instructorId?.lastName].filter(Boolean).join(' ') || 'Instructor';
     const instructorAvatar = course.instructorId?.profilePhoto || instProfile?.profilePhoto || null;
@@ -555,7 +586,11 @@ export class CoursesService {
       course: {
         ...course,
         price: finalPrice,
-        coursePrice: finalPrice,
+        coursePrice: course.coursePrice ?? 0,
+        originalPrice: originalPrice,
+        discountPercent: isDiscountActive ? (course.discountPercent || 0) : 0,
+        discountValidUntil: isDiscountActive ? (course.discountValidUntil || null) : null,
+        hasDiscount: isDiscountActive,
         instructorName,
         instructorAvatar,
         instructorHeadline,

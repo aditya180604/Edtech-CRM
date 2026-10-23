@@ -228,7 +228,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider">
+            <span className="px-2.5 py-0.5 rounded-full bg-orange-50 text-[#FA5A36] text-[10px] font-black uppercase tracking-wider border border-orange-100">
               Assessment Studio
             </span>
             <span className="text-slate-300 text-xs">•</span>
@@ -245,7 +245,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
           <select
             value={selectedCourseFilter}
             onChange={(e) => setSelectedCourseFilter(e.target.value)}
-            className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FA5A36]/20 focus:border-[#FA5A36]"
           >
             <option value="all">All Courses</option>
             {courses.map((c) => (
@@ -257,7 +257,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
 
           <button
             onClick={() => setShowCreateQuizModal(true)}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-extrabold rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create New Quiz</span>
@@ -268,12 +268,12 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
       {/* Quizzes List */}
       {loading ? (
         <div className="bg-white rounded-3xl p-12 border border-slate-100 text-center space-y-3">
-          <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-10 h-10 border-3 border-[#FA5A36] border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs font-bold text-slate-500">Loading your quizzes...</p>
         </div>
       ) : quizzes.length === 0 ? (
         <div className="bg-white rounded-3xl p-12 border border-slate-100 text-center space-y-4 max-w-md mx-auto">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-orange-50 text-[#FA5A36] border border-orange-100 flex items-center justify-center mx-auto shadow-xs">
             <HelpCircle className="w-8 h-8" />
           </div>
           <div>
@@ -284,7 +284,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
           </div>
           <button
             onClick={() => setShowCreateQuizModal(true)}
-            className="px-6 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs"
+            className="px-6 py-2.5 bg-[#FA5A36] hover:bg-[#E04322] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
           >
             Create Your First Quiz
           </button>
@@ -307,7 +307,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                         {quiz.courseId?.title || 'General Course'}
                       </span>
                       {quiz.topicId?.title && (
-                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
+                        <span className="px-2.5 py-0.5 rounded-full bg-orange-50 text-[#FA5A36] text-[10px] font-bold border border-orange-100">
                           Topic: {quiz.topicId.title}
                         </span>
                       )}
@@ -341,11 +341,11 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                       <span className="text-xs font-black text-emerald-800">{quiz.passingScore || 70}%</span>
                     </div>
 
-                    <div className="px-3 py-1.5 bg-indigo-50 rounded-xl border border-indigo-200 text-center">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-700 block">
+                    <div className="px-3 py-1.5 bg-orange-50 rounded-xl border border-orange-200 text-center">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#FA5A36] block">
                         Student Attempts
                       </span>
-                      <span className="text-xs font-black text-indigo-900">{quiz.stats?.totalAttempts || 0}</span>
+                      <span className="text-xs font-black text-orange-950">{quiz.stats?.totalAttempts || 0}</span>
                     </div>
 
                     {/* Actions */}
@@ -371,7 +371,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                           setActiveQuizForQuestion(quiz);
                           setShowAddQuestionModal(true);
                         }}
-                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        className="px-3.5 py-2 bg-[#FA5A36] hover:bg-[#E04322] text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Question</span>
@@ -401,7 +401,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                           setActiveQuizForQuestion(quiz);
                           setShowAddQuestionModal(true);
                         }}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                        className="text-xs font-bold text-[#FA5A36] hover:text-[#E04322] flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Another Question</span>
@@ -421,7 +421,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                                <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#FA5A36] font-bold text-xs flex items-center justify-center border border-orange-100">
                                   {qIdx + 1}
                                 </span>
                                 <span className="text-xs font-bold text-slate-900">{q.questionText}</span>
@@ -510,7 +510,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                   value={newQuizData.courseId}
                   onChange={(e) => setNewQuizData((prev) => ({ ...prev, courseId: e.target.value }))}
                   required
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/30 font-bold text-slate-800"
                 >
                   <option value="">Select a Course</option>
                   {courses.map((c) => (
@@ -529,7 +529,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                   onChange={(e) => setNewQuizData((prev) => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g. Module 2: React Hooks & State Mastery"
                   required
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/30"
                 />
               </div>
 
@@ -540,7 +540,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                   onChange={(e) => setNewQuizData((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Briefly describe what this quiz assesses..."
                   rows={2}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-[#FA5A36] focus:ring-1 focus:ring-[#FA5A36]/30 resize-none"
                 />
               </div>
 
@@ -593,7 +593,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition"
+                  className="px-6 py-2 bg-[#FA5A36] hover:bg-[#E04322] disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition"
                 >
                   {submitting ? 'Creating...' : 'Create Quiz'}
                 </button>
@@ -631,7 +631,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                   placeholder="Enter the question or problem statement..."
                   rows={3}
                   required
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 font-medium"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#FA5A36] font-medium"
                 />
               </div>
 
@@ -668,7 +668,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                         }}
                         placeholder={`Option ${opt.id} description...`}
                         required={idx < 2}
-                        className="flex-1 p-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500"
+                        className="flex-1 p-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#FA5A36]"
                       />
                       {isChecked && (
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 shrink-0">
@@ -687,7 +687,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                   onChange={(e) => setNewQuestionData((prev) => ({ ...prev, explanation: e.target.value }))}
                   placeholder="Explain why the correct answer is right (shown to students in review)..."
                   rows={2}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#FA5A36] resize-none"
                 />
               </div>
 
@@ -702,7 +702,7 @@ export const InstructorQuizStudio: React.FC<InstructorQuizStudioProps> = ({ cour
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition"
+                  className="px-6 py-2 bg-[#FA5A36] hover:bg-[#E04322] disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition"
                 >
                   {submitting ? 'Adding...' : 'Add Question'}
                 </button>

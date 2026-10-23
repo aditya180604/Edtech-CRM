@@ -6,6 +6,8 @@ import { AppError } from '../../utils/apiResponse.js';
 import { ROLES, USER_STATUS } from '../../config/constants.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
 
+const MAX_SESSION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export class AuthService {
   /**
    * Helper to hash a token with SHA-256 for secure DB storage
@@ -40,7 +42,7 @@ export class AuthService {
   /**
    * Generate JWT Access Token and Refresh Token with cryptographic JTI
    */
-  static generateTokens(user) {
+  static generateTokens(user, sessionExpiresAt = Date.now() + MAX_SESSION_AGE_MS) {
     const jti = crypto.randomBytes(16).toString('hex');
 
     const payload = {
@@ -48,6 +50,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       instructorId: user.instructorId || undefined,
+      sessionExpiresAt,
     };
 
     const accessToken = jwt.sign(payload, config.jwt.secret, {
@@ -55,7 +58,7 @@ export class AuthService {
     });
 
     const refreshToken = jwt.sign({ ...payload, jti }, config.jwt.refreshSecret, {
-      expiresIn: config.jwt.refreshExpiresIn,
+      expiresIn: Math.max(1, Math.ceil((sessionExpiresAt - Date.now()) / 1000)),
     });
 
     return { accessToken, refreshToken };
@@ -294,6 +297,13 @@ export class AuthService {
         throw new AppError('User not found or inactive.', 401);
       }
 
+      const sessionExpiresAt =
+        Number(decoded.sessionExpiresAt) ||
+        (decoded.iat ? decoded.iat * 1000 + MAX_SESSION_AGE_MS : 0);
+      if (!sessionExpiresAt || Date.now() >= sessionExpiresAt) {
+        throw new AppError('Session expired. Please log in again.', 401);
+      }
+
       // Check against stored token hash or recent grace-window rotated hash (30s)
       const incomingHash = this.hashToken(incomingRefreshToken);
       const isCurrentMatch = user.refreshTokenHash && user.refreshTokenHash === incomingHash;
@@ -322,7 +332,7 @@ export class AuthService {
       }
 
       // Rotate: Issue new token pair and update history with 30s grace window
-      const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(user);
+      const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(user, sessionExpiresAt);
       user.previousRefreshTokenHash = user.refreshTokenHash || incomingHash;
       user.previousRefreshTokenExpiresAt = new Date(Date.now() + 30000);
       user.refreshTokenHash = this.hashToken(newRefreshToken);
@@ -332,7 +342,12 @@ export class AuthService {
       return { accessToken, refreshToken: newRefreshToken };
     } catch (err) {
       if (err instanceof AppError) throw err;
-      throw new AppError('Invalid or expired refresh token.', 401);
+      // Only JWT failures mean the token is bad. A DB error must surface as a 5xx,
+      // otherwise a transient Atlas blip is reported as 401 and logs the user out.
+      if (['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(err?.name)) {
+        throw new AppError('Invalid or expired refresh token.', 401);
+      }
+      throw err;
     }
   }
 
@@ -568,4 +583,3 @@ export class AuthService {
     };
   }
 }
-

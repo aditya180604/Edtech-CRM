@@ -169,7 +169,7 @@ export const coursesApi = {
     page?: number;
     limit?: number;
   }, options?: { forceRefresh?: boolean }): Promise<{ success: boolean; data: CourseCatalogResponse }> {
-    return cachedGet<{ success: boolean; data: CourseCatalogResponse }>('/courses', { params }, { ttlMs: 30_000, forceRefresh: options?.forceRefresh });
+    return cachedGet<{ success: boolean; data: CourseCatalogResponse }>('/courses', { params }, { ttlMs: 3_000, forceRefresh: options?.forceRefresh });
   },
 
   // 3. Course Details & Complete Syllabus Hierarchy (cached 60s)

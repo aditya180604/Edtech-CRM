@@ -118,9 +118,8 @@ export const HeroSection: React.FC = () => {
               <span className="text-[#FA5A36]">Learn at Your Own Pace.</span>
             </h1>
 
-            {/* Sub-headline */}
-            <p className="text-xs sm:text-base lg:text-lg text-slate-600 max-w-xl mb-5 sm:mb-7 leading-relaxed font-normal">
-              Flexible, modular learning for real-world skills. Master bite-sized topics or upgrade to comprehensive certifications with expert instructors.
+            <p className="max-w-xl mb-5 sm:mb-7 text-sm sm:text-base lg:text-lg leading-relaxed font-medium text-slate-700">
+              <span className="text-slate-900">VStudyOnline by SRR Solutions</span> is an advanced online learning and EdTech platform offering live interactive masterclasses, industry accredited certifications, and personalized mentor led skill tracks for students and professionals looking to accelerate their careers through practical, job-ready learning.
             </p>
 
             {/* Search Bar: Clean mobile layout matching Image 3 & Image 4 */}

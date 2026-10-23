@@ -112,14 +112,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(res.data);
             localStorage.setItem('user', JSON.stringify(res.data));
           }
-        } catch {
-          // Token expired or invalid
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          clearSessionScopedData();
-          setUser(null);
-          setAccessToken(null);
+        } catch (err: any) {
+          // Only end the session when the server definitively rejects it. Network errors,
+          // timeouts and 5xx (e.g. a Render cold start) keep the cached session intact.
+          const status = err?.response?.status;
+          if (status === 401 || status === 403) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            clearSessionScopedData();
+            setUser(null);
+            setAccessToken(null);
+          }
         }
       }
       setIsLoading(false);
@@ -206,7 +210,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password).catch(() => null);
           if (userCredential) {
             const idToken = await userCredential.user.getIdToken();
-            await authApi.firebaseLogin(idToken).catch(() => {});
+            // firebaseLogin issues a new token pair server-side and invalidates the one above,
+            // so the stored tokens must be replaced or the next refresh is rejected as reuse.
+            const syncRes = await authApi.firebaseLogin(idToken).catch(() => null);
+            if (syncRes?.success && syncRes.data?.accessToken) {
+              setAccessToken(syncRes.data.accessToken);
+              localStorage.setItem('accessToken', syncRes.data.accessToken);
+              if (syncRes.data.refreshToken) localStorage.setItem('refreshToken', syncRes.data.refreshToken);
+            }
           }
         } catch {
           // Migration is best-effort and non-blocking

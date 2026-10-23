@@ -2407,13 +2407,29 @@ export const CourseDetailPage: React.FC = () => {
 
               {/* Card Body */}
               <div className="p-6 space-y-4">
-                {/* Pricing Block - Clean Main Price Only */}
+                {/* Pricing Block - Product E-Commerce with Discount */}
                 <div>
-                  <div className="flex items-baseline gap-2.5">
+                  <div className="flex items-baseline gap-2.5 flex-wrap">
                     <span className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
                       {displayPrice === 0 ? 'FREE' : `₹${displayPrice.toLocaleString('en-IN')}`}
                     </span>
+                    {course.hasDiscount && course.originalPrice && course.originalPrice > displayPrice && (
+                      <>
+                        <del className="text-base sm:text-lg font-semibold text-slate-400">
+                          ₹{course.originalPrice.toLocaleString('en-IN')}
+                        </del>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-200">
+                          {course.discountPercent}% OFF
+                        </span>
+                      </>
+                    )}
                   </div>
+                  {course.hasDiscount && course.discountValidUntil && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold bg-amber-50 px-2.5 py-1.5 rounded-xl border border-amber-200 mt-2.5">
+                      <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                      <span>Limited Time Sale: Ends {new Date(course.discountValidUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Primary Action Button (Brand Coral) */}

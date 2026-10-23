@@ -13,10 +13,11 @@ export const LearningPathsSection: React.FC = () => {
     setIsLoading(true);
     setError(null);
     catalogApi
-      .getLearningPaths({ limit: 8 })
+      .getLearningPaths({ limit: 4 })
       .then((data) => {
         const safePaths = Array.isArray(data) ? data : (data as any)?.learningPaths || [];
-        setPaths(safePaths);
+        // Strictly show only the 4 latest learning paths
+        setPaths(safePaths.slice(0, 4));
       })
       .catch((err) => {
         console.error('Failed to load learning paths:', err);

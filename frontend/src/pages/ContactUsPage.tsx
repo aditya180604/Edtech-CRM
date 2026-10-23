@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import emailjs from '@emailjs/browser';
 import { Navbar } from '../components/Navbar';
+import { SEOHead } from '../components/SEOHead';
 import { Footer } from '../components/Footer';
 import { 
   Mail, 
@@ -126,11 +127,27 @@ export const ContactUsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
-      <Navbar />
+    <>
+      <SEOHead
+        title="Contact VStudyOnline | SRR Solutions"
+        description="Reach the VStudyOnline support team for course enrollment, billing, technical issues, and learner support with expert guidance from SRR Solutions."
+        canonical="https://vstudyonline.srrsolutions.io/contact"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'ContactPage',
+          name: 'Contact VStudyOnline',
+          description:
+            'Contact the VStudyOnline support team for course queries, technical support, billing, and student assistance.',
+          publisher: {
+            '@id': 'https://srrsolutions.io/#organization',
+          },
+        }}
+      />
+      <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+        <Navbar />
 
-      <main className="flex-1">
-        {/* Modern Header Banner */}
+        <main className="flex-1">
+            {/* Modern Header Banner */}
         <section className="relative overflow-hidden bg-white border-b border-slate-200/80 py-12 sm:py-16">
           <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFF5F2] border border-[#FFCCC2] text-[#FA5A36] text-xs font-bold tracking-wide">
@@ -140,8 +157,8 @@ export const ContactUsPage: React.FC = () => {
             <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
               How Can We Assist You Today?
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto font-normal leading-relaxed">
-              Select an inquiry topic below or drop us a message. Our dedicated team reviews inquiries around the clock.
+            <p className="text-sm sm:text-base text-slate-700 max-w-2xl mx-auto font-medium leading-relaxed border-l-2 border-[#FA5A36] pl-3 bg-white/60 rounded-r-xl text-left">
+              VStudyOnline by SRR Solutions provides responsive learner support, course guidance, billing help, and technical assistance to students and professionals who need timely answers and clear next steps.
             </p>
 
             {/* Dynamic Topic Selector Chips */}
@@ -389,7 +406,8 @@ export const ContactUsPage: React.FC = () => {
         </section>
       </main>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </>
   );
 };

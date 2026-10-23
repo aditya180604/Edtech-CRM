@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Coupon, CouponRedemption, Course, User } from '../../models/index.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
+import { clearCache } from '../../utils/cache.js';
 
 // Strict validation: exactly 8 characters of uppercase, lowercase, numbers, and allowed special characters
 export const COUPON_CODE_REGEX = /^[A-Za-z0-9!@#$%^&*]{8}$/;
@@ -208,7 +209,7 @@ export class CouponService {
   /**
    * 2. LIST COUPONS (Super Admin Only)
    */
-  static async getCoupons({ page = 1, limit = 20, search, status, discountType, courseId }) {
+  static async getCoupons({ page = 1, limit = 20, search, status, discountType, courseId, user }) {
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (pageNum - 1) * limitNum;
@@ -233,6 +234,17 @@ export class CouponService {
 
     if (courseId && mongoose.isValidObjectId(courseId)) {
       filter.courseId = courseId;
+    }
+
+    const isSuperAdmin = (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && !user?.isOversight;
+    if (!isSuperAdmin && user?._id) {
+      const myCourses = await Course.find({ instructorId: user._id }).select('_id');
+      const myIds = myCourses.map((c) => c._id);
+      if (filter.courseId) {
+        filter.courseId = { $in: myIds.filter((id) => id.toString() === filter.courseId.toString()) };
+      } else {
+        filter.courseId = { $in: myIds };
+      }
     }
 
     if (search && search.trim()) {
@@ -571,8 +583,13 @@ export class CouponService {
   /**
    * 8. GET PUBLISHED COURSES LIST (For Super Admin Dropdown)
    */
-  static async getCoursesDropdownList() {
-    const courses = await Course.find({ status: { $ne: 'ARCHIVED' } })
+  static async getCoursesDropdownList(user = null) {
+    const courseFilter = { status: { $ne: 'ARCHIVED' } };
+    const isSuperAdmin = (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && !user?.isOversight;
+    if (!isSuperAdmin && user?._id) {
+      courseFilter.instructorId = user._id;
+    }
+    const courses = await Course.find(courseFilter)
       .populate('instructorId', 'firstName lastName email')
       .select('title slug coursePrice currency instructorId status')
       .sort({ title: 1 })
@@ -706,5 +723,120 @@ export class CouponService {
     });
 
     return redemption;
+  }
+
+  /**
+   * 10. GET COURSE DISCOUNTS (For Instructor and SuperAdmin)
+   */
+  static async getCourseDiscounts({ user, search, status }) {
+    const filter = { status: { $ne: 'ARCHIVED' } };
+    const isSuperAdmin = (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && !user?.isOversight;
+
+    if (!isSuperAdmin && user?._id) {
+      filter.instructorId = user._id;
+    }
+
+    if (search && search.trim()) {
+      filter.title = { $regex: search.trim(), $options: 'i' };
+    }
+
+    const courses = await Course.find(filter)
+      .populate('instructorId', 'firstName lastName email profilePhoto')
+      .populate('discountAppliedBy', 'firstName lastName email role')
+      .select('title slug coursePrice discountPrice discountPercent discountValidUntil discountAppliedByRole discountAppliedBy discountAppliedAt thumbnail category status')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const now = new Date();
+
+    return courses.map((c) => {
+      const isExpired = c.discountValidUntil ? new Date(c.discountValidUntil) <= now : false;
+      const isDiscountActive = Boolean(c.discountPercent > 0 && !isExpired);
+      const effectivePrice = isDiscountActive
+        ? (c.discountPrice || Math.round((c.coursePrice || 0) * (1 - c.discountPercent / 100)))
+        : (c.coursePrice || 0);
+
+      return {
+        _id: c._id,
+        title: c.title,
+        slug: c.slug,
+        thumbnail: c.thumbnail,
+        category: c.category,
+        status: c.status,
+        coursePrice: c.coursePrice || 0,
+        discountPrice: effectivePrice,
+        discountPercent: isDiscountActive ? c.discountPercent : 0,
+        rawDiscountPercent: c.discountPercent || 0,
+        discountValidUntil: c.discountValidUntil || null,
+        isDiscountActive,
+        isExpired,
+        discountAppliedByRole: c.discountAppliedByRole || 'NONE',
+        discountAppliedBy: c.discountAppliedBy ? {
+          id: c.discountAppliedBy._id,
+          name: `${c.discountAppliedBy.firstName || ''} ${c.discountAppliedBy.lastName || ''}`.trim() || c.discountAppliedBy.email,
+          role: c.discountAppliedBy.role,
+        } : null,
+        discountAppliedAt: c.discountAppliedAt || null,
+        instructor: c.instructorId ? {
+          id: c.instructorId._id,
+          name: `${c.instructorId.firstName || ''} ${c.instructorId.lastName || ''}`.trim(),
+          email: c.instructorId.email,
+        } : null,
+      };
+    });
+  }
+
+  /**
+   * 11. UPDATE COURSE DISCOUNT (Apply, Modify %, Change Expiry, or Remove)
+   */
+  static async updateCourseDiscount({ courseId, discountPercent, discountValidUntil, user }) {
+    const course = await Course.findById(courseId);
+    if (!course) {
+      throw new Error('Course not found.');
+    }
+
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+    if (!isSuperAdmin) {
+      const instructorObjId = user._id.toString();
+      const courseInstId = course.instructorId?.toString();
+      if (instructorObjId !== courseInstId) {
+        throw new Error('Unauthorized: You can only apply discounts to your own courses.');
+      }
+    }
+
+    const pct = Number(discountPercent);
+    if (isNaN(pct) || pct < 0 || pct > 90) {
+      throw new Error('Discount percentage must be between 0% and 90%.');
+    }
+
+    if (pct === 0) {
+      course.discountPercent = 0;
+      course.discountPrice = 0;
+      course.discountValidUntil = null;
+      course.discountAppliedByRole = 'NONE';
+      course.discountAppliedBy = null;
+      course.discountAppliedAt = null;
+    } else {
+      course.discountPercent = pct;
+      course.discountPrice = Math.max(0, Math.round((course.coursePrice || 0) * (1 - pct / 100)));
+      course.discountValidUntil = discountValidUntil ? new Date(discountValidUntil) : null;
+      course.discountAppliedByRole = isSuperAdmin ? 'SUPER_ADMIN' : 'INSTRUCTOR';
+      course.discountAppliedBy = user._id;
+      course.discountAppliedAt = new Date();
+    }
+
+    await course.save();
+    try { clearCache(); } catch (e) { /* ignore */ }
+
+    return {
+      _id: course._id,
+      title: course.title,
+      coursePrice: course.coursePrice,
+      discountPrice: course.discountPrice,
+      discountPercent: course.discountPercent,
+      discountValidUntil: course.discountValidUntil,
+      discountAppliedByRole: course.discountAppliedByRole,
+      isDiscountActive: course.discountPercent > 0,
+    };
   }
 }

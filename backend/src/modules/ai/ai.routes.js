@@ -9,4 +9,7 @@ const router = Router();
 // Each call is a paid Gemini request: cap per IP.
 router.post('/tutor', rateLimit({ name: 'ai-tutor', windowMs: 60 * 1000, max: 20 }), optionalAuthenticate, AiController.askTutor);
 
+// Instructor Auto-Fill Curriculum Parser (OpenAI powered)
+router.post('/parse-curriculum', optionalAuthenticate, AiController.parseCurriculum);
+
 export const aiRoutes = router;

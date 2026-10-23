@@ -82,6 +82,10 @@ export interface Course {
   price: number;
   coursePrice?: number;
   originalPrice?: number;
+  hasDiscount?: boolean;
+  discountPercent?: number;
+  discountPrice?: number;
+  discountValidUntil?: string | null;
   thumbnail: string;
   banner?: string;
   category: string;

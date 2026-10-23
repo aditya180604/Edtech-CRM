@@ -33,7 +33,7 @@ export const COURSE_ALL_FIELDS = [
   'instructorId', 'category', 'subcategory', 'level', 'language', 'skills', 'requirements',
   'learningObjectives', 'detailedOverview', 'targetAudience', 'courseGoals', 'teachingMethodology',
   'foundationalConcepts', 'recommendedPriorKnowledge', 'coreTools', 'hardwareRequirements',
-  'softwareRequirements', 'requiredAccounts', 'courseIncludes', 'promotionalVideo', 'discountPrice',
+  'softwareRequirements', 'requiredAccounts', 'courseIncludes', 'promotionalVideo', 'discountPrice', 'discountPercent', 'discountValidUntil', 'discountAppliedByRole', 'discountAppliedAt',
   'accessDuration', 'certificateEnabled', 'certificateSettings', 'coursePrice', 'currency', 'status',
   'approvalStatus', 'rejectionReason', 'approvedAt', 'approvedBy', 'publishingFeePaid',
   'publishingFeeAmount', 'publishingFeePaidAt', 'cashfreeOrderId', 'cashfreePaymentSessionId',

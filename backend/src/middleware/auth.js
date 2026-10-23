@@ -29,6 +29,10 @@ export async function authenticate(req, res, next) {
     }
 
     if (isLocalJwt && decoded?.userId) {
+      if (decoded.sessionExpiresAt && Date.now() >= Number(decoded.sessionExpiresAt)) {
+        return next(new AppError('Session expired. Please log in again.', 401));
+      }
+
       const user = await User.findById(decoded.userId).select('status role email firebaseUid adminPermissions department');
       if (!user) {
         return next(new AppError('User account not found.', 401));
@@ -110,6 +114,10 @@ export async function optionalAuthenticate(req, res, next) {
       // 1. Try local JWT
       try {
         const decoded = jwt.verify(token, config.jwt.secret);
+        if (decoded.sessionExpiresAt && Date.now() >= Number(decoded.sessionExpiresAt)) {
+          return next();
+        }
+
         const user = await User.findById(decoded.userId).select('status role email firebaseUid');
         if (user && user.status === 'ACTIVE') {
           req.user = {

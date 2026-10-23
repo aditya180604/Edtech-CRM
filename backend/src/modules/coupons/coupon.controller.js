@@ -2,6 +2,30 @@ import { CouponService } from './coupon.service.js';
 import { PricingService } from '../checkout/pricing.service.js';
 import { ApiResponse, asyncHandler } from '../../utils/apiResponse.js';
 
+function getEffectiveUser(req) {
+  const user = req.user;
+  if (!user) return null;
+
+  const rawOverride = req.headers?.['x-instructor-id'] || req.query?.instructorId;
+  const override = Array.isArray(rawOverride) ? rawOverride[0] : rawOverride;
+
+  if (override && typeof override === 'string' && override.trim().length > 0) {
+    return {
+      ...user,
+      _id: override.trim(),
+      userId: override.trim(),
+      role: 'INSTRUCTOR',
+      isOversight: true,
+    };
+  }
+
+  return {
+    ...user,
+    _id: user._id || user.userId,
+    userId: user.userId || user._id,
+  };
+}
+
 export class CouponController {
   /**
    * Super Admin: Create Coupon (Course-Scoped)
@@ -12,7 +36,7 @@ export class CouponController {
       userAgent: req.headers['user-agent'],
     };
 
-    const coupon = await CouponService.createCoupon(req.body, req.user, meta);
+    const coupon = await CouponService.createCoupon(req.body, getEffectiveUser(req), meta);
     return ApiResponse.created(res, coupon, 'Coupon created successfully.');
   });
 
@@ -21,7 +45,7 @@ export class CouponController {
    */
   static getCoupons = asyncHandler(async (req, res) => {
     const { page, limit, search, status, discountType, courseId } = req.query;
-    const result = await CouponService.getCoupons({ page, limit, search, status, discountType, courseId });
+    const result = await CouponService.getCoupons({ page, limit, search, status, discountType, courseId, user: getEffectiveUser(req) });
     return ApiResponse.success(res, result, 'Coupons list retrieved successfully.');
   });
 
@@ -29,7 +53,7 @@ export class CouponController {
    * Super Admin: Get Courses for Creation Dropdown
    */
   static getCoursesDropdown = asyncHandler(async (req, res) => {
-    const courses = await CouponService.getCoursesDropdownList();
+    const courses = await CouponService.getCoursesDropdownList(getEffectiveUser(req));
     return ApiResponse.success(res, courses, 'Courses list retrieved.');
   });
 
@@ -119,5 +143,33 @@ export class CouponController {
         message: error.message,
       });
     }
+  });
+
+  /**
+   * Super Admin & Instructor: Get Course Discounts
+   */
+  static getCourseDiscounts = asyncHandler(async (req, res) => {
+    const { search, status } = req.query;
+    const result = await CouponService.getCourseDiscounts({
+      user: getEffectiveUser(req),
+      search,
+      status,
+    });
+    return ApiResponse.success(res, result, 'Course discounts retrieved successfully.');
+  });
+
+  /**
+   * Super Admin & Instructor: Update Course Discount (Percentage & Expiry)
+   */
+  static updateCourseDiscount = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
+    const { discountPercent, discountValidUntil } = req.body;
+    const result = await CouponService.updateCourseDiscount({
+      courseId,
+      discountPercent,
+      discountValidUntil,
+      user: getEffectiveUser(req),
+    });
+    return ApiResponse.success(res, result, 'Course discount updated successfully.');
   });
 }

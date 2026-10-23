@@ -76,6 +76,17 @@ import { LiveStartedBanner } from '../../components/dashboard/LiveStartedBanner'
 import { InstructorQuizStudio } from '../../components/quiz/InstructorQuizStudio';
 import { InstructorSlotsManager } from '../../components/slots/InstructorSlotsManager';
 import { InstructorConsultationsManager } from '../../components/consultations/InstructorConsultationsManager';
+import { AutoFillCurriculumModal } from '../../components/course/AutoFillCurriculumModal';
+import { CouponsAndDiscountsManager } from '../../components/coupons/CouponsAndDiscountsManager';
+
+const STANDARD_COURSE_CATEGORIES = [
+  'Development',
+  'Cloud Computing',
+  'IT & Software',
+  'Data Science',
+  'Design',
+  'Cybersecurity',
+];
 
 export const InstructorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -90,7 +101,7 @@ export const InstructorDashboard: React.FC = () => {
   const isMobile = useIsMobile(500);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<
-    'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'webinars' | 'consultations' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
+    'dashboard' | 'courses' | 'create-course' | 'quizzes' | 'coupons' | 'webinars' | 'consultations' | 'students' | 'reviews' | 'qa' | 'analytics' | 'profile'
   >('dashboard');
 
   // Top-Right Profile Dropdown State
@@ -266,6 +277,8 @@ export const InstructorDashboard: React.FC = () => {
   // 9-Step Create/Edit Course Wizard State
   const [createStep, setCreateStep] = useState(1);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
   const [courseFormData, setCourseFormData] = useState({
     title: '',
     shortDescription: '',
@@ -359,6 +372,8 @@ export const InstructorDashboard: React.FC = () => {
   // Wizard In-UI Module and Topic Modals
   const [wizardModuleModal, setWizardModuleModal] = useState(false);
   const [wizardModuleTitle, setWizardModuleTitle] = useState('');
+  const [autoFillModalOpen, setAutoFillModalOpen] = useState(false);
+  const [curriculumMode, setCurriculumMode] = useState<'manual' | 'ai'>('manual');
   const [wizardTopicModal, setWizardTopicModal] = useState(false);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null);
   const [editingTopicIndex, setEditingTopicIndex] = useState<number | null>(null);
@@ -719,6 +734,44 @@ export const InstructorDashboard: React.FC = () => {
     setWizardModuleModal(false);
   };
 
+  // Auto-Fill Curriculum using OpenAI (Approve & Ingest Handler)
+  const handleAutoFillApproved = (result: {
+    modules: any[];
+    courseTitle?: string;
+    courseDescription?: string;
+    price?: number;
+    duration?: number;
+  }) => {
+    if (result.modules && result.modules.length > 0) {
+      setCourseFormData((prev) => ({
+        ...prev,
+        modules: result.modules,
+        coursePrice:
+          prev.coursePrice || (result.price ? Number(result.price) : prev.coursePrice),
+        title: prev.title || result.courseTitle || prev.title,
+        shortDescription:
+          prev.shortDescription || result.courseDescription || prev.shortDescription,
+        courseIncludes: {
+          ...prev.courseIncludes,
+          videoHours: result.duration
+            ? `${result.duration}+ Hours of On-Demand Content`
+            : prev.courseIncludes.videoHours,
+        },
+      }));
+
+      const newExp: Record<string, boolean> = {};
+      result.modules.forEach((_, idx) => {
+        newExp[`wizard-mod-${idx}`] = true;
+      });
+      setExpandedModules((prev) => ({ ...prev, ...newExp }));
+
+      success(
+        'Curriculum Auto-Filled',
+        `Successfully imported ${result.modules.length} modules using OpenAI. You can now review, edit, or add more lessons.`
+      );
+    }
+  };
+
   // In-UI Save Topic in Wizard (Add or Edit with Strict Validations)
   const handleWizardSaveTopic = (e: React.FormEvent) => {
     e.preventDefault();
@@ -835,6 +888,9 @@ export const InstructorDashboard: React.FC = () => {
       if (res.success && res.data) {
         const { course, modules } = res.data;
         setEditingCourseId(courseId);
+        const isKnownCat = STANDARD_COURSE_CATEGORIES.includes(course.category);
+        setIsCustomCategory(!isKnownCat && Boolean(course.category));
+        setCustomCategoryInput(!isKnownCat && Boolean(course.category) ? course.category : '');
         setCourseFormData({
           title: course.title || '',
           shortDescription: course.shortDescription || '',
@@ -1063,6 +1119,11 @@ export const InstructorDashboard: React.FC = () => {
       setCreateStep(1);
       return;
     }
+    if (!courseFormData.category || !courseFormData.category.trim()) {
+      toastError('Category Required', 'Please select or enter a course category in Step 1.');
+      setCreateStep(1);
+      return;
+    }
     if (isSubmittingCourse) return;
 
     try {
@@ -1153,6 +1214,8 @@ export const InstructorDashboard: React.FC = () => {
         totalSessions: '',
         modules: [],
       });
+      setIsCustomCategory(false);
+      setCustomCategoryInput('');
       await loadSubViewData();
       fetchDashboard(true);
     } catch (err: any) {
@@ -1264,6 +1327,7 @@ export const InstructorDashboard: React.FC = () => {
               { id: 'courses', label: 'My Courses', icon: BookOpen },
               { id: 'create-course', label: 'Create Course', icon: PlusCircle },
               { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
+              { id: 'coupons', label: 'Discounts & Coupons', icon: Tag },
               { id: 'webinars', label: 'Webinars', icon: Video },
               { id: 'consultations', label: '1-on-1 Mentorship', icon: Calendar },
               { id: 'students', label: 'Students', icon: Users },
@@ -1278,14 +1342,14 @@ export const InstructorDashboard: React.FC = () => {
                 <button
                   key={item.id}
                   onClick={() => setActiveNav(item.id as any)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-[#FA5A36] text-white font-bold shadow-md shadow-[#FA5A36]/25'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <span className="truncate whitespace-nowrap">{item.label}</span>
                 </button>
               );
             })}
@@ -1349,6 +1413,7 @@ export const InstructorDashboard: React.FC = () => {
                   { id: 'courses', label: 'My Courses', icon: BookOpen },
                   { id: 'create-course', label: 'Create Course', icon: PlusCircle },
                   { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
+              { id: 'coupons', label: 'Discounts & Coupons', icon: Tag },
                   { id: 'webinars', label: 'Webinars', icon: Video },
                   { id: 'consultations', label: '1-on-1 Mentorship', icon: Calendar },
                   { id: 'students', label: 'Students', icon: Users },
@@ -1371,7 +1436,7 @@ export const InstructorDashboard: React.FC = () => {
                       }`}
                     >
                       <Icon className="w-4 h-4 shrink-0" />
-                      <span>{item.label}</span>
+                      <span className="truncate whitespace-nowrap">{item.label}</span>
                     </button>
                   );
                 })}
@@ -2506,17 +2571,52 @@ export const InstructorDashboard: React.FC = () => {
                         <div>
                           <label className="font-bold text-slate-800 block mb-1.5">Category *</label>
                           <select
-                            value={courseFormData.category}
-                            onChange={(e) => setCourseFormData({ ...courseFormData, category: e.target.value })}
+                            value={
+                              isCustomCategory ||
+                              (!STANDARD_COURSE_CATEGORIES.includes(courseFormData.category) && courseFormData.category !== '')
+                                ? 'Other'
+                                : courseFormData.category
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'Other') {
+                                setIsCustomCategory(true);
+                                setCourseFormData({ ...courseFormData, category: customCategoryInput.trim() });
+                              } else {
+                                setIsCustomCategory(false);
+                                setCourseFormData({ ...courseFormData, category: val });
+                              }
+                            }}
                             className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-colors"
                           >
-                            <option value="Development">Development</option>
-                            <option value="Cloud Computing">Cloud Computing</option>
-                            <option value="IT & Software">IT & Software</option>
-                            <option value="Data Science">Data Science</option>
-                            <option value="Design">Design</option>
-                            <option value="Cybersecurity">Cybersecurity</option>
+                            {STANDARD_COURSE_CATEGORIES.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                            <option value="Other">Other</option>
                           </select>
+
+                          {/* When "Other" is selected, show custom category text input */}
+                          {(isCustomCategory ||
+                            (!STANDARD_COURSE_CATEGORIES.includes(courseFormData.category) && courseFormData.category !== '')) && (
+                            <div className="mt-2.5 space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Enter Custom Category Name *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Artificial Intelligence, Blockchain, DevOps, Robotics..."
+                                value={customCategoryInput}
+                                onChange={(e) => {
+                                  const customVal = e.target.value;
+                                  setCustomCategoryInput(customVal);
+                                  setCourseFormData({ ...courseFormData, category: customVal });
+                                }}
+                                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-medium text-slate-800 focus:border-[#FA5A36] focus:outline-none shadow-2xs transition-all text-sm"
+                              />
+                            </div>
+                          )}
                         </div>
 
                         <div>
@@ -3075,6 +3175,80 @@ export const InstructorDashboard: React.FC = () => {
                  ========================================================================= */}
               {createStep === 4 && (
                 <div className="space-y-6 text-xs">
+                  {/* Educational Callout: What is a Curriculum? */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50/70 via-amber-50/50 to-white border border-orange-200/80 flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white text-[#FA5A36] shadow-xs flex items-center justify-center shrink-0 border border-orange-200">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs text-slate-800 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-slate-900 text-sm">
+                          What is a Course Curriculum?
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full bg-orange-100 text-[#FA5A36] text-[10px] font-black uppercase tracking-wider">
+                          Course Roadmap
+                        </span>
+                      </div>
+                      <p className="text-slate-600 leading-relaxed font-normal">
+                        A curriculum is the structured learning pathway of your course. It organizes your content into sequential <strong>Modules</strong> (major sections or chapters) and atomic <strong>Topics & Lessons</strong> (individual lectures with video links, durations, descriptions, and free previews).
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mode Selector Cards: Manual vs AI Auto-Fill */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Mode 1: Manual */}
+                    <div
+                      onClick={() => setCurriculumMode('manual')}
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                        curriculumMode === 'manual'
+                          ? 'border-blue-500 bg-blue-50/30 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                          <span>✍️ Mode 1: Manual Builder</span>
+                        </span>
+                        {curriculumMode === 'manual' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                        Add modules, individual lessons, video URLs, and durations one-by-one using the manual forms.
+                      </p>
+                    </div>
+
+                    {/* Mode 2: AI Auto-Fill */}
+                    <div
+                      onClick={() => {
+                        setCurriculumMode('ai');
+                        setAutoFillModalOpen(true);
+                      }}
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden ${
+                        curriculumMode === 'ai'
+                          ? 'border-[#FA5A36] bg-[#FFF5F2]/50 shadow-xs'
+                          : 'border-orange-200 hover:border-[#FA5A36] bg-gradient-to-r from-orange-50/40 via-white to-amber-50/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-[#FA5A36]" />
+                          <span>Mode 2: ✨ AI Auto-Fill Mode</span>
+                        </span>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-[#FA5A36] border border-orange-200 uppercase tracking-wider">
+                          AI Powered
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        Upload your syllabus document (PDF, Word DOCX, Text,paste the notes) only, our vstudyonline model will extracts all modules, topics & links for your approval in seconds!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Header with Both Manual and AI Actions */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-2xl bg-[#FFF5F2] text-[#FA5A36] flex items-center justify-center shrink-0 border border-[#FFCCC2]">
@@ -3085,23 +3259,54 @@ export const InstructorDashboard: React.FC = () => {
                         <p className="text-slate-500 font-medium text-xs">Add structured modules, atomic topics, durations, free preview toggles, and video lessons.</p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setWizardModuleModal(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer shadow-md shadow-blue-600/20"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span> Add Module</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAutoFillModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#FFF5F2] hover:bg-orange-100/70 text-[#FA5A36] border border-[#FFCCC2] font-bold rounded-xl cursor-pointer shadow-xs transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Auto-Fill with AI</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setWizardModuleModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer shadow-md shadow-blue-600/20"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span> Add Module</span>
+                      </button>
+                    </div>
                   </div>
 
                   {courseFormData.modules.length === 0 ? (
-                    <div className="p-12 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="p-10 text-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 space-y-4">
                       <Layers className="w-10 h-10 text-slate-400 mx-auto" />
-                      <p className="font-black text-slate-700 text-sm">No curriculum modules added yet</p>
-                      <p className="text-slate-500 text-xs max-w-sm mx-auto">
-                        Click "+ Add Module" above to start structuring your course into sequential learning modules.
-                      </p>
+                      <div>
+                        <p className="font-black text-slate-800 text-sm">No curriculum modules added yet</p>
+                        <p className="text-slate-500 text-xs max-w-md mx-auto mt-1">
+                          Structure your course into sequential learning modules. You can build manually or auto-fill in seconds using our VStudyOnline syllabus parser.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setAutoFillModalOpen(true)}
+                          className="px-4 py-2.5 rounded-xl bg-[#FA5A36] hover:bg-[#E04322] text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-2"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>Auto-Fill with AI</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWizardModuleModal(true)}
+                          className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add Manually</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -4160,6 +4365,16 @@ export const InstructorDashboard: React.FC = () => {
            ========================================================================= */}
         {activeNav === 'quizzes' && (
           <InstructorQuizStudio courses={dashboardData?.myCourses || []} />
+        )}
+
+        {/* =========================================================================
+            VIEW 3.6: COUPONS & STOREFRONT DISCOUNTS PROMOTION CENTER
+           ========================================================================= */}
+        {activeNav === 'coupons' && (
+          <CouponsAndDiscountsManager
+            role="INSTRUCTOR"
+            initialCourses={dashboardData?.myCourses || []}
+          />
         )}
 
         {/* =========================================================================
@@ -6179,6 +6394,13 @@ export const InstructorDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Auto-Fill Course Curriculum Modal (OpenAI Powered) */}
+      <AutoFillCurriculumModal
+        isOpen={autoFillModalOpen}
+        onClose={() => setAutoFillModalOpen(false)}
+        onApprove={handleAutoFillApproved}
+      />
 
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
+import { SEOHead } from '../components/SEOHead';
 import { Footer } from '../components/Footer';
 import { 
   Rocket, 
@@ -71,10 +72,26 @@ export const AboutUsPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
-      <Navbar />
+    <>
+      <SEOHead
+        title="About VStudyOnline | SRR Solutions"
+        description="Learn how VStudyOnline by SRR Solutions delivers real-world engineering education, expert mentorship, and career-defining learning experiences."
+        canonical="https://vstudyonline.srrsolutions.io/about"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'AboutPage',
+          name: 'About VStudyOnline',
+          description:
+            'VStudyOnline by SRR Solutions delivers real-world engineering education, mentor-led learning, and verified career outcomes for students and professionals.',
+          publisher: {
+            '@id': 'https://srrsolutions.io/#organization',
+          },
+        }}
+      />
+      <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+        <Navbar />
 
-      <main className="flex-1">
+        <main className="flex-1">
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-white border-b border-slate-200/80 py-16 sm:py-20 lg:py-24">
           <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -86,8 +103,8 @@ export const AboutUsPage: React.FC = () => {
               <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                 Democratizing <span className="text-[#FA5A36]">Real-World Engineering</span> Excellence
               </h1>
-              <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal">
-                VStudyOnline was founded on a simple conviction: conventional education is too slow for modern engineering, while generic bootcamps skip foundational craft. We bridge that gap with production-grade instruction.
+              <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-medium border-l-2 border-[#FA5A36] pl-3 bg-white/60 rounded-r-xl text-left">
+                VStudyOnline by SRR Solutions is an online learning platform that helps students and professionals upskill with live mentor guidance, practical projects, structured pathways, and career-focused digital credentials designed for real-world outcomes.
               </p>
             </div>
 
@@ -194,7 +211,8 @@ export const AboutUsPage: React.FC = () => {
         </section>
       </main>
 
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </>
   );
 };

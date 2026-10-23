@@ -22,12 +22,52 @@ export interface AskTutorResponse {
   timestamp: string;
 }
 
+export interface ParsedTopic {
+  title: string;
+  description: string;
+  duration: number;
+  videoUrl: string;
+  price: number;
+  isFree: boolean;
+}
+
+export interface ParsedModule {
+  title: string;
+  topics: ParsedTopic[];
+}
+
+export interface ParseCurriculumResponse {
+  courseTitle?: string;
+  courseDescription?: string;
+  price?: number;
+  duration?: number;
+  modules: ParsedModule[];
+  stats?: {
+    totalModules: number;
+    totalTopics: number;
+    totalDurationMinutes: number;
+  };
+}
+
 export const aiApi = {
   /**
    * Ask In-Classroom AI Tutor
    */
   async askTutor(payload: AskTutorPayload): Promise<{ success: boolean; data: AskTutorResponse; message?: string }> {
     const response = await apiClient.post('/ai/tutor', payload);
+    return response.data;
+  },
+
+  /**
+   * Parse Course Curriculum from raw text or uploaded document (PDF/Word/Text)
+   */
+  async parseCurriculum(payload: {
+    text?: string;
+    fileDataUrl?: string;
+    fileName?: string;
+    fileType?: string;
+  }): Promise<{ success: boolean; data: ParseCurriculumResponse; message?: string }> {
+    const response = await apiClient.post('/ai/parse-curriculum', payload);
     return response.data;
   },
 };

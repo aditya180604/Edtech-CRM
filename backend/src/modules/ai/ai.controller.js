@@ -38,4 +38,28 @@ export class AiController {
 
     return ApiResponse.success(res, result, 'AI Tutor response generated.');
   });
+
+  /**
+   * POST /api/v1/ai/parse-curriculum
+   * Parse Course Curriculum from raw text or document (PDF/Word/Text) using OpenAI
+   */
+  static parseCurriculum = asyncHandler(async (req, res) => {
+    const { text, fileDataUrl, fileName, fileType } = req.body || {};
+
+    if (!text && !fileDataUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide course syllabus text or an uploaded document.',
+      });
+    }
+
+    const result = await AiService.parseCurriculumWithAi({
+      text,
+      fileDataUrl,
+      fileName,
+      fileType,
+    });
+
+    return ApiResponse.success(res, result, 'Curriculum parsed successfully.');
+  });
 }

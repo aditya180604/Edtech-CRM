@@ -7,6 +7,7 @@ import {
   BookOpen,
   Clock,
   Sparkles,
+  Tag,
   GraduationCap,
   Users,
   Lock,
@@ -306,11 +307,34 @@ export const FeaturedCourses: React.FC = () => {
 
                 {/* Price & Action Row */}
                 <div className="px-4 pb-3.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2 bg-slate-50/50">
-                  <div className="flex items-baseline">
-                    <span className="text-sm sm:text-base font-semibold text-slate-900">
-                      {course.price === 0 ? 'FREE' : `₹${course.price?.toLocaleString('en-IN')}`}
-                    </span>
-                  </div>
+                  {(() => {
+                    const basePrice = course.originalPrice || course.coursePrice || course.price;
+                    const currentPrice = course.price;
+                    const isDiscounted = Boolean(
+                      course.hasDiscount ||
+                      (course.discountPercent && course.discountPercent > 0) ||
+                      (basePrice > currentPrice)
+                    );
+                    const discountPct = course.discountPercent || (basePrice > currentPrice ? Math.round(((basePrice - currentPrice) / basePrice) * 100) : 0);
+
+                    return (
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-sm sm:text-base font-black text-slate-900">
+                          {currentPrice === 0 ? 'FREE' : `₹${currentPrice?.toLocaleString('en-IN')}`}
+                        </span>
+                        {isDiscounted && discountPct > 0 && basePrice > currentPrice && (
+                          <>
+                            <del className="text-xs text-slate-400 font-semibold line-through">
+                              ₹{basePrice.toLocaleString('en-IN')}
+                            </del>
+                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[10px] border border-emerald-200">
+                              {discountPct}% OFF
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center gap-1.5">
                     <button

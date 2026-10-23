@@ -14,6 +14,10 @@ import {
   Briefcase,
   ChevronRight,
   Filter,
+  Compass,
+  MessageSquare,
+  HelpCircle,
+  Zap,
 } from 'lucide-react';
 import { consultationsApi, type ConsultationMentor } from '../../api/consultations';
 import { ConsultationBookingModal } from '../../components/consultations/ConsultationBookingModal';
@@ -153,8 +157,110 @@ export const MentorshipDirectoryPage: React.FC = () => {
           </div>
         </section>
 
+        {/* =========================================================================
+            WHAT IS 1-ON-1 MENTORSHIP & WHY YOU NEED IT
+           ========================================================================= */}
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-6">
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2]">
+              <HelpCircle className="w-3.5 h-3.5" />
+              1-on-1 Mentorship Explained
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">
+              Personalized Guidance that Recorded Videos Cannot Give You
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl mx-auto">
+              Self-paced courses build your fundamentals, but real career breakthroughs happen when you talk directly to someone who has done it. 1-on-1 mentorship connects you privately with working IT leaders to solve your exact doubts and supercharge your career.
+            </p>
+          </div>
+
+          {/* WHAT IT IS & WHY WE ADDED IT CALLOUT */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xs">
+            <div className="space-y-2.5 border-b md:border-b-0 md:border-r border-slate-100 pb-5 md:pb-0 md:pr-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF5F2] text-[#FA5A36] border border-[#FFCCC2] text-xs font-black tracking-wide uppercase">
+                What is 1-on-1 Mentorship?
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+                It is a private, dedicated 1-to-1 video consultation where a verified industry specialist works exclusively with you. Unlike pre-recorded courses, the session is tailored strictly to your specific blockers, code reviews, and personal goals.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-3 md:pt-0 md:pl-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black tracking-wide uppercase">
+                Why We Added It & Why It is Needed
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+                Over 70% of online learners experience "tutorial hell" or get stuck on complex bugs and career uncertainties. VStudyOnline introduced 1-on-1 mentorship so you never learn in isolation—giving you direct, on-demand access to senior engineers who clear your blockers fast.
+              </p>
+            </div>
+          </div>
+
+          {/* TWO PRIMARY BENEFIT CARDS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mb-8">
+            {/* Card 1: Career Guidance */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs hover:shadow-xl hover:shadow-[#FA5A36]/10 transition-all space-y-4 relative overflow-hidden group">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FA5A36] flex items-center justify-center font-bold">
+                <Compass className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                  Career Guidance & Strategic Growth
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Tailored career roadmaps, technical interview mock preparation, and resume reviews directly from engineers who hire at leading tech companies.
+                </p>
+              </div>
+
+              <div className="space-y-2.5 pt-3 border-t border-slate-100">
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Resume & Portfolio Teardown:</strong> Optimize your GitHub, projects, and CV to stand out to recruiters and hiring managers.</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Mock Interviews & System Design:</strong> Practice realistic coding and architectural questions with actionable critique.</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Domain Switching & Promotion Roadmaps:</strong> Clear, step-by-step guidance on transitioning into Cloud, Full Stack, or AI.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Doubts Resolution & Course Explanation */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs hover:shadow-xl hover:shadow-indigo-500/10 transition-all space-y-4 relative overflow-hidden group">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                  Live 1-on-1 Interaction & Course Walkthroughs
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Never stay blocked on a stubborn bug, architectural problem, or difficult topic. Get direct screen-share help and customized explanations.
+                </p>
+              </div>
+
+              <div className="space-y-2.5 pt-3 border-t border-slate-100">
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Instant Bug & Architecture Walkthrough:</strong> Pair program on a private live call to debug errors and adopt industry patterns.</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Customized Concept Breakdown:</strong> Complex frameworks, databases, and async architecture explained at your own pace.</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Capstone Project Code Reviews:</strong> Receive deep, line-by-line feedback before presenting or deploying your code.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Mentors Grid Directory */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-xl font-black text-slate-900">Available Mentors</h2>

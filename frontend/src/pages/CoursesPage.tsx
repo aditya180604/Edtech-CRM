@@ -10,6 +10,7 @@ import {
   BookOpen,
   Clock,
   Sparkles,
+  Tag,
   GraduationCap,
   Users,
   Lock,
@@ -124,11 +125,14 @@ export const CoursesPage: React.FC = () => {
   const loadCourses = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await coursesApi.getCatalog({
-        category: selectedCategory.toLowerCase() === 'all' ? undefined : selectedCategory,
-        level: selectedLevel.toLowerCase() === 'all' ? undefined : selectedLevel,
-        search: debouncedSearch.trim() || undefined,
-      });
+      const res = await coursesApi.getCatalog(
+        {
+          category: selectedCategory.toLowerCase() === 'all' ? undefined : selectedCategory,
+          level: selectedLevel.toLowerCase() === 'all' ? undefined : selectedLevel,
+          search: debouncedSearch.trim() || undefined,
+        },
+        { forceRefresh: true }
+      );
 
       if (res.success && res.data) {
         setCourses(res.data.courses || []);
@@ -348,6 +352,16 @@ export const CoursesPage: React.FC = () => {
                             </span>
                           </div>
 
+                          {/* Product E-Commerce Discount Badge on Thumbnail */}
+                          {Boolean((course.hasDiscount && course.discountPercent && course.discountPercent > 0) || (course.discountPercent && course.discountPercent > 0)) && (
+                            <div className="absolute top-2.5 right-2.5 z-10">
+                              <span className="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-[11px] rounded-lg shadow-md flex items-center gap-1 tracking-tight">
+                                <Tag className="w-3 h-3 text-emerald-100" />
+                                {course.discountPercent}% OFF
+                              </span>
+                            </div>
+                          )}
+
                           {/* Sold Out Badge or Remaining Seats */}
                           {isSoldOut ? (
                             <span className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 bg-rose-600/95 backdrop-blur-md text-white text-[10px] font-medium rounded-md uppercase tracking-wider shadow-sm flex items-center gap-1">
@@ -490,11 +504,34 @@ export const CoursesPage: React.FC = () => {
 
                       {/* Course Card Footer */}
                       <div className="px-4.5 pb-4 pt-2.5 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-                        <div>
-                          <span className="text-base font-semibold text-slate-900">
-                            {course.price === 0 ? 'FREE' : `₹${course.price.toLocaleString('en-IN')}`}
-                          </span>
-                        </div>
+                        {(() => {
+                          const basePrice = course.originalPrice || course.coursePrice || course.price;
+                          const currentPrice = course.price;
+                          const isDiscounted = Boolean(
+                            course.hasDiscount ||
+                            (course.discountPercent && course.discountPercent > 0) ||
+                            (basePrice > currentPrice)
+                          );
+                          const discountPct = course.discountPercent || (basePrice > currentPrice ? Math.round(((basePrice - currentPrice) / basePrice) * 100) : 0);
+
+                          return (
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-base sm:text-lg font-black text-slate-900">
+                                {currentPrice === 0 ? 'FREE' : `₹${currentPrice.toLocaleString('en-IN')}`}
+                              </span>
+                              {isDiscounted && discountPct > 0 && basePrice > currentPrice && (
+                                <>
+                                  <del className="text-xs text-slate-400 font-semibold line-through">
+                                    ₹{basePrice.toLocaleString('en-IN')}
+                                  </del>
+                                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[10px] border border-emerald-200">
+                                    {discountPct}% OFF
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div className="flex items-center gap-2">
                           <button
                             type="button"

@@ -93,7 +93,16 @@ export class PricingService {
           }
         }
 
-        const authoritativePrice = Math.max(0, Number(course.coursePrice) || 0);
+        const isDiscountActive = Boolean(
+          course.discountPercent > 0 &&
+          (!course.discountValidUntil || new Date(course.discountValidUntil) > new Date())
+        );
+        const authoritativePrice = Math.max(
+          0,
+          isDiscountActive
+            ? (course.discountPrice || Math.round((course.coursePrice || 0) * (1 - course.discountPercent / 100)))
+            : (Number(course.coursePrice) || 0)
+        );
 
         lineItems.push({
           productId: course._id.toString(),

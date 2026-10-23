@@ -153,6 +153,45 @@ export const isPublicPath = (pathname: string): boolean => {
   return !isProtected;
 };
 
+// Runs fn while holding a lock shared by every open tab, so only one tab rotates the
+// refresh token at a time (falls back to no lock on browsers without Web Locks).
+const runWithRefreshLock = <T,>(fn: () => Promise<T>): Promise<T> => {
+  const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined;
+  return locks?.request ? locks.request('auth-refresh', fn) : fn();
+};
+
+const refreshAccessToken = (staleAccessToken: string | null): Promise<string> =>
+  runWithRefreshLock(async () => {
+    // Another tab may have refreshed while we waited for the lock: reuse its token
+    // instead of rotating again with a refresh token that has just been replaced.
+    const currentAccessToken = localStorage.getItem('accessToken');
+    if (currentAccessToken && currentAccessToken !== staleAccessToken) {
+      return currentAccessToken;
+    }
+
+    const storedRefreshToken = localStorage.getItem('refreshToken');
+    if (!storedRefreshToken) {
+      throw Object.assign(new Error('No refresh token available'), { isSessionExpired: true });
+    }
+
+    const { data } = await axios.post(
+      `${API_BASE_URL}/auth/refresh`,
+      { refreshToken: storedRefreshToken },
+      { withCredentials: true }
+    );
+
+    const newAccessToken = data?.data?.accessToken;
+    const newRefreshToken = data?.data?.refreshToken;
+    if (!newAccessToken) {
+      throw new Error('No access token returned from refresh');
+    }
+    localStorage.setItem('accessToken', newAccessToken);
+    if (newRefreshToken) {
+      localStorage.setItem('refreshToken', newRefreshToken);
+    }
+    return newAccessToken;
+  });
+
 // Response Interceptor: Handle Token Refresh on 401
 apiClient.interceptors.response.use(
   (response) => response,
@@ -180,33 +219,25 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const storedRefreshToken = localStorage.getItem('refreshToken');
-        if (!storedRefreshToken) {
-          throw new Error('No refresh token available');
-        }
+        const sentAuth = String(originalRequest.headers?.Authorization || '');
+        const sentAccessToken = sentAuth.startsWith('Bearer ') ? sentAuth.slice(7) : null;
+        const newAccessToken = await refreshAccessToken(sentAccessToken);
 
-        const { data } = await axios.post(
-          `${API_BASE_URL}/auth/refresh`,
-          { refreshToken: storedRefreshToken },
-          { withCredentials: true }
-        );
-
-        const newAccessToken = data?.data?.accessToken;
-        const newRefreshToken = data?.data?.refreshToken;
-
-        if (newAccessToken) {
-          localStorage.setItem('accessToken', newAccessToken);
-          if (newRefreshToken) {
-            localStorage.setItem('refreshToken', newRefreshToken);
-          }
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          processQueue(null, newAccessToken);
-          return apiClient(originalRequest);
-        } else {
-          throw new Error('No access token returned from refresh');
-        }
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        processQueue(null, newAccessToken);
+        return apiClient(originalRequest);
       } catch (refreshError: any) {
         processQueue(refreshError, null);
+
+        // Only log out when the server definitively rejected the refresh token. Network
+        // errors, timeouts and 5xx (Render cold start, Atlas blip) must not end the session.
+        const refreshStatus = refreshError?.response?.status;
+        const isDefinitiveRejection =
+          refreshError?.isSessionExpired || refreshStatus === 400 || refreshStatus === 401 || refreshStatus === 403;
+        if (!isDefinitiveRejection) {
+          return Promise.reject(refreshError);
+        }
+
         // Cleanly remove invalid authentication credentials
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
